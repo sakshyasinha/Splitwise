@@ -1,9 +1,15 @@
-import group from '../models/group.model.js';
+import Group from '../models/group.model.js';
 
-export const createGroup=async(userId,{name})=>{
-    return await group.create({
+export const createGroup=async({ name, userId })=>{
+    if (!name) {
+        const error = new Error('Group name is required');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    return await Group.create({
         name,
-        members:[userId],
-        createdBy:[userId],
+        members: userId ? [userId] : [],
+        createdBy: userId ? [userId] : [],
     });
 };

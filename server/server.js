@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from "dotenv"
 import path from 'path';
 import { fileURLToPath } from 'url';
+import cors from 'cors';
 import connectDB from "./config/db.js"
 
 import authRoutes from './routes/auth.routes.js'
@@ -12,10 +13,12 @@ import settlementsRoutes from './routes/settlements.routes.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app =express();
 
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
 app.use('/api/auth',authRoutes);

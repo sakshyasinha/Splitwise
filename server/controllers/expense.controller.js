@@ -1,6 +1,13 @@
 import * as expenseService from '../services/expense.service.js';
 
 export const addExpense=async(req,res)=>{
-    const expense = await expenseService.addExpense(req.body);
-    res.json(expense);
-}
+    try {
+        const expense = await expenseService.addExpense({
+            userId: req.user?.id || req.body.userId,
+            ...req.body
+        });
+        res.status(201).json(expense);
+    } catch (error) {
+        res.status(error.statusCode || 500).json({ message: error.message });
+    }
+};
