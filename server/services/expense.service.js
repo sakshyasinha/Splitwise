@@ -1,17 +1,23 @@
-import expense from '../models/expense.model.js';
+import Expense from '../models/expense.model.js';
 import { splitEqual } from './split.service.js';
 
-export const addExpense=async(userId,data)=>{
-    const {groupId,amount,description,participants}=data;
+export const addExpense=async(data)=>{
+    const { userId, groupId, amount, description, participants } = data;
 
-    const splits=splitEqual(amount, participants);
+    if (!userId || !groupId || !amount || !description || !Array.isArray(participants) || participants.length === 0) {
+        const error = new Error('userId, groupId, amount, description and participants are required');
+        error.statusCode = 400;
+        throw error;
+    }
 
-    const expense=await expense.create({
-        groupId,
-        amount,
+    const splits=splitEqual(Number(amount), participants);
+
+    const createdExpense=await Expense.create({
+        group: groupId,
+        amount: Number(amount),
         description,
         paidBy:userId,
         participants:splits,
     });
-    return expense;
+    return createdExpense;
 };

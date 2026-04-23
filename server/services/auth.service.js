@@ -28,12 +28,20 @@ export const loginUser=async({email,password})=>{
 
         const user=await User.findOne({email});
 
-        if(!user) throw new Error('User not found');
+        if(!user) {
+            const error = new Error('User not found');
+            error.statusCode = 404;
+            throw error;
+        }
         
 
         const isMatch=await bcrypt.compare(password,user.password);
 
-        if(!isMatch) throw new Error('invalid credentials');
+        if(!isMatch) {
+            const error = new Error('invalid credentials');
+            error.statusCode = 401;
+            throw error;
+        }
 
-            return jwt.sign({id:user._id},process.env.JWT_secret);
+        return jwt.sign({id:user._id},process.env.JWT_SECRET, { expiresIn: '7d' });
 };

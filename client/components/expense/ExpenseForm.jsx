@@ -92,10 +92,10 @@ export default function ExpenseForm() {
         <Input
           id="participants"
           name="participants"
-          label="Participants (comma separated user IDs)"
+          label="Participants (comma separated names or emails)"
           value={form.participants}
           onChange={onChange}
-          placeholder="u1,u2,u3"
+          placeholder="apple,banana"
           required
         />
 

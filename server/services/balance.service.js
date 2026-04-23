@@ -1,19 +1,20 @@
-import { group } from 'node:console';
-import expense from '../models/expense.model.js';
+import Expense from '../models/expense.model.js';
 
 export const CalculateBalance=async(groupId)=>{
-    const expenses=await expense.find({groupId});
+    const expenses=await Expense.find({ group: groupId });
 
     const balances={};
 
     for(const expense of expenses){
-        const {paidBy,amount,participants}=expense;
+        const { paidBy, amount, participants }=expense;
+        const payerId = paidBy?.toString();
 
-        balances[paidBy]=(balances[paidBy] || 0)+amount;
+        balances[payerId]=(balances[payerId] || 0) + Number(amount || 0);
 
-        participants.forEach(({userId,share})=>{
-            balances[userId]=balances[userId] || 0-share;
-        })
+        participants.forEach(({ userId, amount: shareAmount })=>{
+            const participantId = userId?.toString();
+            balances[participantId] = (balances[participantId] || 0) - Number(shareAmount || 0);
+        });
     }
     return balances;
 };
