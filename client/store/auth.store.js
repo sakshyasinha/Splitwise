@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { login as loginService, register as registerService } from '../services/auth.service.js';
 
 const useAuthStore = create((set, get) => ({
-    token: localStorage.getItem('token') || null,
+    token: sessionStorage.getItem('token') || null,
     user: null,
     loading: false,
     error: null,
@@ -14,7 +14,7 @@ const useAuthStore = create((set, get) => ({
             if (!data.token) {
                 throw new Error('Token missing in login response');
             }
-            localStorage.setItem('token', data.token);
+            sessionStorage.setItem("token", data.token);
             set({ token: data.token, loading: false });
             return data;
         } catch (error) {
@@ -40,7 +40,7 @@ const useAuthStore = create((set, get) => ({
         }
     },
     logout: () => {
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         set({ token: null, user: null, error: null });
     },
     isAuthenticated: () => Boolean(get().token)
