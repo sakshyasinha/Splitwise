@@ -47,15 +47,25 @@ export default function DashboardPage() {
         </Button>
       </header>
 
+      <section className="hero-strip">
+        <p>
+          Shared money is less stressful when everyone sees the same truth.
+        </p>
+        <span className="due-pill">Pending Dues: {myDues.length}</span>
+      </section>
+
       <section className="stats-grid">
         <Card title="Groups" subtitle="Active shared circles">
           <p className="metric">{totals.groupCount}</p>
+          <p className="metric-label">Teams currently splitting bills</p>
         </Card>
         <Card title="Expenses" subtitle="Recorded transactions">
           <p className="metric">{totals.expenseCount}</p>
+          <p className="metric-label">Items captured in this session</p>
         </Card>
         <Card title="You Owe" subtitle="Pending dues on your account">
           <p className="metric">{currency(totalOwed)}</p>
+          <p className="metric-label">Updated for your active account</p>
         </Card>
       </section>
 

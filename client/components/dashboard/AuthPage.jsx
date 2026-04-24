@@ -34,7 +34,7 @@ export default function AuthPage() {
       <Card
         className="auth-card"
         title={mode === 'login' ? 'Welcome Back' : 'Create Account'}
-        subtitle="Split bills without the spreadsheet pain"
+        subtitle="Your shared money command center"
       >
         <form className="stack" onSubmit={handleSubmit}>
           {mode === 'register' && (

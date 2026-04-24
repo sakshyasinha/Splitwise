@@ -21,7 +21,7 @@ export default function ExpenseList() {
             <li key={expense._id || `${expense.description}-${index}`} className="expense-item">
               <div>
                 <p className="expense-title">{expense.description || 'Untitled expense'}</p>
-                <p className="muted">Group: {expense.groupId || expense.group || 'n/a'}</p>
+                <p className="muted">Group: {expense.group?.name || expense.groupId || expense.group || 'n/a'}</p>
               </div>
               <p className="expense-amount">{formatAmount(expense.amount)}</p>
             </li>
