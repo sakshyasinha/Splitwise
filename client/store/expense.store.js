@@ -9,6 +9,15 @@ const useExpenseStore = create((set) => ({
   totalOwed: 0,
   loading: false,
   error: null,
+  resetState: () =>
+    set({
+      expenses: [],
+      groups: [],
+      myDues: [],
+      totalOwed: 0,
+      loading: false,
+      error: null
+    }),
   clearError: () => set({ error: null }),
   addExpense: async (payload) => {
     set({ loading: true, error: null });
@@ -28,7 +37,7 @@ const useExpenseStore = create((set) => ({
     }
   },
   fetchMyDues: async () => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, myDues: [], totalOwed: 0 });
     try {
       const data = await getMyDuesService();
       set({
@@ -40,6 +49,8 @@ const useExpenseStore = create((set) => ({
     } catch (error) {
       set({
         loading: false,
+        myDues: [],
+        totalOwed: 0,
         error: error?.response?.data?.message || error.message || 'Failed to load dues'
       });
       throw error;

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { login as loginService, register as registerService } from '../services/auth.service.js';
+import useExpenseStore from './expense.store.js';
 
 const useAuthStore = create((set, get) => ({
     token: sessionStorage.getItem('token') || null,
@@ -15,6 +16,7 @@ const useAuthStore = create((set, get) => ({
                 throw new Error('Token missing in login response');
             }
             sessionStorage.setItem("token", data.token);
+            useExpenseStore.getState().resetState();
             set({ token: data.token, loading: false });
             return data;
         } catch (error) {
@@ -41,6 +43,7 @@ const useAuthStore = create((set, get) => ({
     },
     logout: () => {
         sessionStorage.removeItem('token');
+        useExpenseStore.getState().resetState();
         set({ token: null, user: null, error: null });
     },
     isAuthenticated: () => Boolean(get().token)
