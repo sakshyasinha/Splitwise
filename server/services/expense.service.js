@@ -151,6 +151,21 @@ export const deleteExpense = async (userId, expenseId) => {
     return { deleted: true };
 };
 
+export const getGroupExpenses = async (userId, groupId) => {
+    if (!groupId) {
+        const error = new Error("groupId is required");
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const expenses = await Expense.find({ group: groupId })
+        .populate("group", "name")
+        .populate("paidBy", "name email")
+        .sort({ createdAt: -1 });
+
+    return expenses;
+};
+
 export const getMyDues = async (userId) => {
     const expenses = await Expense.find({ 'participants.userId': userId })
         .populate('paidBy', 'name email')

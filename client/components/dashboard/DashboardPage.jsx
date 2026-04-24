@@ -18,13 +18,17 @@ function currency(amount) {
 
 export default function DashboardPage() {
   const { logout } = useAuth();
-  const { expenses, groups, myDues, totalOwed, fetchMyDues } = useExpenses();
+  const { expenses, groups, myDues, totalOwed, fetchExpenses, fetchMyDues } = useExpenses();
 
   useEffect(() => {
+    fetchExpenses().catch(() => {
+      // Error state is already managed in store.
+    });
+
     fetchMyDues().catch(() => {
       // Error state is already managed in store.
     });
-  }, [fetchMyDues]);
+  }, [fetchExpenses, fetchMyDues]);
 
   const totals = useMemo(() => {
     const totalSpend = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
