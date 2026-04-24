@@ -31,6 +31,29 @@ export default function AuthPage() {
 
   return (
     <main className="auth-layout">
+      <section className="auth-hero">
+        <div className="auth-hero-badge">Shared money, handled cleanly</div>
+        <h1>Split expenses without the clutter.</h1>
+        <p>
+          Keep every payment, balance, and settlement in one polished workspace so the group
+          always sees the same truth.
+        </p>
+        <div className="auth-points">
+          <div className="auth-point">
+            <strong>Live balances</strong>
+            <span>Track who owes what the moment an expense is added.</span>
+          </div>
+          <div className="auth-point">
+            <strong>Fast settle-ups</strong>
+            <span>See the cleanest path to zero without mental bookkeeping.</span>
+          </div>
+          <div className="auth-point">
+            <strong>Built for groups</strong>
+            <span>From trips to rent, keep shared spending visible and organized.</span>
+          </div>
+        </div>
+      </section>
+
       <Card
         className="auth-card"
         title={mode === 'login' ? 'Welcome Back' : 'Create Account'}

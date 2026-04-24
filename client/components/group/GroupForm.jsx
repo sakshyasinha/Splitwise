@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import useAuth from "../../hooks/useAuth.js";
 import useExpenses from "../../hooks/useExpenses.js";
 import Button from "../ui/Button.jsx";
 import Card from "../ui/Card.jsx";
@@ -8,9 +9,10 @@ const normalizeEmail = (value) => value.trim().toLowerCase();
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 export default function GroupForm() {
+  const { user } = useAuth();
   const { createGroup, loading, error, clearError } = useExpenses();
 
-  const currentUserEmail = normalizeEmail(sessionStorage.getItem("email") || "");
+  const currentUserEmail = normalizeEmail(user?.email || sessionStorage.getItem("email") || "");
 
   const [name, setName] = useState("");
   const [memberInput, setMemberInput] = useState("");
@@ -18,10 +20,10 @@ export default function GroupForm() {
   const [success, setSuccess] = useState("");
   const [localError, setLocalError] = useState("");
 
-  const allMembersPreview = useMemo(() => {
-    const others = [...new Set(members.map(normalizeEmail).filter(Boolean))];
-    return currentUserEmail ? [currentUserEmail, ...others] : others;
-  }, [currentUserEmail, members]);
+  const allMembers = useMemo(() => {
+    const unique = [...new Set(members.map(normalizeEmail))];
+    return currentUserEmail ? [currentUserEmail, ...unique] : unique;
+  }, [members, currentUserEmail]);
 
   // ➕ Add member
   const handleAddMember = () => {
@@ -31,41 +33,39 @@ export default function GroupForm() {
     setSuccess("");
 
     if (!email) {
-      setLocalError("Enter an email to add a member");
+      setLocalError("Enter an email");
       return;
     }
 
     if (!isValidEmail(email)) {
-      setLocalError("Enter a valid email");
+      setLocalError("Invalid email format");
       return;
     }
 
-    if (currentUserEmail && email === currentUserEmail) {
-      setLocalError("You are already part of the group");
+    if (email === currentUserEmail) {
+      setLocalError("You are already included");
       setMemberInput("");
       return;
     }
 
-    if (members.map(normalizeEmail).includes(email)) {
-      setLocalError("Member already added");
+    if (members.includes(email)) {
+      setLocalError("Already added");
       setMemberInput("");
       return;
     }
 
     setMembers((prev) => [...prev, email]);
     setMemberInput("");
-    setSuccess(`Added ${email}`);
   };
 
-  // ❌ Remove member
-  const handleRemoveMember = (email) => {
-    setLocalError("");
+  // ❌ Remove
+  const removeMember = (email) => {
     setMembers((prev) => prev.filter((m) => m !== email));
   };
 
   // 🚀 Submit
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
     setSuccess("");
     setLocalError("");
@@ -77,98 +77,83 @@ export default function GroupForm() {
     }
 
     if (members.length === 0) {
-      setLocalError("Add at least one member before creating the group");
+      setLocalError("Add at least one member");
       return;
     }
 
     try {
       await createGroup({
         name: name.trim(),
-        members: members.map(normalizeEmail),
+        members,
       });
 
-      setSuccess("Group created successfully.");
+      setSuccess("Group created successfully");
       setName("");
       setMembers([]);
-    } catch (err) {
-      // handled globally
-    }
+    } catch (_) {}
   };
 
   return (
-    <Card title="Create Group" subtitle="Start splitting with your crew">
+    <Card title="Create Group" subtitle="Split expenses with your crew">
       <form className="stack" onSubmit={handleSubmit}>
         
         {/* Group Name */}
         <Input
-          id="group-name"
           label="Group Name"
-          name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Flatmates April"
           required
         />
 
-        {/* Show current user */}
-        <div>
+        {/* Members Section */}
+        <div className="section">
           <label className="label">Members</label>
-          <p className="muted">
-            ✔ You ({currentUserEmail || "current account"})
-          </p>
-        </div>
 
-        {/* Add Members */}
-        <div>
-          <label className="label">Add Members (email)</label>
-
-          <div style={{ display: "flex", gap: "8px" }}>
+          {/* Input Row */}
+          <div className="row">
             <input
               type="email"
+              className="input"
               value={memberInput}
               onChange={(e) => setMemberInput(e.target.value)}
-              placeholder="friend@example.com"
-              className="input"
+              placeholder="Enter email"
             />
             <Button type="button" onClick={handleAddMember}>
               Add
             </Button>
           </div>
 
-          {/* Local errors */}
+          {/* Errors */}
           {localError && <p className="banner error">{localError}</p>}
 
-          {/* Member preview including current user */}
-          {allMembersPreview.length > 0 && (
-            <ul style={{ marginTop: "10px", paddingLeft: "18px" }}>
-              {allMembersPreview.map((email) => (
-                <li key={`preview-${email}`} className="muted">
-                  {email === currentUserEmail ? `You (${email})` : email}
-                </li>
-              ))}
-            </ul>
-          )}
+          {/* Chips UI */}
+          <div className="chips">
+            {/* Current user */}
+            {currentUserEmail && (
+              <div className="chip primary">
+                You
+                <span className="chip-sub">{currentUserEmail}</span>
+              </div>
+            )}
 
-          {/* Member List */}
-          {members.length > 0 && (
-            <ul style={{ marginTop: "10px" }}>
-              {members.map((email) => (
-                <li key={email} className="flex-between">
-                  <span>{email}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveMember(email)}
-                    className="danger"
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {/* Other members */}
+            {members.map((email) => (
+              <div key={email} className="chip">
+                {email}
+                <span onClick={() => removeMember(email)}>×</span>
+              </div>
+            ))}
+          </div>
+
+          {allMembers.length > 0 && (
+            <p className="text-sm muted" style={{ marginTop: 8 }}>
+              Preview: {allMembers.join(' · ')}
+            </p>
           )}
         </div>
 
-        {/* Backend messages */}
+        {/* Status */}
         {error && <p className="banner error">{error}</p>}
         {success && <p className="banner success">{success}</p>}
 

@@ -151,6 +151,43 @@ export const deleteExpense = async (userId, expenseId) => {
     return { deleted: true };
 };
 
+export const settleDue = async (userId, expenseId) => {
+    const expense = await Expense.findById(expenseId)
+        .populate('group', 'name')
+        .populate('paidBy', 'name email');
+
+    if (!expense) {
+        const error = new Error('Expense not found');
+        error.statusCode = 404;
+        throw error;
+    }
+
+    if (String(expense.paidBy?._id || expense.paidBy) === String(userId)) {
+        const error = new Error('Payer does not need to settle this expense');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const participant = expense.participants.find(
+        (entry) => String(entry.userId) === String(userId)
+    );
+
+    if (!participant) {
+        const error = new Error('You are not part of this expense split');
+        error.statusCode = 403;
+        throw error;
+    }
+
+    if (participant.status === 'paid') {
+        return { settled: true, alreadyPaid: true };
+    }
+
+    participant.status = 'paid';
+    await expense.save();
+
+    return { settled: true };
+};
+
 export const getGroupExpenses = async (userId, groupId) => {
     if (!groupId) {
         const error = new Error("groupId is required");
@@ -178,7 +215,7 @@ export const getMyDues = async (userId) => {
                 (entry) => String(entry.userId) === String(userId)
             );
 
-            if (!participant || String(expense.paidBy?._id) === String(userId)) {
+            if (!participant || participant.status !== 'pending' || String(expense.paidBy?._id) === String(userId)) {
                 return null;
             }
 

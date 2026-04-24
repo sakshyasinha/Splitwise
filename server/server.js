@@ -9,12 +9,17 @@ import authRoutes from './routes/auth.routes.js'
 import groupRoutes from './routes/group.routes.js';
 import expenseRoutes from './routes/expense.routes.js';
 import settlementsRoutes from './routes/settlements.routes.js';
+import aiRoutes from './routes/ai.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+if (!process.env.JWT_SECRET) {
+    throw new Error('Missing JWT secret. Set JWT_SECRET in server/.env or the workspace root .env file.');
+}
 
 const PORT = Number(process.env.PORT) || 5000;
 const CORS_ORIGIN = process.env.CORS_ORIGIN
@@ -31,6 +36,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth',authRoutes);
+app.use('/api/ai', aiRoutes);
 
 app.use("/api/groups", groupRoutes);
 

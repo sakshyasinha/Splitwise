@@ -1,9 +1,17 @@
 import { useState } from 'react';
 import { askAI } from '../../services/ai.service.js';
+import useExpenses from '../../hooks/useExpenses.js';
 import Button from '../ui/Button.jsx';
 import Card from '../ui/Card.jsx';
 
+const QUICK_PROMPTS = [
+  'How should I settle this week with minimal transactions?',
+  'Where am I overspending based on my current activity?',
+  'Give me 3 ways to reduce group spending this month.'
+];
+
 export default function AIChatPanel() {
+  const { totalOwed, expenses, groups } = useExpenses();
   const [prompt, setPrompt] = useState('Suggest one way to reduce group expenses this week.');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,7 +22,11 @@ export default function AIChatPanel() {
     setLoading(true);
     setError('');
     try {
-      const data = await askAI(prompt);
+      const data = await askAI(prompt, {
+        totalOwed,
+        expenseCount: expenses.length,
+        groupCount: groups.length
+      });
       setAnswer(data.reply || data.message || JSON.stringify(data));
     } catch (err) {
       setError(err?.response?.data?.message || err.message || 'AI request failed');
@@ -26,9 +38,22 @@ export default function AIChatPanel() {
   return (
     <Card
       title="AI Assistant"
-      subtitle="Ask for spending ideas or settlement tips"
+      subtitle="Splitwise-style spending and settlement guidance"
       className="sticky"
     >
+      <div className="quick-actions">
+        {QUICK_PROMPTS.map((item) => (
+          <button
+            key={item}
+            type="button"
+            className="quick-chip"
+            onClick={() => setPrompt(item)}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+
       <form className="stack" onSubmit={onSubmit}>
         <label className="input-block" htmlFor="ai-prompt">
           <span className="input-label">Prompt</span>

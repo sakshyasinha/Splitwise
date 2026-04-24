@@ -11,29 +11,29 @@ export const simplifyDebts=(balances)=>{
         else if(amount<0){
             debtors.push({user,amount:-amount});
         }
-        const transactions=[];
+    }
+    const transactions=[];
 
-        let i=0,j=0;
+    let i=0,j=0;
 
-        while(i<creditors.length && j<debtors.length){
-            const creditor=creditors[i];
-            const debtor=debtors[j];
+    while(i<creditors.length && j<debtors.length){
+        const creditor=creditors[i];
+        const debtor=debtors[j];
 
-            const settledAmount=match.min(creditor.amount,debtor.amount);
+        const settledAmount=Math.min(creditor.amount,debtor.amount);
 
-            transactions.push({
-                from:debtor.user,
-                to:creditor.user,
-                amount:settledAmount,
-            });
-            creditor.amount=-settledAmount;
-            debtor.amount-=settledAmount;
-            if(creditor.amount===0){
-                i++;
-            }
-            if(debtor.amount===0){
-                j++;
-            }
+        transactions.push({
+            from:debtor.user,
+            to:creditor.user,
+            amount:settledAmount,
+        });
+        creditor.amount-=settledAmount;
+        debtor.amount-=settledAmount;
+        if(creditor.amount===0){
+            i++;
+        }
+        if(debtor.amount===0){
+            j++;
         }
     }
     return transactions;
