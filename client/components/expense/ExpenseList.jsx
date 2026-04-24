@@ -15,6 +15,7 @@ export default function ExpenseList() {
   // Fetch on mount (IMPORTANT)
   useEffect(() => {
     fetchExpenses();
+    console.log("fetchExpenses:", fetchExpenses);
   }, [fetchExpenses]);
 
   return (
