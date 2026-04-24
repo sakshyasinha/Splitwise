@@ -1,26 +1,59 @@
 import { useMemo, useState } from 'react';
 import useExpenses from '../../hooks/useExpenses.js';
+import useAuth from '../../hooks/useAuth.js';
 import Card from '../ui/Card.jsx';
 
 function formatAmount(value) {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: 'INR'
+    currency: 'INR',
   }).format(Number(value || 0));
 }
 
+const CAT_COLORS = {
+  Food:      { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b' },
+  Travel:    { bg: 'rgba(124,110,255,0.12)', color: '#a594ff' },
+  Events:    { bg: 'rgba(244,63,94,0.12)',   color: '#f43f5e' },
+  Utilities: { bg: 'rgba(34,197,94,0.12)',   color: '#22c55e' },
+  Shopping:  { bg: 'rgba(56,189,248,0.12)',  color: '#38bdf8' },
+  General:   { bg: 'rgba(122,121,138,0.12)', color: '#7a798a' },
+};
+
+const CAT_EMOJI = {
+  Food: '🍕', Travel: '✈', Events: '🎉',
+  Utilities: '🏠', Shopping: '🛒', General: '🧾',
+};
+
+function CategoryIcon({ category }) {
+  const key = category || 'General';
+  const style = CAT_COLORS[key] || CAT_COLORS.General;
+  return (
+    <div
+      className="expense-icon"
+      style={{ background: style.bg, color: style.color, fontSize: 17 }}
+    >
+      {CAT_EMOJI[key] || '🧾'}
+    </div>
+  );
+}
+
 export default function ExpenseList() {
+  const { user } = useAuth();
   const { expenses = [], loading, error, updateExpense, deleteExpense } = useExpenses();
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ description: '', amount: '' });
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
-  const canSave = useMemo(() => form.description.trim() && Number(form.amount) > 0, [form]);
+  const canSave = useMemo(
+    () => form.description.trim() && Number(form.amount) > 0,
+    [form]
+  );
 
   const startEdit = (expense) => {
     setEditingId(expense._id);
     setForm({
       description: expense.description || '',
-      amount: String(expense.amount || '')
+      amount: String(expense.amount || ''),
     });
   };
 
@@ -33,100 +66,189 @@ export default function ExpenseList() {
     try {
       await updateExpense(expenseId, {
         description: form.description,
-        amount: Number(form.amount)
+        amount: Number(form.amount),
       });
       cancelEdit();
-    } catch (_error) {
-      // Error is handled in store.
-    }
+    } catch (_) {}
   };
 
   const removeExpense = async (expenseId) => {
     try {
       await deleteExpense(expenseId);
-      if (editingId === expenseId) {
-        cancelEdit();
-      }
-    } catch (_error) {
-      // Error is handled in store.
-    }
+      if (editingId === expenseId) cancelEdit();
+      setConfirmDelete(null);
+    } catch (_) {}
   };
 
   return (
-    <Card title="Recent Expenses" subtitle="Add, edit, or delete your entries">
-      {loading && <p className="muted">Syncing expenses...</p>}
-      {error && <p className="banner error">{error}</p>}
+    <Card>
+      {/* ── HEADER ── */}
+      <div className="card-header">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2>Recent Expenses</h2>
+            <p>Add, edit, or delete your entries</p>
+          </div>
+          <span className="badge badge-violet">{expenses.length} items</span>
+        </div>
+      </div>
 
-      {!loading && expenses.length === 0 && (
-        <p className="muted">No expenses yet. Add your first one above.</p>
-      )}
+      <div className="card-content">
+        {/* ── LOADING ── */}
+        {loading && (
+          <div className="empty-state">
+            <div className="empty-icon" style={{ fontSize: 20 }}>⟳</div>
+            Syncing expenses…
+          </div>
+        )}
 
-      {!loading && expenses.length > 0 && (
-        <ul className="expense-list">
-          {expenses.map((expense) => (
-            <li key={expense._id} className="expense-item">
-              <div className="stack" style={{ width: '100%' }}>
-                {editingId === expense._id ? (
-                  <>
-                    <input
-                      className="input"
-                      value={form.description}
-                      onChange={(event) =>
-                        setForm((prev) => ({ ...prev, description: event.target.value }))
-                      }
-                    />
-                    <input
-                      className="input"
-                      type="number"
-                      min="1"
-                      value={form.amount}
-                      onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <p className="expense-title">{expense.description || 'Untitled expense'}</p>
-                    <p className="muted">Group: {expense.group?.name || expense.groupId || 'n/a'}</p>
-                    <p className="muted">Paid by: {expense.paidBy?.name || expense.paidBy?.email || 'n/a'}</p>
-                  </>
-                )}
+        {/* ── ERROR ── */}
+        {error && <p className="banner error">{error}</p>}
 
-                <div className="stack" style={{ gridTemplateColumns: 'repeat(3, max-content)', gap: '0.5rem' }}>
-                  {editingId === expense._id ? (
-                    <>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={loading || !canSave}
-                        onClick={() => saveEdit(expense._id)}
-                      >
-                        Save
-                      </button>
-                      <button type="button" className="btn btn-ghost" onClick={cancelEdit}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <button type="button" className="btn btn-ghost" onClick={() => startEdit(expense)}>
-                      Edit
-                    </button>
+        {/* ── EMPTY ── */}
+        {!loading && expenses.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-icon">🧾</div>
+            No expenses yet — add your first one above.
+          </div>
+        )}
+
+        {/* ── LIST ── */}
+        {!loading && expenses.length > 0 && (
+          <ul className="expense-list">
+            {expenses.map((expense) => {
+              const paidById = expense.paidBy?._id || expense.paidBy;
+              const canManage = user?.id && String(paidById) === String(user.id);
+              const isEditing = editingId === expense._id;
+              const isConfirming = confirmDelete === expense._id;
+
+              return (
+                <li key={expense._id} className="expense-item" style={{ alignItems: 'flex-start', paddingTop: 14, paddingBottom: 14 }}>
+
+                  {/* ICON */}
+                  {!isEditing && <CategoryIcon category={expense.category} />}
+
+                  {/* BODY */}
+                  <div className="expense-info">
+                    {isEditing ? (
+                      /* ── EDIT MODE ── */
+                      <div className="stack" style={{ gap: 8 }}>
+                        <input
+                          className="input"
+                          placeholder="Description"
+                          value={form.description}
+                          onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+                          autoFocus
+                        />
+                        <input
+                          className="input"
+                          type="number"
+                          min="1"
+                          placeholder="Amount"
+                          value={form.amount}
+                          onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
+                        />
+                        <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={loading || !canSave}
+                            onClick={() => saveEdit(expense._id)}
+                            style={{ fontSize: 12, padding: '6px 12px' }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={cancelEdit}
+                            style={{ fontSize: 12, padding: '6px 12px' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── VIEW MODE ── */
+                      <>
+                        <div className="expense-title">{expense.description || 'Untitled expense'}</div>
+                        <div className="expense-meta">
+                          {expense.group?.name && <span>{expense.group.name}</span>}
+                          {expense.group?.name && <span style={{ margin: '0 4px', opacity: 0.4 }}>·</span>}
+                          <span>
+                            Paid by {expense.paidBy?.name || expense.paidBy?.email || 'n/a'}
+                          </span>
+                        </div>
+
+                        {/* ACTION ROW */}
+                        {canManage ? (
+                          isConfirming ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                              <span className="text-sm" style={{ color: 'var(--danger)' }}>Delete?</span>
+                              <button
+                                type="button"
+                                className="btn btn-danger"
+                                style={{ fontSize: 11, padding: '4px 10px' }}
+                                disabled={loading}
+                                onClick={() => removeExpense(expense._id)}
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                style={{ fontSize: 11, padding: '4px 10px' }}
+                                onClick={() => setConfirmDelete(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                style={{ fontSize: 11, padding: '4px 10px' }}
+                                onClick={() => startEdit(expense)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                style={{ fontSize: 11, padding: '4px 10px', color: 'var(--danger)', borderColor: 'var(--danger-dim)' }}
+                                disabled={loading}
+                                onClick={() => setConfirmDelete(expense._id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )
+                        ) : (
+                          <div className="text-sm muted" style={{ marginTop: 6 }}>View only</div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* AMOUNT — hidden in edit mode */}
+                  {!isEditing && (
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div className="expense-amount debit">{formatAmount(expense.amount)}</div>
+                      {expense.participants?.length > 0 && (
+                        <div className="expense-share">
+                          ÷ {expense.participants.length + 1} people
+                        </div>
+                      )}
+                    </div>
                   )}
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    disabled={loading}
-                    onClick={() => removeExpense(expense._id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
 
-              <p className="expense-amount">{formatAmount(expense.amount)}</p>
-            </li>
-          ))}
-        </ul>
-      )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </Card>
   );
 }

@@ -39,6 +39,15 @@ export const deleteExpense = async (req, res) => {
     }
 };
 
+export const settleDue = async (req, res) => {
+    try {
+        const data = await expenseService.settleDue(req.user?.id, req.params.id);
+        res.json(data);
+    } catch (error) {
+        res.status(error.statusCode || 500).json({ message: error.message });
+    }
+};
+
 export const getMyDues = async (req, res) => {
     try {
         const data = await expenseService.getMyDues(req.user?.id);

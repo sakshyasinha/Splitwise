@@ -2,6 +2,14 @@ import User from '../models/user.model.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
+function toPublicUser(user) {
+    return {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email
+    };
+}
+
 export const registerUser=async({name,email,password})=>{
     if (!name || !email || !password) {
         const error = new Error('name, email and password are required');
@@ -9,14 +17,23 @@ export const registerUser=async({name,email,password})=>{
         throw error;
     }
 
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const existingUser = await User.findOne({ email: normalizedEmail });
+
+    if (existingUser) {
+        const error = new Error('Email already registered');
+        error.statusCode = 409;
+        throw error;
+    }
+
     const hashed=await bcrypt.hash(password,10);
 
     const user=await User.create({
-        name,
-        email,
+        name: String(name).trim(),
+        email: normalizedEmail,
         password:hashed,
     });
-    return user;
+    return toPublicUser(user);
 };
 
 export const loginUser=async({email,password})=>{
@@ -26,7 +43,8 @@ export const loginUser=async({email,password})=>{
             throw error;
         }
 
-        const user=await User.findOne({email});
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const user=await User.findOne({email: normalizedEmail});
 
         if(!user) {
             const error = new Error('User not found');
@@ -43,5 +61,8 @@ export const loginUser=async({email,password})=>{
             throw error;
         }
 
-        return jwt.sign({id:user._id},process.env.JWT_SECRET, { expiresIn: '7d' });
+        return {
+            token: jwt.sign({id:user._id},process.env.JWT_SECRET, { expiresIn: '7d' }),
+            user: toPublicUser(user)
+        };
 };

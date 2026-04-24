@@ -4,6 +4,7 @@ import {
   deleteExpense as deleteExpenseService,
   updateExpense as updateExpenseService,
   getMyDues as getMyDuesService,
+  settleDue as settleDueService,
   getExpenses as getExpensesService, // ✅ NEW
 } from "../services/expense.service.js";
 import { createGroup as createGroupService } from "../services/group.service.js";
@@ -127,6 +128,35 @@ const useExpenseStore = create((set) => ({
           error?.response?.data?.message ||
           error.message ||
           "Failed to delete expense",
+      });
+
+      throw error;
+    }
+  },
+
+  settleDue: async (expenseId) => {
+    set({ loading: true, error: null });
+
+    try {
+      await settleDueService(expenseId);
+      const [expensesData, duesData] = await Promise.all([
+        getExpensesService(),
+        getMyDuesService(),
+      ]);
+
+      set({
+        expenses: expensesData || [],
+        myDues: duesData.dues || [],
+        totalOwed: Number(duesData.totalOwed || 0),
+        loading: false,
+      });
+    } catch (error) {
+      set({
+        loading: false,
+        error:
+          error?.response?.data?.message ||
+          error.message ||
+          "Failed to settle due",
       });
 
       throw error;

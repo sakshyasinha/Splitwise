@@ -24,3 +24,8 @@ export async function getMyDues() {
   const response = await API.get('/expenses/my');
   return response.data;
 }
+
+export async function settleDue(expenseId) {
+  const response = await API.patch(`/expenses/${expenseId}/settle`);
+  return response.data;
+}
