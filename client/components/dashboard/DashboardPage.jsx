@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import useAuth from '../../hooks/useAuth.js';
 import useExpenses from '../../hooks/useExpenses.js';
 import Button from '../ui/Button.jsx';
@@ -18,7 +18,13 @@ function currency(amount) {
 
 export default function DashboardPage() {
   const { logout } = useAuth();
-  const { expenses, groups } = useExpenses();
+  const { expenses, groups, myDues, totalOwed, fetchMyDues } = useExpenses();
+
+  useEffect(() => {
+    fetchMyDues().catch(() => {
+      // Error state is already managed in store.
+    });
+  }, [fetchMyDues]);
 
   const totals = useMemo(() => {
     const totalSpend = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
@@ -48,8 +54,8 @@ export default function DashboardPage() {
         <Card title="Expenses" subtitle="Recorded transactions">
           <p className="metric">{totals.expenseCount}</p>
         </Card>
-        <Card title="Total Spend" subtitle="Across all entries">
-          <p className="metric">{currency(totals.totalSpend)}</p>
+        <Card title="You Owe" subtitle="Pending dues on your account">
+          <p className="metric">{currency(totalOwed)}</p>
         </Card>
       </section>
 
@@ -60,6 +66,25 @@ export default function DashboardPage() {
           <ExpenseList />
         </div>
         <div className="right-column">
+          <Card title="My Dues" subtitle="What you need to pay">
+            {myDues.length === 0 ? (
+              <p className="muted">You have no pending dues.</p>
+            ) : (
+              <ul className="expense-list">
+                {myDues.map((due) => (
+                  <li key={due.expenseId} className="expense-item">
+                    <div>
+                      <p className="expense-title">{due.description}</p>
+                      <p className="muted">Pay to: {due.paidTo?.name || due.paidTo?.email}</p>
+                      <p className="muted">Group: {due.group?.name}</p>
+                    </div>
+                    <p className="expense-amount">{currency(due.amount)}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
           <AIChatPanel />
         </div>
       </section>

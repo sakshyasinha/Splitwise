@@ -29,6 +29,7 @@ app.use("/api/expenses", expenseRoutes);
 
 app.use("/api/settlements",settlementsRoutes);
 
+
 const startServer = async () => {
     try {
         await connectDB();

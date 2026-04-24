@@ -6,8 +6,13 @@ const expenseSchema=new mongoose.Schema({
     group:{type:mongoose.Schema.Types.ObjectId,ref:'Group'},
     paidBy:{type:mongoose.Schema.Types.ObjectId,ref:'User'},
     participants:[{
-        userId:{type:String},
-        amount:Number
+        userId:{type:mongoose.Schema.Types.ObjectId,ref:'User'},
+        amount:Number,
+        status:{
+            type:String,
+            enum:['pending','paid'],
+            default:'pending'
+        }
     }],
 },{timestamps:true});
 

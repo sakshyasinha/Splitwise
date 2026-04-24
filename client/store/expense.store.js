@@ -1,10 +1,12 @@
 import { create } from 'zustand';
-import { addExpense as addExpenseService } from '../services/expense.service.js';
+import { addExpense as addExpenseService, getMyDues as getMyDuesService } from '../services/expense.service.js';
 import { createGroup as createGroupService } from '../services/group.service.js';
 
 const useExpenseStore = create((set) => ({
   expenses: [],
   groups: [],
+  myDues: [],
+  totalOwed: 0,
   loading: false,
   error: null,
   clearError: () => set({ error: null }),
@@ -21,6 +23,24 @@ const useExpenseStore = create((set) => ({
       set({
         loading: false,
         error: error?.response?.data?.message || error.message || 'Failed to add expense'
+      });
+      throw error;
+    }
+  },
+  fetchMyDues: async () => {
+    set({ loading: true, error: null });
+    try {
+      const data = await getMyDuesService();
+      set({
+        myDues: data.dues || [],
+        totalOwed: Number(data.totalOwed || 0),
+        loading: false
+      });
+      return data;
+    } catch (error) {
+      set({
+        loading: false,
+        error: error?.response?.data?.message || error.message || 'Failed to load dues'
       });
       throw error;
     }
