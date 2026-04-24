@@ -12,11 +12,14 @@ function formatAmount(value) {
 export default function ExpenseList() {
   const { expenses = [], loading, error, fetchExpenses } = useExpenses();
 
-  // Fetch on mount (IMPORTANT)
   useEffect(() => {
-    fetchExpenses();
-    console.log("fetchExpenses:", fetchExpenses);
-  }, [fetchExpenses]);
+    // 🔥 SAFETY CHECK
+    if (typeof fetchExpenses === "function") {
+      fetchExpenses();
+    } else {
+      console.error("fetchExpenses is not a function:", fetchExpenses);
+    }
+  }, []); // ❗ remove dependency
 
   return (
     <Card title="Recent Expenses" subtitle="Latest activity in this session">
@@ -37,10 +40,7 @@ export default function ExpenseList() {
                   {expense.description || "Untitled expense"}
                 </p>
                 <p className="muted">
-                  Group:{" "}
-                  {expense.group?.name ||
-                    expense.groupId ||
-                    "n/a"}
+                  Group: {expense.group?.name || expense.groupId || "n/a"}
                 </p>
               </div>
               <p className="expense-amount">
