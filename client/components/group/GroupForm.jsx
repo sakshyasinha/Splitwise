@@ -1,16 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useExpenses from "../../hooks/useExpenses.js";
 import Button from "../ui/Button.jsx";
 import Card from "../ui/Card.jsx";
 import Input from "../ui/Input.jsx";
 
-// simple email validator
-const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
+const normalizeEmail = (value) => value.trim().toLowerCase();
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 export default function GroupForm() {
   const { createGroup, loading, error, clearError } = useExpenses();
 
-  const currentUserEmail = localStorage.getItem("email"); // ⚠️ replace with auth store later
+  const currentUserEmail = normalizeEmail(sessionStorage.getItem("email") || "");
 
   const [name, setName] = useState("");
   const [memberInput, setMemberInput] = useState("");
@@ -18,26 +18,35 @@ export default function GroupForm() {
   const [success, setSuccess] = useState("");
   const [localError, setLocalError] = useState("");
 
+  const allMembersPreview = useMemo(() => {
+    const others = [...new Set(members.map(normalizeEmail).filter(Boolean))];
+    return currentUserEmail ? [currentUserEmail, ...others] : others;
+  }, [currentUserEmail, members]);
+
   // ➕ Add member
   const handleAddMember = () => {
-    const email = memberInput.trim().toLowerCase();
+    const email = normalizeEmail(memberInput);
 
     setLocalError("");
+    setSuccess("");
 
-    if (!email) return;
+    if (!email) {
+      setLocalError("Enter an email to add a member");
+      return;
+    }
 
     if (!isValidEmail(email)) {
       setLocalError("Enter a valid email");
       return;
     }
 
-    if (email === currentUserEmail) {
+    if (currentUserEmail && email === currentUserEmail) {
       setLocalError("You are already part of the group");
       setMemberInput("");
       return;
     }
 
-    if (members.includes(email)) {
+    if (members.map(normalizeEmail).includes(email)) {
       setLocalError("Member already added");
       setMemberInput("");
       return;
@@ -45,10 +54,12 @@ export default function GroupForm() {
 
     setMembers((prev) => [...prev, email]);
     setMemberInput("");
+    setSuccess(`Added ${email}`);
   };
 
   // ❌ Remove member
   const handleRemoveMember = (email) => {
+    setLocalError("");
     setMembers((prev) => prev.filter((m) => m !== email));
   };
 
@@ -60,10 +71,20 @@ export default function GroupForm() {
     setLocalError("");
     clearError();
 
+    if (!name.trim()) {
+      setLocalError("Group name is required");
+      return;
+    }
+
+    if (members.length === 0) {
+      setLocalError("Add at least one member before creating the group");
+      return;
+    }
+
     try {
       await createGroup({
-        name,
-        members,
+        name: name.trim(),
+        members: members.map(normalizeEmail),
       });
 
       setSuccess("Group created successfully.");
@@ -92,7 +113,9 @@ export default function GroupForm() {
         {/* Show current user */}
         <div>
           <label className="label">Members</label>
-          <p className="muted">✔ You ({currentUserEmail})</p>
+          <p className="muted">
+            ✔ You ({currentUserEmail || "current account"})
+          </p>
         </div>
 
         {/* Add Members */}
@@ -114,6 +137,17 @@ export default function GroupForm() {
 
           {/* Local errors */}
           {localError && <p className="banner error">{localError}</p>}
+
+          {/* Member preview including current user */}
+          {allMembersPreview.length > 0 && (
+            <ul style={{ marginTop: "10px", paddingLeft: "18px" }}>
+              {allMembersPreview.map((email) => (
+                <li key={`preview-${email}`} className="muted">
+                  {email === currentUserEmail ? `You (${email})` : email}
+                </li>
+              ))}
+            </ul>
+          )}
 
           {/* Member List */}
           {members.length > 0 && (
