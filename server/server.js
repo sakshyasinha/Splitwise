@@ -16,10 +16,19 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
+const PORT = Number(process.env.PORT) || 5000;
+const CORS_ORIGIN = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
+    : true;
+
 const app =express();
 
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(express.json());
+
+app.get('/api/health', (_req, res) => {
+    res.json({ status: 'ok' });
+});
 
 app.use('/api/auth',authRoutes);
 
@@ -34,8 +43,8 @@ const startServer = async () => {
     try {
         await connectDB();
 
-        app.listen(5000, () => {
-            console.log('Server is running on port 5000');
+        app.listen(PORT, () => {
+            console.log(`Server is running on port ${PORT}`);
         });
     } catch (error) {
         console.error('DB connection failed:', error);
