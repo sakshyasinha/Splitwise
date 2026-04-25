@@ -54,10 +54,13 @@ export const addExpense=async(data)=>{
         throw error;
     }
 
-    const splits=splitEqual(Number(amount), participantIds).map((split) => ({
-        ...split,
-        status: 'pending'
-    }));
+    const payerAwareParticipants = [String(userId), ...participantIds];
+    const splits = splitEqual(Number(amount), payerAwareParticipants)
+        .filter((split) => String(split.userId) !== String(userId))
+        .map((split) => ({
+            ...split,
+            status: 'pending'
+        }));
 
     const createdExpense=await Expense.create({
         group: groupId,
@@ -121,10 +124,13 @@ export const updateExpense = async (userId, expenseId, updates) => {
 
     expense.description = nextDescription;
     expense.amount = nextAmount;
-    expense.participants = splitEqual(nextAmount, nextParticipants).map((split) => ({
-        ...split,
-        status: 'pending'
-    }));
+    const payerAwareParticipants = [String(userId), ...nextParticipants];
+    expense.participants = splitEqual(nextAmount, payerAwareParticipants)
+        .filter((split) => String(split.userId) !== String(userId))
+        .map((split) => ({
+            ...split,
+            status: 'pending'
+        }));
 
     await expense.save();
 
