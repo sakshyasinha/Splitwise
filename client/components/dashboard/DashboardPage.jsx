@@ -100,40 +100,109 @@
 
       return {
         ...group,
+        groupKey: String(group._id),
         totalSpend,
         totalDue,
         myTotalDue,
         memberDues,
         memberNames,
         memberCount,
+        dues,
+        groupExpenses,
       };
     }) : [];
 
+    const mergedGroupSummaries = useMemo(() => {
+      const byName = new Map();
+
+      for (const group of groupSummaries) {
+        const key = normalizeGroupName(group.name) || String(group.groupKey);
+        const existing = byName.get(key);
+
+        if (!existing) {
+          byName.set(key, {
+            ...group,
+            groupKey: key,
+            _sourceGroupIds: [String(group._id)],
+            groupExpenses: [...(group.groupExpenses || [])],
+            dues: [...(group.dues || [])],
+            memberNames: [...(group.memberNames || [])],
+          });
+          continue;
+        }
+
+        existing._sourceGroupIds = [...new Set([...existing._sourceGroupIds, String(group._id)])];
+        const expenseMap = new Map((existing.groupExpenses || []).map((expense) => [String(expense._id), expense]));
+        (group.groupExpenses || []).forEach((expense) => {
+          expenseMap.set(String(expense._id), expense);
+        });
+        existing.groupExpenses = Array.from(expenseMap.values());
+
+        const dueMap = new Map((existing.dues || []).map((due) => [String(due.expenseId), due]));
+        (group.dues || []).forEach((due) => {
+          dueMap.set(String(due.expenseId), due);
+        });
+        existing.dues = Array.from(dueMap.values());
+
+        existing.memberNames = dedupeNames([...(existing.memberNames || []), ...(group.memberNames || [])]);
+      }
+
+      return Array.from(byName.values()).map((group) => {
+        const totalSpend = (group.groupExpenses || []).reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+        const totalDue = (group.groupExpenses || []).reduce(
+          (sum, expense) =>
+            sum +
+            (expense.participants || []).reduce(
+              (pendingSum, participant) =>
+                participant?.status === 'pending'
+                  ? pendingSum + Number(participant.amount || 0)
+                  : pendingSum,
+              0
+            ),
+          0
+        );
+        const myTotalDue = (group.dues || []).reduce((sum, due) => sum + Number(due.amount || 0), 0);
+        const memberDues = (group.dues || []).map((due) => ({
+          name: due.paidTo?.name || due.paidTo?.email,
+          amount: due.amount,
+        }));
+        const memberNames = dedupeNames([
+          ...(group.memberNames || []),
+          ...(group.dues || []).map((due) => due.paidTo?.name || due.paidTo?.email || ''),
+          ...(group.groupExpenses || []).map((expense) => expense.paidBy?.name || expense.paidBy?.email || ''),
+          user?.name || user?.email || '',
+        ]);
+
+        return {
+          ...group,
+          totalSpend,
+          totalDue,
+          myTotalDue,
+          memberDues,
+          memberNames,
+          memberCount: Math.max(memberNames.length, 1),
+        };
+      });
+    }, [groupSummaries, user?.name, user?.email]);
+
     const prioritizedGroups = useMemo(
       () =>
-        [...groupSummaries].sort((a, b) => {
+        [...mergedGroupSummaries].sort((a, b) => {
           const aScore = Number(a.myTotalDue || 0) + Number(a.totalDue || 0);
           const bScore = Number(b.myTotalDue || 0) + Number(b.totalDue || 0);
           if (bScore !== aScore) return bScore - aScore;
           return Number(b.totalSpend || 0) - Number(a.totalSpend || 0);
         }),
-      [groupSummaries]
+      [mergedGroupSummaries]
     );
 
     const selectedGroup = useMemo(
-      () => prioritizedGroups.find((group) => String(group._id) === String(selectedGroupId)) || prioritizedGroups[0] || null,
+      () => prioritizedGroups.find((group) => String(group.groupKey) === String(selectedGroupId)) || prioritizedGroups[0] || null,
       [prioritizedGroups, selectedGroupId]
     );
 
     const selectedGroupExpenses = selectedGroup
-      ? (() => {
-          const exactMatchedExpenses = expenses.filter((expense) => String(getExpenseGroupId(expense)) === String(selectedGroup._id));
-          if (exactMatchedExpenses.length > 0) {
-            return exactMatchedExpenses;
-          }
-
-          return expenses.filter((expense) => normalizeGroupName(getExpenseGroupName(expense)) === normalizeGroupName(selectedGroup.name));
-        })()
+      ? (selectedGroup.groupExpenses || [])
       : [];
 
     return (
@@ -169,7 +238,7 @@
             <div className="card-content">
               <div className="metric-icon">👥</div>
               <div className="metric-label">Groups</div>
-              <div className="metric">{totals.groupCount}</div>
+              <div className="metric">{prioritizedGroups.length}</div>
               <div className="metric-sub">Active shared circles</div>
             </div>
           </Card>
@@ -209,7 +278,7 @@
                 <p>Your active shared circles</p>
               </div>
               <div className="card-content">
-                {groups.length === 0 ? (
+                {prioritizedGroups.length === 0 ? (
                   <div className="empty-state">
                     <div className="empty-icon">👥</div>
                     No groups yet. Create one to start splitting.
@@ -218,17 +287,17 @@
                   <div className="stack">
                     {prioritizedGroups.map((group) => (
                       <button
-                        key={group._id}
+                        key={group.groupKey}
                         type="button"
                         className="group-card"
-                        onClick={() => setSelectedGroupId(group._id)}
+                        onClick={() => setSelectedGroupId(group.groupKey)}
                         style={{
                           flexDirection: "column",
                           alignItems: "flex-start",
                           width: "100%",
                           cursor: "pointer",
-                          border: String(selectedGroup?._id) === String(group._id) ? '1px solid var(--primary)' : undefined,
-                          boxShadow: String(selectedGroup?._id) === String(group._id) ? '0 0 0 3px rgba(74, 144, 226, 0.12)' : undefined,
+                          border: String(selectedGroup?.groupKey) === String(group.groupKey) ? '1px solid var(--primary)' : undefined,
+                          boxShadow: String(selectedGroup?.groupKey) === String(group.groupKey) ? '0 0 0 3px rgba(74, 144, 226, 0.12)' : undefined,
                         }}
                       >
                         {/* Top Row */}
@@ -272,7 +341,7 @@
                               <div
                                 key={i}
                                 className="text-sm"
-                                style={{ display: 'grid', gridTemplateColumns: '1fr auto', columnGap: 12, width: '100%' }}
+                                style={{ display: 'grid', gridTemplateColumns: '1fr auto', columnGap: 12, alignItems: 'center', width: '100%' }}
                               >
                                 <span>{person.name}</span>
                                 <span style={{ color: 'var(--danger)' }}>
