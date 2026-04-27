@@ -2,6 +2,7 @@ import express from "express";
 import { createGroup } from "../controllers/group.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 import Group from "../models/group.model.js"; 
+import Expense from "../models/expense.model.js";
 
 const router = express.Router();
 
@@ -16,8 +17,28 @@ router.post("/create", protect, createGroup);
 
 router.get("/", protect, async (req, res) => {
   try {
+    const [memberOrOwnerGroups, expenseGroupIds] = await Promise.all([
+      Group.find({
+        $or: [
+          { members: req.user.id },
+          { createdBy: req.user.id },
+        ],
+      }).select("_id"),
+      Expense.distinct("group", {
+        $or: [
+          { paidBy: req.user.id },
+          { "participants.userId": req.user.id },
+        ],
+      }),
+    ]);
+
+    const visibleGroupIds = [...new Set([
+      ...memberOrOwnerGroups.map((group) => String(group._id)),
+      ...expenseGroupIds.map((groupId) => String(groupId)),
+    ])];
+
     const groups = await Group.find({
-      members: req.user.id, // user must be in group
+      _id: { $in: visibleGroupIds },
     })
       .populate("members", "name email")
       .populate("createdBy", "name email");
