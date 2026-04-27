@@ -5,27 +5,8 @@ import Button from "../ui/Button.jsx";
 import Card from "../ui/Card.jsx";
 import Input from "../ui/Input.jsx";
 
-// Constants for error messages
-const ERROR_MESSAGES = {
-  EMPTY_EMAIL: "Enter an email",
-  INVALID_EMAIL: "Invalid email format",
-  SELF_EMAIL: "You are already included",
-  DUPLICATE_EMAIL: "Already added",
-  EMPTY_GROUP_NAME: "Group name is required",
-  NO_MEMBERS: "Add at least one member",
-};
-
 const normalizeEmail = (value) => value.trim().toLowerCase();
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
-// Chip Component
-const Chip = ({ email, onRemove, isPrimary }) => (
-  <div className={`chip ${isPrimary ? "primary" : ""}`}>
-    {isPrimary ? "You" : email}
-    <span className="chip-sub">{isPrimary ? email : "×"}</span>
-    {!isPrimary && <span onClick={() => onRemove(email)}>×</span>}
-  </div>
-);
 
 export default function GroupForm() {
   const { user } = useAuth();
@@ -52,23 +33,23 @@ export default function GroupForm() {
     setSuccess("");
 
     if (!email) {
-      setLocalError(ERROR_MESSAGES.EMPTY_EMAIL);
+      setLocalError("Enter an email");
       return;
     }
 
     if (!isValidEmail(email)) {
-      setLocalError(ERROR_MESSAGES.INVALID_EMAIL);
+      setLocalError("Invalid email format");
       return;
     }
 
     if (email === currentUserEmail) {
-      setLocalError(ERROR_MESSAGES.SELF_EMAIL);
+      setLocalError("You are already included");
       setMemberInput("");
       return;
     }
 
     if (members.includes(email)) {
-      setLocalError(ERROR_MESSAGES.DUPLICATE_EMAIL);
+      setLocalError("Already added");
       setMemberInput("");
       return;
     }
@@ -91,12 +72,12 @@ export default function GroupForm() {
     clearError();
 
     if (!name.trim()) {
-      setLocalError(ERROR_MESSAGES.EMPTY_GROUP_NAME);
+      setLocalError("Group name is required");
       return;
     }
 
     if (members.length === 0) {
-      setLocalError(ERROR_MESSAGES.NO_MEMBERS);
+      setLocalError("Add at least one member");
       return;
     }
 
@@ -109,14 +90,13 @@ export default function GroupForm() {
       setSuccess("Group created successfully");
       setName("");
       setMembers([]);
-    } catch (err) {
-      setLocalError(err.message || "Failed to create group");
-    }
+    } catch (_) {}
   };
 
   return (
     <Card title="Create Group" subtitle="Split expenses with your crew">
       <form className="stack" onSubmit={handleSubmit}>
+        
         {/* Group Name */}
         <Input
           label="Group Name"
@@ -138,9 +118,8 @@ export default function GroupForm() {
               value={memberInput}
               onChange={(e) => setMemberInput(e.target.value)}
               placeholder="Enter email"
-              aria-label="Add member email"
             />
-            <Button type="button" onClick={handleAddMember} disabled={!memberInput.trim()}>
+            <Button type="button" onClick={handleAddMember}>
               Add
             </Button>
           </div>
@@ -148,15 +127,24 @@ export default function GroupForm() {
           {localError && <p className="banner error">{localError}</p>}
 
           <div className="chips">
-            {currentUserEmail && <Chip email={currentUserEmail} isPrimary />}
+            {currentUserEmail && (
+              <div className="chip primary">
+                You
+                <span className="chip-sub">{currentUserEmail}</span>
+              </div>
+            )}
+
             {members.map((email) => (
-              <Chip key={email} email={email} onRemove={removeMember} />
+              <div key={email} className="chip">
+                {email}
+                <span onClick={() => removeMember(email)}>×</span>
+              </div>
             ))}
           </div>
 
           {allMembers.length > 0 && (
             <p className="text-sm muted" style={{ marginTop: 8 }}>
-              Preview: {allMembers.join(" · ")}
+              Preview: {allMembers.join(' · ')}
             </p>
           )}
         </div>
