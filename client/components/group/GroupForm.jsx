@@ -5,8 +5,27 @@ import Button from "../ui/Button.jsx";
 import Card from "../ui/Card.jsx";
 import Input from "../ui/Input.jsx";
 
+// Constants for error messages
+const ERROR_MESSAGES = {
+  EMPTY_EMAIL: "Enter an email",
+  INVALID_EMAIL: "Invalid email format",
+  SELF_EMAIL: "You are already included",
+  DUPLICATE_EMAIL: "Already added",
+  EMPTY_GROUP_NAME: "Group name is required",
+  NO_MEMBERS: "Add at least one member",
+};
+
 const normalizeEmail = (value) => value.trim().toLowerCase();
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+// Chip Component
+const Chip = ({ email, onRemove, isPrimary }) => (
+  <div className={`chip ${isPrimary ? "primary" : ""}`}>
+    {isPrimary ? "You" : email}
+    <span className="chip-sub">{isPrimary ? email : "×"}</span>
+    {!isPrimary && <span onClick={() => onRemove(email)}>×</span>}
+  </div>
+);
 
 export default function GroupForm() {
   const { user } = useAuth();
@@ -33,23 +52,23 @@ export default function GroupForm() {
     setSuccess("");
 
     if (!email) {
-      setLocalError("Enter an email");
+      setLocalError(ERROR_MESSAGES.EMPTY_EMAIL);
       return;
     }
 
     if (!isValidEmail(email)) {
-      setLocalError("Invalid email format");
+      setLocalError(ERROR_MESSAGES.INVALID_EMAIL);
       return;
     }
 
     if (email === currentUserEmail) {
-      setLocalError("You are already included");
+      setLocalError(ERROR_MESSAGES.SELF_EMAIL);
       setMemberInput("");
       return;
     }
 
     if (members.includes(email)) {
-      setLocalError("Already added");
+      setLocalError(ERROR_MESSAGES.DUPLICATE_EMAIL);
       setMemberInput("");
       return;
     }
@@ -72,12 +91,12 @@ export default function GroupForm() {
     clearError();
 
     if (!name.trim()) {
-      setLocalError("Group name is required");
+      setLocalError(ERROR_MESSAGES.EMPTY_GROUP_NAME);
       return;
     }
 
     if (members.length === 0) {
-      setLocalError("Add at least one member");
+      setLocalError(ERROR_MESSAGES.NO_MEMBERS);
       return;
     }
 
@@ -90,13 +109,14 @@ export default function GroupForm() {
       setSuccess("Group created successfully");
       setName("");
       setMembers([]);
-    } catch (_) {}
+    } catch (err) {
+      setLocalError(err.message || "Failed to create group");
+    }
   };
 
   return (
     <Card title="Create Group" subtitle="Split expenses with your crew">
       <form className="stack" onSubmit={handleSubmit}>
-        
         {/* Group Name */}
         <Input
           label="Group Name"
@@ -118,46 +138,32 @@ export default function GroupForm() {
               value={memberInput}
               onChange={(e) => setMemberInput(e.target.value)}
               placeholder="Enter email"
+              aria-label="Add member email"
             />
-            <Button type="button" onClick={handleAddMember}>
+            <Button type="button" onClick={handleAddMember} disabled={!memberInput.trim()}>
               Add
             </Button>
           </div>
 
-          {/* Errors */}
           {localError && <p className="banner error">{localError}</p>}
 
-          {/* Chips UI */}
           <div className="chips">
-            {/* Current user */}
-            {currentUserEmail && (
-              <div className="chip primary">
-                You
-                <span className="chip-sub">{currentUserEmail}</span>
-              </div>
-            )}
-
-            {/* Other members */}
+            {currentUserEmail && <Chip email={currentUserEmail} isPrimary />}
             {members.map((email) => (
-              <div key={email} className="chip">
-                {email}
-                <span onClick={() => removeMember(email)}>×</span>
-              </div>
+              <Chip key={email} email={email} onRemove={removeMember} />
             ))}
           </div>
 
           {allMembers.length > 0 && (
             <p className="text-sm muted" style={{ marginTop: 8 }}>
-              Preview: {allMembers.join(' · ')}
+              Preview: {allMembers.join(" · ")}
             </p>
           )}
         </div>
 
-        {/* Status */}
         {error && <p className="banner error">{error}</p>}
         {success && <p className="banner success">{success}</p>}
 
-        {/* Submit */}
         <Button type="submit" disabled={loading || !name.trim()}>
           {loading ? "Creating..." : "Create Group"}
         </Button>
