@@ -8,6 +8,7 @@ import {
   getExpenses as getExpensesService, // ✅ NEW
 } from "../services/expense.service.js";
 import { createGroup as createGroupService } from "../services/group.service.js";
+import { getGroups as getGroupsService } from "../services/group.service.js";
 
 const useExpenseStore = create((set) => ({
   expenses: [],
@@ -16,6 +17,32 @@ const useExpenseStore = create((set) => ({
   totalOwed: 0,
   loading: false,
   error: null,
+
+
+fetchGroups: async () => {
+  try {
+    set({ loading: true, error: null });
+
+    const data = await getGroupsService();
+
+    set({
+      groups: data || [],
+      loading: false,
+    });
+
+    return data;
+  } catch (err) {
+    set({
+      error:
+        err?.response?.data?.message ||
+        err.message ||
+        "Failed to fetch groups",
+      loading: false,
+    });
+
+    throw err;
+  }
+},
 
   // 🔄 Reset state (important for user switching)
   resetState: () =>

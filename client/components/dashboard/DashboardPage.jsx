@@ -1,4 +1,5 @@
- import useAuth from '../../hooks/useAuth.js';
+                                                                                                                                           
+  import useAuth from '../../hooks/useAuth.js';                                                                                                
   import useExpenses from '../../hooks/useExpenses.js';
   import Button from '../ui/Button.jsx';
   import Card from '../ui/Card.jsx';
@@ -19,12 +20,15 @@
 
   const DashboardPage = () => {
     const { logout } = useAuth();
-    const { expenses, groups, myDues, totalOwed, fetchExpenses, fetchMyDues } = useExpenses();
-
+    const { expenses, groups, myDues, totalOwed, fetchExpenses, fetchMyDues, fetchGroups } = useExpenses();
     useEffect(() => {
       fetchExpenses();
       fetchMyDues();
-    }, [fetchExpenses, fetchMyDues]);
+      fetchGroups();
+    }, []);
+
+    console.log("groups:", groups);
+    console.log(expenses.map(e => e.group));
 
     const totals = {
       groupCount: groups.length,
@@ -32,12 +36,18 @@
       totalSpend: expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0),
     };
 
-    const groupSummaries = groups.map((group) => {
-      const groupExpenses = expenses.filter((expense) => expense.group?._id === group._id);
+    const groupSummaries = groups.length > 0 ? groups.map((group) => {
+      const groupExpenses = expenses.filter((expense) => {
+        const expenseGroupId = typeof expense.group === "object" ? expense.group._id : expense.group;
+        return expense.group?.name === group.name;
+      });
+
       const totalSpend = groupExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-      const dues = myDues.filter((due) => due.group?._id === group._id);
+      const dues = myDues.filter((due) => String(due.group?.id) === String(group._id));
       const totalDue = dues.reduce((sum, due) => sum + Number(due.amount || 0), 0);
       const memberDues = dues.map((due) => ({ name: due.paidTo?.name || due.paidTo?.email, amount: due.amount }));
+
+      console.log(myDues.map(d => d.group));
 
       return {
         ...group,
@@ -45,7 +55,9 @@
         totalDue,
         memberDues,
       };
-    });
+    }) : [];
+
+    console.log(groupSummaries);
 
     return (
       <main className="dashboard-layout">
@@ -233,3 +245,4 @@
   };
 
   export default DashboardPage;
+  
