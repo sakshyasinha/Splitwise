@@ -7,7 +7,7 @@
   import ExpenseForm from '../expense/ExpenseForm.jsx';
   import ExpenseList from '../expense/ExpenseList.jsx';
   import AIChatPanel from '../chat/AIChatPanel.jsx';
-  import { useEffect } from 'react'
+  import { useEffect, useMemo, useState } from 'react'
 
   // Define the currency function
   const currency = (amount) => {
@@ -18,17 +18,25 @@
     }).format(amount || 0);
   };
 
+  const getMemberLabel = (member, index) => {
+    if (member && typeof member === 'object') {
+      return member.name || member.email || `Member ${index + 1}`;
+    }
+
+    return `Member ${index + 1}`;
+  };
+
   const DashboardPage = () => {
     const { logout } = useAuth();
     const { expenses, groups, myDues, totalOwed, fetchExpenses, fetchMyDues, fetchGroups } = useExpenses();
+    const [selectedGroupId, setSelectedGroupId] = useState(null);
+
     useEffect(() => {
       fetchExpenses();
       fetchMyDues();
       fetchGroups();
     }, []);
 
-    console.log("groups:", groups);
-    console.log(expenses.map(e => e.group));
 
     const totals = {
       groupCount: groups.length,
@@ -36,28 +44,49 @@
       totalSpend: expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0),
     };
 
+    const getDueGroupId = (due) => due.group?._id || due.group?.id || null;
+    const getExpenseGroupId = (expense) => (typeof expense.group === 'object' ? expense.group?._id : expense.group);
+
     const groupSummaries = groups.length > 0 ? groups.map((group) => {
-      const groupExpenses = expenses.filter((expense) => {
-        const expenseGroupId = typeof expense.group === "object" ? expense.group._id : expense.group;
-        return expense.group?.name === group.name;
-      });
+      const groupExpenses = expenses.filter((expense) => String(getExpenseGroupId(expense)) === String(group._id));
 
       const totalSpend = groupExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-      const dues = myDues.filter((due) => String(due.group?.id) === String(group._id));
-      const totalDue = dues.reduce((sum, due) => sum + Number(due.amount || 0), 0);
+      const dues = myDues.filter((due) => String(getDueGroupId(due)) === String(group._id));
+      const myTotalDue = dues.reduce((sum, due) => sum + Number(due.amount || 0), 0);
+      const totalDue = groupExpenses.reduce(
+        (sum, expense) =>
+          sum +
+          (expense.participants || []).reduce(
+            (pendingSum, participant) =>
+              participant?.status === 'pending'
+                ? pendingSum + Number(participant.amount || 0)
+                : pendingSum,
+            0
+          ),
+        0
+      );
       const memberDues = dues.map((due) => ({ name: due.paidTo?.name || due.paidTo?.email, amount: due.amount }));
-
-      console.log(myDues.map(d => d.group));
 
       return {
         ...group,
         totalSpend,
         totalDue,
+        myTotalDue,
         memberDues,
       };
     }) : [];
 
-    console.log(groupSummaries);
+    const selectedGroup = useMemo(
+      () => groupSummaries.find((group) => String(group._id) === String(selectedGroupId)) || groupSummaries[0] || null,
+      [groupSummaries, selectedGroupId]
+    );
+
+    const selectedGroupExpenses = selectedGroup
+      ? expenses.filter((expense) => {
+          const expenseGroupId = typeof expense.group === "object" ? expense.group._id : expense.group;
+          return String(expenseGroupId) === String(selectedGroup._id);
+        })
+      : [];
 
     return (
       <main className="dashboard-layout">
@@ -140,7 +169,20 @@
                 ) : (
                   <div className="stack">
                     {groupSummaries.map((group) => (
-                      <div key={group._id} className="group-card" style={{ flexDirection: "column", alignItems: "flex-start" }}>
+                      <button
+                        key={group._id}
+                        type="button"
+                        className="group-card"
+                        onClick={() => setSelectedGroupId(group._id)}
+                        style={{
+                          flexDirection: "column",
+                          alignItems: "flex-start",
+                          width: "100%",
+                          cursor: "pointer",
+                          border: String(selectedGroup?._id) === String(group._id) ? '1px solid var(--primary)' : undefined,
+                          boxShadow: String(selectedGroup?._id) === String(group._id) ? '0 0 0 3px rgba(74, 144, 226, 0.12)' : undefined,
+                        }}
+                      >
                         {/* Top Row */}
                         <div className="flex items-center gap-3 justify-between" style={{ width: "100%" }}>
                           <div className="flex items-center gap-3">
@@ -156,9 +198,13 @@
                           </div>
                           {/* Total Due */}
                           <div className="text-sm font-syne">
-                            {group.totalDue > 0 ? (
+                            {group.myTotalDue > 0 ? (
                               <span style={{ color: 'var(--danger)' }}>
-                                You owe {currency(group.totalDue)}
+                                You owe {currency(group.myTotalDue)}
+                              </span>
+                            ) : group.totalDue > 0 ? (
+                              <span style={{ color: 'var(--danger)' }}>
+                                Outstanding {currency(group.totalDue)}
                               </span>
                             ) : (
                               <span style={{ color: 'var(--success)' }}>
@@ -184,7 +230,7 @@
                             ))}
                           </div>
                         )}
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -194,6 +240,83 @@
             <ExpenseList />
           </div>
           <div className="right-column">
+            <Card>
+              <div className="card-header">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2>Group Details</h2>
+                    <p>{selectedGroup ? selectedGroup.name : 'Pick a group to inspect'}</p>
+                  </div>
+                  {selectedGroup && (
+                    <span className={`badge ${selectedGroup.totalDue > 0 ? 'badge-red' : 'badge-green'}`}>
+                      {selectedGroup.totalDue > 0 ? 'Pending' : 'Settled'}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="card-content">
+                {!selectedGroup ? (
+                  <div className="empty-state">
+                    <div className="empty-icon">👆</div>
+                    Click a group on the left to view the breakdown.
+                  </div>
+                ) : (
+                  <div className="stack-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="metric-label">Members</div>
+                        <div className="metric">{selectedGroup.members?.length || 1}</div>
+                      </div>
+                      <div>
+                        <div className="metric-label">Spend</div>
+                        <div className="metric">{currency(selectedGroup.totalSpend)}</div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="metric-label" style={{ marginBottom: 8 }}>Member names</div>
+                      <div className="stack">
+                        {(selectedGroup.members || []).length === 0 ? (
+                          <div className="text-sm muted">No members found for this group.</div>
+                        ) : (
+                          (selectedGroup.members || []).map((member, index) => (
+                            <div key={member?._id || member?.id || String(member) || index} className="text-sm">
+                              {getMemberLabel(member, index)}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="metric-label" style={{ marginBottom: 8 }}>Outstanding</div>
+                      <div className="metric" style={{ color: selectedGroup.totalDue > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                        {selectedGroup.totalDue > 0 ? currency(selectedGroup.totalDue) : 'Settled'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="metric-label" style={{ marginBottom: 8 }}>Recent expenses</div>
+                      {selectedGroupExpenses.length === 0 ? (
+                        <div className="empty-state" style={{ marginTop: 8 }}>
+                          <div className="empty-icon">🧾</div>
+                          No expenses in this group yet.
+                        </div>
+                      ) : (
+                        <div className="stack">
+                          {selectedGroupExpenses.slice(0, 5).map((expense) => (
+                            <div key={expense._id} className="flex items-center justify-between text-sm">
+                              <span>{expense.description}</span>
+                              <span>{currency(expense.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
             {/* MY DUES */}
             <Card>
               <div className="card-header">
