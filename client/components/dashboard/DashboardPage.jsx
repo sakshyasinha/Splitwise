@@ -33,6 +33,39 @@ export default function DashboardPage() {
       totalSpend,
     };
   }, [expenses, groups]);
+  const groupSummaries = useMemo(() => {
+  return groups.map((group) => {
+    const groupExpenses = expenses.filter(
+      (expense) => expense.group?._id === group._id
+    );
+
+    const totalSpend = groupExpenses.reduce(
+      (sum, expense) => sum + Number(expense.amount || 0),
+      0
+    );
+
+    const dues = myDues.filter(
+      (due) => due.group?._id === group._id
+    );
+
+    const totalDue = dues.reduce(
+      (sum, due) => sum + Number(due.amount || 0),
+      0
+    );
+
+    const memberDues = dues.map((due) => ({
+      name: due.paidTo?.name || due.paidTo?.email,
+      amount: due.amount,
+    }));
+
+    return {
+      ...group,
+      totalSpend,
+      totalDue,
+      memberDues,
+    };
+  });
+}, [groups, expenses, myDues]);
 
   return (
     <main className="dashboard-layout">
@@ -110,6 +143,79 @@ export default function DashboardPage() {
 
         <div className="left-column stack-lg">
           <GroupForm />
+          <Card>
+  <div className="card-header">
+    <h2>Groups</h2>
+    <p>Your active shared circles</p>
+  </div>
+
+  <div className="card-content">
+    {groups.length === 0 ? (
+      <div className="empty-state">
+        <div className="empty-icon">👥</div>
+        No groups yet. Create one to start splitting.
+      </div>
+    ) : (
+      <div className="stack">
+        {groupSummaries.map((group) => (
+          <div
+            key={group._id}
+            className="group-card"
+            style={{ flexDirection: "column", alignItems: "flex-start" }}
+          >
+            {/* Top Row */}
+            <div className="flex items-center gap-3 justify-between" style={{ width: "100%" }}>
+              <div className="flex items-center gap-3">
+                <div className="group-emoji">
+                  {group.name?.[0]?.toUpperCase() || 'G'}
+                </div>
+
+                <div>
+                  <div className="group-name">{group.name}</div>
+                  <div className="group-meta">
+                    {group.members?.length || 1} member{group.members?.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
+              </div>
+
+              {/* Total Due */}
+              <div className="text-sm font-syne">
+                {group.totalDue > 0 ? (
+                  <span style={{ color: 'var(--danger)' }}>
+                    You owe {currency(group.totalDue)}
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--success)' }}>
+                    Settled
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Spend Info */}
+            <div className="mt-2 text-sm muted">
+              Total Spend: {currency(group.totalSpend)}
+            </div>
+
+            {/* Member Breakdown */}
+            {group.memberDues.length > 0 && (
+              <div className="mt-2 stack">
+                {group.memberDues.map((person, i) => (
+                  <div key={i} className="flex justify-between text-sm">
+                    <span>{person.name}</span>
+                    <span style={{ color: 'var(--danger)' }}>
+                      {currency(person.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+  </Card>
           <ExpenseForm />
           <ExpenseList />
         </div>
