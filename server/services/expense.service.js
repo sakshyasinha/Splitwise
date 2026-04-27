@@ -73,15 +73,15 @@ export const addExpense=async(data)=>{
 };
 
 export const getVisibleExpenses = async (userId) => {
-    return Expense.find({
-        $or: [
-            { paidBy: userId },
-            { 'participants.userId': userId }
-        ]
-    })
-        .populate('group', 'name')
-        .populate('paidBy', 'name email')
-        .sort({ createdAt: -1 });
+  return Expense.find({
+    $or: [
+      { paidBy: userId },
+      { "participants.userId": userId }
+    ]
+  })
+    .populate("group", "name")
+    .populate("paidBy", "name email")
+    .sort({ createdAt: -1 });
 };
 
 export const updateExpense = async (userId, expenseId, updates) => {
