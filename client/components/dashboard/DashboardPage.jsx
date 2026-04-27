@@ -27,9 +27,23 @@
   };
 
   const normalizeGroupName = (value) => String(value || '').trim().toLowerCase();
+  const normalizePersonLabel = (value) => String(value || '').trim();
+  const dedupeNames = (values = []) => {
+    const seen = new Set();
+
+    return values.filter((value) => {
+      const normalized = normalizePersonLabel(value).toLowerCase();
+      if (!normalized || seen.has(normalized)) {
+        return false;
+      }
+
+      seen.add(normalized);
+      return true;
+    });
+  };
 
   const DashboardPage = () => {
-    const { logout } = useAuth();
+    const { logout, user } = useAuth();
     const { expenses, groups, myDues, totalOwed, fetchExpenses, fetchMyDues, fetchGroups } = useExpenses();
     const [selectedGroupId, setSelectedGroupId] = useState(null);
 
@@ -76,6 +90,13 @@
         0
       );
       const memberDues = dues.map((due) => ({ name: due.paidTo?.name || due.paidTo?.email, amount: due.amount }));
+      const memberNames = dedupeNames([
+        ...(group.members || []).map((member, index) => getMemberLabel(member, index)),
+        ...dues.map((due) => due.paidTo?.name || due.paidTo?.email || ''),
+        ...groupExpenses.map((expense) => expense.paidBy?.name || expense.paidBy?.email || ''),
+        user?.name || user?.email || '',
+      ]);
+      const memberCount = Math.max(memberNames.length, (group.members || []).length, 1);
 
       return {
         ...group,
@@ -83,6 +104,8 @@
         totalDue,
         myTotalDue,
         memberDues,
+        memberNames,
+        memberCount,
       };
     }) : [];
 
@@ -103,10 +126,14 @@
     );
 
     const selectedGroupExpenses = selectedGroup
-      ? expenses.filter((expense) => {
-          const expenseGroupId = typeof expense.group === "object" ? expense.group._id : expense.group;
-          return String(expenseGroupId) === String(selectedGroup._id);
-        })
+      ? (() => {
+          const exactMatchedExpenses = expenses.filter((expense) => String(getExpenseGroupId(expense)) === String(selectedGroup._id));
+          if (exactMatchedExpenses.length > 0) {
+            return exactMatchedExpenses;
+          }
+
+          return expenses.filter((expense) => normalizeGroupName(getExpenseGroupName(expense)) === normalizeGroupName(selectedGroup.name));
+        })()
       : [];
 
     return (
@@ -213,7 +240,7 @@
                             <div>
                               <div className="group-name">{group.name}</div>
                               <div className="group-meta">
-                                {group.members?.length || 1} member{group.members?.length !== 1 ? 's' : ''}
+                                {group.memberCount || 1} member{(group.memberCount || 1) !== 1 ? 's' : ''}
                               </div>
                             </div>
                           </div>
@@ -242,7 +269,11 @@
                         {group.memberDues.length > 0 && (
                           <div className="mt-2 stack">
                             {group.memberDues.map((person, i) => (
-                              <div key={i} className="flex justify-between text-sm">
+                              <div
+                                key={i}
+                                className="text-sm"
+                                style={{ display: 'grid', gridTemplateColumns: '1fr auto', columnGap: 12, width: '100%' }}
+                              >
                                 <span>{person.name}</span>
                                 <span style={{ color: 'var(--danger)' }}>
                                   {currency(person.amount)}
@@ -286,7 +317,7 @@
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="metric-label">Members</div>
-                        <div className="metric">{selectedGroup.members?.length || 1}</div>
+                        <div className="metric">{selectedGroup.memberCount || 1}</div>
                       </div>
                       <div>
                         <div className="metric-label">Spend</div>
@@ -297,12 +328,12 @@
                     <div>
                       <div className="metric-label" style={{ marginBottom: 8 }}>Member names</div>
                       <div className="stack">
-                        {(selectedGroup.members || []).length === 0 ? (
+                        {(selectedGroup.memberNames || []).length === 0 ? (
                           <div className="text-sm muted">No members found for this group.</div>
                         ) : (
-                          (selectedGroup.members || []).map((member, index) => (
-                            <div key={member?._id || member?.id || String(member) || index} className="text-sm">
-                              {getMemberLabel(member, index)}
+                          (selectedGroup.memberNames || []).map((memberName, index) => (
+                            <div key={`${memberName}-${index}`} className="text-sm">
+                              {memberName}
                             </div>
                           ))
                         )}
