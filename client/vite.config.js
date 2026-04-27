@@ -1,8 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const repoName = process.env.GITHUB_REPOSITORY?.split('/')[1];
+const githubBase = repoName ? `/${repoName}/` : '/';
+
 export default defineConfig({
-  base: process.env.GITHUB_ACTIONS ? '/splitwise/' : '/', // Reverted to original conditional base path
+  // Derive the Pages base from the repository slug in CI, so renames don't break asset paths.
+  base: process.env.GITHUB_ACTIONS ? githubBase : '/',
   plugins: [react()],
   build: {
     rollupOptions: {
