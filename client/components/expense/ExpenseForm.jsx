@@ -15,7 +15,7 @@ const CATEGORIES = [
 const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
 
 export default function ExpenseForm() {
-  const { addExpense, groups, loading, error, clearError } = useExpenses();
+  const { addExpense, groups, expenses, loading, error, clearError } = useExpenses();
 
   const [form, setForm] = useState({
     description: "",
@@ -37,6 +37,31 @@ export default function ExpenseForm() {
       participants.length > 0
     );
   }, [form, participants]);
+
+  const normalizeGroupName = (value) => String(value || "").normalize("NFKC").trim().toLowerCase().replace(/[\s\u200B-\u200D\uFEFF]+/g, "");
+
+  const groupOptions = useMemo(() => {
+    const byName = new Map();
+
+    for (const group of groups) {
+      const key = normalizeGroupName(group.name) || String(group._id);
+      const groupExpenses = expenses.filter((expense) => {
+        const expenseGroupId = typeof expense.group === "object" ? expense.group?._id : expense.group;
+        const expenseGroupName = typeof expense.group === "object" ? expense.group?.name : "";
+
+        return String(expenseGroupId) === String(group._id) || normalizeGroupName(expenseGroupName) === key;
+      });
+
+      const score = groupExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+      const existing = byName.get(key);
+
+      if (!existing || score > existing.score) {
+        byName.set(key, { group, score });
+      }
+    }
+
+    return Array.from(byName.values()).map(({ group }) => group);
+  }, [groups, expenses]);
 
   const onChange = (e) => {
     clearError();
@@ -145,7 +170,7 @@ export default function ExpenseForm() {
               required
             >
               <option value="">Choose group</option>
-              {groups.map((g) => (
+              {groupOptions.map((g) => (
                 <option key={g._id} value={g._id}>
                   {g.name}
                 </option>
