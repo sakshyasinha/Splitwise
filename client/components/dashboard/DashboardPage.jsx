@@ -26,6 +26,8 @@
     return `Member ${index + 1}`;
   };
 
+  const normalizeGroupName = (value) => String(value || '').trim().toLowerCase();
+
   const DashboardPage = () => {
     const { logout } = useAuth();
     const { expenses, groups, myDues, totalOwed, fetchExpenses, fetchMyDues, fetchGroups } = useExpenses();
@@ -45,13 +47,21 @@
     };
 
     const getDueGroupId = (due) => due.group?._id || due.group?.id || null;
+    const getDueGroupName = (due) => due.group?.name || '';
     const getExpenseGroupId = (expense) => (typeof expense.group === 'object' ? expense.group?._id : expense.group);
+    const getExpenseGroupName = (expense) => (typeof expense.group === 'object' ? expense.group?.name : '');
 
     const groupSummaries = groups.length > 0 ? groups.map((group) => {
-      const groupExpenses = expenses.filter((expense) => String(getExpenseGroupId(expense)) === String(group._id));
+      const exactMatchedExpenses = expenses.filter((expense) => String(getExpenseGroupId(expense)) === String(group._id));
+      const groupExpenses = exactMatchedExpenses.length > 0
+        ? exactMatchedExpenses
+        : expenses.filter((expense) => normalizeGroupName(getExpenseGroupName(expense)) === normalizeGroupName(group.name));
 
       const totalSpend = groupExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-      const dues = myDues.filter((due) => String(getDueGroupId(due)) === String(group._id));
+      const exactMatchedDues = myDues.filter((due) => String(getDueGroupId(due)) === String(group._id));
+      const dues = exactMatchedDues.length > 0
+        ? exactMatchedDues
+        : myDues.filter((due) => normalizeGroupName(getDueGroupName(due)) === normalizeGroupName(group.name));
       const myTotalDue = dues.reduce((sum, due) => sum + Number(due.amount || 0), 0);
       const totalDue = groupExpenses.reduce(
         (sum, expense) =>
@@ -76,9 +86,20 @@
       };
     }) : [];
 
+    const prioritizedGroups = useMemo(
+      () =>
+        [...groupSummaries].sort((a, b) => {
+          const aScore = Number(a.myTotalDue || 0) + Number(a.totalDue || 0);
+          const bScore = Number(b.myTotalDue || 0) + Number(b.totalDue || 0);
+          if (bScore !== aScore) return bScore - aScore;
+          return Number(b.totalSpend || 0) - Number(a.totalSpend || 0);
+        }),
+      [groupSummaries]
+    );
+
     const selectedGroup = useMemo(
-      () => groupSummaries.find((group) => String(group._id) === String(selectedGroupId)) || groupSummaries[0] || null,
-      [groupSummaries, selectedGroupId]
+      () => prioritizedGroups.find((group) => String(group._id) === String(selectedGroupId)) || prioritizedGroups[0] || null,
+      [prioritizedGroups, selectedGroupId]
     );
 
     const selectedGroupExpenses = selectedGroup
@@ -168,7 +189,7 @@
                   </div>
                 ) : (
                   <div className="stack">
-                    {groupSummaries.map((group) => (
+                    {prioritizedGroups.map((group) => (
                       <button
                         key={group._id}
                         type="button"
