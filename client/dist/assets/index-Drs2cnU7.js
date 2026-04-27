@@ -1,1 +1,1 @@
-import '/splitwise/assets/index.js';
+import './index.js';
