@@ -26,7 +26,11 @@
     return `Member ${index + 1}`;
   };
 
-  const normalizeGroupName = (value) => String(value || '').trim().toLowerCase();
+  const normalizeGroupName = (value) =>
+    String(value || '')
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[\s\u200B-\u200D\uFEFF]+/g, '');
   const normalizePersonLabel = (value) => String(value || '').trim();
   const dedupeNames = (values = []) => {
     const seen = new Set();
@@ -202,7 +206,26 @@
     );
 
     const selectedGroupExpenses = selectedGroup
-      ? (selectedGroup.groupExpenses || [])
+      ? (() => {
+          const canonicalKey = normalizeGroupName(selectedGroup.name);
+          const selectedGroupIds = new Set((selectedGroup._sourceGroupIds || []).map(String));
+          const exactMatchedExpenses = expenses.filter((expense) => selectedGroupIds.has(String(getExpenseGroupId(expense))));
+
+          if (exactMatchedExpenses.length > 0) {
+            return exactMatchedExpenses;
+          }
+
+          return expenses.filter((expense) => normalizeGroupName(getExpenseGroupName(expense)) === canonicalKey);
+        })()
+      : [];
+
+    const selectedGroupMemberNames = selectedGroup
+      ? dedupeNames([
+          ...(selectedGroup.members || []).map((member, index) => getMemberLabel(member, index)),
+          ...selectedGroupExpenses.map((expense) => expense.paidBy?.name || expense.paidBy?.email || ''),
+          ...(selectedGroup.dues || []).map((due) => due.paidTo?.name || due.paidTo?.email || ''),
+          user?.name || user?.email || '',
+        ])
       : [];
 
     return (
@@ -341,7 +364,7 @@
                               <div
                                 key={i}
                                 className="text-sm"
-                                style={{ display: 'grid', gridTemplateColumns: '1fr auto', columnGap: 12, alignItems: 'center', width: '100%' }}
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, width: 'fit-content' }}
                               >
                                 <span>{person.name}</span>
                                 <span style={{ color: 'var(--danger)' }}>
@@ -397,10 +420,10 @@
                     <div>
                       <div className="metric-label" style={{ marginBottom: 8 }}>Member names</div>
                       <div className="stack">
-                        {(selectedGroup.memberNames || []).length === 0 ? (
+                        {selectedGroupMemberNames.length === 0 ? (
                           <div className="text-sm muted">No members found for this group.</div>
                         ) : (
-                          (selectedGroup.memberNames || []).map((memberName, index) => (
+                          selectedGroupMemberNames.map((memberName, index) => (
                             <div key={`${memberName}-${index}`} className="text-sm">
                               {memberName}
                             </div>
