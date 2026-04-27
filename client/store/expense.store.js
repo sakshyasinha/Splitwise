@@ -5,12 +5,36 @@ import {
   updateExpense as updateExpenseService,
   getMyDues as getMyDuesService,
   settleDue as settleDueService,
-  getExpenses as getExpensesService, // ✅ NEW
+  getExpenses as getExpensesService,
 } from "../services/expense.service.js";
-import { createGroup as createGroupService } from "../services/group.service.js";
-import { getGroups as getGroupsService } from "../services/group.service.js";
 
-const useExpenseStore = create((set) => ({
+import {
+  createGroup as createGroupService,
+  getGroups as getGroupsService,
+} from "../services/group.service.js";
+
+const getGroupKey = (group) => {
+  const creator = Array.isArray(group?.createdBy) ? group.createdBy[0] : group?.createdBy;
+  const creatorId = creator && typeof creator === "object" ? creator._id || creator.id : creator;
+
+  return `${String(group?.name || "").trim().toLowerCase()}::${String(creatorId || "")}`;
+};
+
+const dedupeGroups = (groups = []) => {
+  const seen = new Set();
+
+  return (groups || []).filter((group) => {
+    const key = getGroupKey(group);
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+};
+
+const useExpenseStore = create((set, get) => ({
   expenses: [],
   groups: [],
   myDues: [],
@@ -18,50 +42,60 @@ const useExpenseStore = create((set) => ({
   loading: false,
   error: null,
 
-
-fetchGroups: async () => {
-  try {
-    set({ loading: true, error: null });
-
-    const data = await getGroupsService();
-
-    set({
-      groups: data || [],
-      loading: false,
-    });
-
-    return data;
-  } catch (err) {
-    set({
-      error:
-        err?.response?.data?.message ||
-        err.message ||
-        "Failed to fetch groups",
-      loading: false,
-    });
-
-    throw err;
-  }
-},
-
-  // 🔄 Reset state (important for user switching)
-  resetState: () =>
-    set({
-      expenses: [],
-      groups: [],
-      myDues: [],
-      totalOwed: 0,
-      loading: false,
-      error: null,
-    }),
-
-  clearError: () => set({ error: null }),
-
-  // ✅ FETCH EXPENSES (FIXES YOUR BUG)
-  fetchExpenses: async () => {
-    set({ loading: true, error: null });
-
+  // ------------------ GROUPS ------------------
+  fetchGroups: async () => {
     try {
+      set({ loading: true, error: null });
+
+      const data = await getGroupsService();
+
+      set({
+        groups: dedupeGroups(data || []),
+        loading: false,
+      });
+
+      return data;
+    } catch (err) {
+      set({
+        error:
+          err?.response?.data?.message ||
+          err.message ||
+          "Failed to fetch groups",
+        loading: false,
+      });
+      throw err;
+    }
+  },
+
+  createGroup: async (payload) => {
+    try {
+      set({ loading: true, error: null });
+
+      const group = await createGroupService(payload);
+
+      set((state) => ({
+        groups: dedupeGroups([group, ...state.groups]),
+        loading: false,
+      }));
+
+      return group;
+    } catch (error) {
+      set({
+        loading: false,
+        error:
+          error?.response?.data?.message ||
+          error.message ||
+          "Failed to create group",
+      });
+      throw error;
+    }
+  },
+
+  // ------------------ EXPENSES ------------------
+  fetchExpenses: async () => {
+    try {
+      set({ loading: true, error: null });
+
       const data = await getExpensesService();
 
       set({
@@ -78,16 +112,14 @@ fetchGroups: async () => {
           error.message ||
           "Failed to fetch expenses",
       });
-
       throw error;
     }
   },
 
-  // ➕ Add expense
   addExpense: async (payload) => {
-    set({ loading: true, error: null });
-
     try {
+      set({ loading: true, error: null });
+
       const expense = await addExpenseService(payload);
 
       set((state) => ({
@@ -104,16 +136,14 @@ fetchGroups: async () => {
           error.message ||
           "Failed to add expense",
       });
-
       throw error;
     }
   },
 
-  // ✏️ Update expense
   updateExpense: async (id, payload) => {
-    set({ loading: true, error: null });
-
     try {
+      set({ loading: true, error: null });
+
       const updatedExpense = await updateExpenseService(id, payload);
 
       set((state) => ({
@@ -132,16 +162,14 @@ fetchGroups: async () => {
           error.message ||
           "Failed to update expense",
       });
-
       throw error;
     }
   },
 
-  // 🗑️ Delete expense
   deleteExpense: async (id) => {
-    set({ loading: true, error: null });
-
     try {
+      set({ loading: true, error: null });
+
       await deleteExpenseService(id);
 
       set((state) => ({
@@ -156,45 +184,15 @@ fetchGroups: async () => {
           error.message ||
           "Failed to delete expense",
       });
-
       throw error;
     }
   },
 
-  settleDue: async (expenseId) => {
-    set({ loading: true, error: null });
-
-    try {
-      await settleDueService(expenseId);
-      const [expensesData, duesData] = await Promise.all([
-        getExpensesService(),
-        getMyDuesService(),
-      ]);
-
-      set({
-        expenses: expensesData || [],
-        myDues: duesData.dues || [],
-        totalOwed: Number(duesData.totalOwed || 0),
-        loading: false,
-      });
-    } catch (error) {
-      set({
-        loading: false,
-        error:
-          error?.response?.data?.message ||
-          error.message ||
-          "Failed to settle due",
-      });
-
-      throw error;
-    }
-  },
-
-  // 💰 Fetch dues
+  // ------------------ DUES ------------------
   fetchMyDues: async () => {
-    set({ loading: true, error: null, myDues: [], totalOwed: 0 });
-
     try {
+      set({ loading: true, error: null, myDues: [], totalOwed: 0 });
+
       const data = await getMyDuesService();
 
       set({
@@ -214,36 +212,52 @@ fetchGroups: async () => {
           error.message ||
           "Failed to load dues",
       });
-
       throw error;
     }
   },
 
-  // 👥 Create group
-  createGroup: async (payload) => {
-    set({ loading: true, error: null });
-
+  settleDue: async (expenseId) => {
     try {
-      const group = await createGroupService(payload);
+      set({ loading: true, error: null });
 
-      set((state) => ({
-        groups: [group, ...state.groups],
+      await settleDueService(expenseId);
+
+      // refresh data after settlement
+      const [expensesData, duesData] = await Promise.all([
+        getExpensesService(),
+        getMyDuesService(),
+      ]);
+
+      set({
+        expenses: expensesData || [],
+        myDues: duesData.dues || [],
+        totalOwed: Number(duesData.totalOwed || 0),
         loading: false,
-      }));
-
-      return group;
+      });
     } catch (error) {
       set({
         loading: false,
         error:
           error?.response?.data?.message ||
           error.message ||
-          "Failed to create group",
+          "Failed to settle due",
       });
-
       throw error;
     }
   },
+
+  // ------------------ UTIL ------------------
+  resetState: () =>
+    set({
+      expenses: [],
+      groups: [],
+      myDues: [],
+      totalOwed: 0,
+      loading: false,
+      error: null,
+    }),
+
+  clearError: () => set({ error: null }),
 }));
 
 export default useExpenseStore;

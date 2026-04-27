@@ -1,3 +1,5 @@
+import Group from "../models/group.model.js";
+
 export const createGroup = async ({ name, userId }) => {
   if (!name) {
     const error = new Error("Group name is required");
@@ -6,22 +8,28 @@ export const createGroup = async ({ name, userId }) => {
   }
 
   const trimmedName = name.trim();
+  const normalizedMembers = userId ? [userId] : [];
 
-  // 🔥 CHECK FOR DUPLICATE
   const existingGroup = await Group.findOne({
     name: trimmedName,
-    createdBy: userId, // IMPORTANT
+    createdBy: userId,
   });
 
   if (existingGroup) {
-    const error = new Error("Group with this name already exists");
-    error.statusCode = 400;
-    throw error;
+    existingGroup.members = Array.from(
+      new Set([
+        ...(existingGroup.members || []).map(String),
+        ...normalizedMembers.map(String),
+      ])
+    );
+
+    await existingGroup.save();
+    return existingGroup;
   }
 
   return await Group.create({
     name: trimmedName,
-    members: userId ? [userId] : [],
-    createdBy: userId ? userId : null, // ⚠️ FIXED (see below)
+    members: normalizedMembers,
+    createdBy: userId,
   });
 };

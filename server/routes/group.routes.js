@@ -1,21 +1,39 @@
 import express from "express";
 import { createGroup } from "../controllers/group.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
-import Group from "../models/group.model.js"; // 👈 IMPORTANT
+import Group from "../models/group.model.js"; 
 
 const router = express.Router();
 
-// ✅ Create group
+const getGroupDedupKey = (group) => {
+  const creator = Array.isArray(group.createdBy) ? group.createdBy[0] : group.createdBy;
+  const creatorId = creator && typeof creator === "object" ? creator._id || creator.id : creator;
+
+  return `${String(group.name || "").trim().toLowerCase()}::${String(creatorId || "")}`;
+};
+
 router.post("/create", protect, createGroup);
 
-// ✅ Fetch all groups
 router.get("/", protect, async (req, res) => {
   try {
     const groups = await Group.find({
       members: req.user.id, // user must be in group
+    })
+      .populate("members", "name email")
+      .populate("createdBy", "name email");
+
+    const seen = new Set();
+    const uniqueGroups = groups.filter((group) => {
+      const key = getGroupDedupKey(group);
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
     });
 
-    res.json(groups);
+    res.json(uniqueGroups);
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch groups" });
   }
