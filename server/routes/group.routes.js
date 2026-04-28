@@ -1,5 +1,5 @@
 import express from "express";
-import { createGroup } from "../controllers/group.controller.js";
+import { createGroup, updateGroup, deleteGroup, addMember, removeMember } from "../controllers/group.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 import Group from "../models/group.model.js"; 
 import Expense from "../models/expense.model.js";
@@ -10,7 +10,7 @@ const getGroupDedupKey = (group) => {
   const creator = Array.isArray(group.createdBy) ? group.createdBy[0] : group.createdBy;
   const creatorId = creator && typeof creator === "object" ? creator._id || creator.id : creator;
 
-  return `${String(group.name || "").trim().toLowerCase()}::${String(creatorId || "")}`;
+  return `${String(group.name || "").trim().toLowerCase()}::${String(group.type || "other").trim().toLowerCase()}::${String(creatorId || "")}`;
 };
 
 router.post("/create", protect, createGroup);
@@ -59,5 +59,10 @@ router.get("/", protect, async (req, res) => {
     res.status(500).json({ message: "Failed to fetch groups" });
   }
 });
+
+router.put("/:id", protect, updateGroup);
+router.delete("/:id", protect, deleteGroup);
+router.patch("/:id/members/add", protect, addMember);
+router.patch("/:id/members/remove", protect, removeMember);
 
 export default router;

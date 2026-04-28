@@ -17,7 +17,7 @@ const getGroupKey = (group) => {
   const creator = Array.isArray(group?.createdBy) ? group.createdBy[0] : group?.createdBy;
   const creatorId = creator && typeof creator === "object" ? creator._id || creator.id : creator;
 
-  return `${String(group?.name || "").trim().toLowerCase()}::${String(creatorId || "")}`;
+  return `${String(group?.name || "").trim().toLowerCase()}::${String(group?.type || "other").trim().toLowerCase()}::${String(creatorId || "")}`;
 };
 
 const dedupeGroups = (groups = []) => {
@@ -241,6 +241,82 @@ const useExpenseStore = create((set, get) => ({
           error?.response?.data?.message ||
           error.message ||
           "Failed to settle due",
+      });
+      throw error;
+    }
+  },
+
+  updateGroup: async (groupId, payload) => {
+    set({ loading: true, error: null });
+    try {
+      const { updateGroup } = await import('../services/group.service.js');
+      await updateGroup(groupId, payload);
+      await get().fetchGroups();
+      set({ loading: false });
+    } catch (error) {
+      set({
+        loading: false,
+        error:
+          error?.response?.data?.message ||
+          error.message ||
+          "Failed to update group",
+      });
+      throw error;
+    }
+  },
+
+  deleteGroup: async (groupId) => {
+    set({ loading: true, error: null });
+    try {
+      const { deleteGroup } = await import('../services/group.service.js');
+      await deleteGroup(groupId);
+      await get().fetchGroups();
+      set({ loading: false });
+    } catch (error) {
+      set({
+        loading: false,
+        error:
+          error?.response?.data?.message ||
+          error.message ||
+          "Failed to delete group",
+      });
+      throw error;
+    }
+  },
+
+  addGroupMember: async (groupId, memberId) => {
+    set({ loading: true, error: null });
+    try {
+      const { addGroupMember } = await import('../services/group.service.js');
+      await addGroupMember(groupId, memberId);
+      await get().fetchGroups();
+      set({ loading: false });
+    } catch (error) {
+      set({
+        loading: false,
+        error:
+          error?.response?.data?.message ||
+          error.message ||
+          "Failed to add member",
+      });
+      throw error;
+    }
+  },
+
+  removeGroupMember: async (groupId, memberId) => {
+    set({ loading: true, error: null });
+    try {
+      const { removeGroupMember } = await import('../services/group.service.js');
+      await removeGroupMember(groupId, memberId);
+      await get().fetchGroups();
+      set({ loading: false });
+    } catch (error) {
+      set({
+        loading: false,
+        error:
+          error?.response?.data?.message ||
+          error.message ||
+          "Failed to remove member",
       });
       throw error;
     }

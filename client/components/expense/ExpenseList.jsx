@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import useExpenses from '../../hooks/useExpenses.js';
 import useAuth from '../../hooks/useAuth.js';
+import useToast from '../../hooks/useToast.js';
 import Card from '../ui/Card.jsx';
 
 function formatAmount(value) {
@@ -9,6 +10,12 @@ function formatAmount(value) {
     currency: 'INR',
   }).format(Number(value || 0));
 }
+
+const personName = (person, fallback = 'Unknown') => {
+  if (!person) return fallback;
+  if (typeof person === 'string') return person;
+  return person.name || person.email || fallback;
+};
 
 const CAT_COLORS = {
   Food:      { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b' },
@@ -37,9 +44,10 @@ function CategoryIcon({ category }) {
   );
 }
 
-export default function ExpenseList() {
+export default function ExpenseList({ onEdit }) {
   const { user } = useAuth();
   const { expenses = [], loading, error, updateExpense, deleteExpense } = useExpenses();
+  const toast = useToast();
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ description: '', amount: '' });
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -68,16 +76,33 @@ export default function ExpenseList() {
         description: form.description,
         amount: Number(form.amount),
       });
+      toast.success('Expense updated successfully');
       cancelEdit();
-    } catch (_) {}
+    } catch (err) {
+      toast.error('Failed to update expense');
+    }
   };
 
   const removeExpense = async (expenseId) => {
     try {
       await deleteExpense(expenseId);
+      toast.success('Expense deleted successfully');
       if (editingId === expenseId) cancelEdit();
       setConfirmDelete(null);
-    } catch (_) {}
+    } catch (err) {
+      toast.error('Failed to delete expense');
+    }
+  };
+
+  const handleEdit = (expense) => {
+    setEditingId(expense._id);
+    setForm({
+      description: expense.description || '',
+      amount: String(expense.amount || ''),
+    });
+    if (onEdit) {
+      onEdit(expense);
+    }
   };
 
   return (
@@ -121,6 +146,10 @@ export default function ExpenseList() {
               const canManage = user?.id && String(paidById) === String(user.id);
               const isEditing = editingId === expense._id;
               const isConfirming = confirmDelete === expense._id;
+              const involvedPeople = [
+                personName(expense.paidBy, 'Payer'),
+                ...(expense.participants || []).map((participant) => personName(participant?.userId, 'Member')),
+              ];
 
               return (
                 <li key={expense._id} className="expense-item" style={{ alignItems: 'flex-start', paddingTop: 14, paddingBottom: 14 }}>
@@ -179,6 +208,26 @@ export default function ExpenseList() {
                             Paid by {expense.paidBy?.name || expense.paidBy?.email || 'n/a'}
                           </span>
                         </div>
+                        <div className="expense-meta" style={{ marginTop: 6 }}>
+                          <strong style={{ fontWeight: 700 }}>Involved:</strong>
+                          <span>{involvedPeople.join(' · ')}</span>
+                        </div>
+                        {/* Show pending vs settled status */}
+                        {expense.participants?.length > 0 && (
+                          <div className="expense-meta" style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+                            {(() => {
+                              const pendingCount = (expense.participants || []).filter(p => p?.status === 'pending').length;
+                              const settledCount = (expense.participants || []).length - pendingCount;
+                              return (
+                                <>
+                                  {pendingCount > 0 && <span style={{ color: 'var(--danger)' }}>{pendingCount} pending</span>}
+                                  {pendingCount > 0 && settledCount > 0 && <span style={{ margin: '0 4px', opacity: 0.4 }}>·</span>}
+                                  {settledCount > 0 && <span style={{ color: 'var(--success)' }}>{settledCount} settled</span>}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
 
                         {/* ACTION ROW */}
                         {canManage ? (
@@ -234,12 +283,23 @@ export default function ExpenseList() {
                   {/* AMOUNT — hidden in edit mode */}
                   {!isEditing && (
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div className="expense-amount debit">{formatAmount(expense.amount)}</div>
-                      {expense.participants?.length > 0 && (
-                        <div className="expense-share">
-                          ÷ {expense.participants.length + 1} people
-                        </div>
-                      )}
+                      {(() => {
+                        const pendingParticipants = (expense.participants || []).filter(p => p?.status === 'pending');
+                        const pendingCount = pendingParticipants.length;
+                        const hasPending = pendingCount > 0;
+                        return (
+                          <>
+                            <div className="expense-amount debit" style={{ color: hasPending ? 'var(--danger)' : 'var(--success)' }}>
+                              {hasPending ? formatAmount(expense.amount) : '✓'}
+                            </div>
+                            {hasPending && (
+                              <div className="expense-share">
+                                ÷ {pendingCount + 1} people
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
 

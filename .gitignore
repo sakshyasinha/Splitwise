@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+server/node_modules/
+client/node_modules/
+/.idea
+.vscode/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

@@ -16,6 +16,10 @@ export default function useExpenses() {
 	const fetchMyDues = useExpenseStore((state) => state.fetchMyDues);
 	const clearError = useExpenseStore((state) => state.clearError);
 	const fetchGroups = useExpenseStore((state) => state.fetchGroups);
+	const updateGroup = useExpenseStore((state) => state.updateGroup);
+	const deleteGroup = useExpenseStore((state) => state.deleteGroup);
+	const addGroupMember = useExpenseStore((state) => state.addGroupMember);
+	const removeGroupMember = useExpenseStore((state) => state.removeGroupMember);
 
 	return {
 		expenses,
@@ -32,6 +36,10 @@ export default function useExpenses() {
 		createGroup,
 		fetchMyDues,
 		clearError,
-		fetchGroups
+		fetchGroups,
+		updateGroup,
+		deleteGroup,
+		addGroupMember,
+		removeGroupMember
 	};
 }

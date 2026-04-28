@@ -69,7 +69,10 @@ export const addExpense=async(data)=>{
         paidBy:userId,
         participants:splits,
     });
-    return createdExpense;
+    return Expense.findById(createdExpense._id)
+        .populate('group', 'name')
+        .populate('paidBy', 'name email')
+        .populate('participants.userId', 'name email');
 };
 
 export const getVisibleExpenses = async (userId) => {
@@ -81,6 +84,7 @@ export const getVisibleExpenses = async (userId) => {
   })
     .populate("group", "name")
     .populate("paidBy", "name email")
+        .populate("participants.userId", "name email")
     .sort({ createdAt: -1 });
 };
 
@@ -136,7 +140,8 @@ export const updateExpense = async (userId, expenseId, updates) => {
 
     return Expense.findById(expense._id)
         .populate('group', 'name')
-        .populate('paidBy', 'name email');
+        .populate('paidBy', 'name email')
+        .populate('participants.userId', 'name email');
 };
 
 export const deleteExpense = async (userId, expenseId) => {
@@ -156,11 +161,8 @@ export const deleteExpense = async (userId, expenseId) => {
     await Expense.deleteOne({ _id: expenseId });
     return { deleted: true };
 };
-
 export const settleDue = async (userId, expenseId) => {
-    const expense = await Expense.findById(expenseId)
-        .populate('group', 'name')
-        .populate('paidBy', 'name email');
+    const expense = await Expense.findById(expenseId);
 
     if (!expense) {
         const error = new Error('Expense not found');
@@ -168,16 +170,22 @@ export const settleDue = async (userId, expenseId) => {
         throw error;
     }
 
-    if (String(expense.paidBy?._id || expense.paidBy) === String(userId)) {
+    if (String(expense.paidBy) === String(userId)) {
         const error = new Error('Payer does not need to settle this expense');
         error.statusCode = 400;
         throw error;
     }
 
-    const participant = expense.participants.find(
-        (entry) => String(entry.userId) === String(userId)
-    );
+    const participant = expense.participants?.find((entry) => {
+        const id =
+            entry.userId?._id?.toString?.() ||
+            entry.userId?.toString?.() ||
+            entry.userId;
 
+        return String(id) === String(userId);
+    });
+
+    // ✅ CRITICAL FIX: prevent 500 crash
     if (!participant) {
         const error = new Error('You are not part of this expense split');
         error.statusCode = 403;
@@ -204,6 +212,7 @@ export const getGroupExpenses = async (userId, groupId) => {
     const expenses = await Expense.find({ group: groupId })
         .populate("group", "name")
         .populate("paidBy", "name email")
+        .populate("participants.userId", "name email")
         .sort({ createdAt: -1 });
 
     return expenses;
