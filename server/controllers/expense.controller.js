@@ -1,4 +1,6 @@
 import * as expenseService from '../services/expense.service.js';
+import Settlement from '../models/settlement.model.js';
+import Expense from '../models/expense.model.js';
 
 export const addExpense=async(req,res)=>{
     try {
@@ -42,6 +44,29 @@ export const deleteExpense = async (req, res) => {
 export const settleDue = async (req, res) => {
     try {
         const data = await expenseService.settleDue(req.user?.id, req.params.id);
+
+        // Record the settlement
+        if (data.settled && !data.alreadyPaid) {
+            const expense = await Expense.findById(req.params.id).populate('paidBy');
+
+            if (expense) {
+                const settlement = await Settlement.create({
+                    expenseId: req.params.id,
+                    from: req.user?.id,
+                    to: expense.paidBy,
+                    amount: expense.participants.find(
+                        p => String(p.userId) === String(req.user?.id)
+                    )?.amount || 0,
+                    description: `Settlement for: ${expense.description}`,
+                });
+
+                await settlement.populate('from', 'name email');
+                await settlement.populate('to', 'name email');
+
+                data.settlement = settlement;
+            }
+        }
+
         res.json(data);
     } catch (error) {
         res.status(error.statusCode || 500).json({ message: error.message });

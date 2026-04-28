@@ -49,8 +49,17 @@ const startServer = async () => {
     try {
         await connectDB();
 
-        app.listen(PORT, () => {
-            console.log(`Server is running on port ${PORT}`);
+        const server = app.listen(PORT, () => {
+            console.log(`Server is running on port ${PORT} (env: ${process.env.NODE_ENV || 'development'})`);
+        });
+
+        server.on('error', (err) => {
+            if (err && err.code === 'EADDRINUSE') {
+                console.error(`Port ${PORT} is already in use. Stop the other process or set a different PORT environment variable.`);
+            } else {
+                console.error('Server error:', err);
+            }
+            process.exit(1);
         });
     } catch (error) {
         console.error('DB connection failed:', error);
