@@ -4,6 +4,7 @@ import useExpenses from '../../hooks/useExpenses.js';
 import Button from '../ui/Button.jsx';
 import Card from '../ui/Card.jsx';
 import GroupForm from '../group/GroupForm.jsx';
+import GroupEditForm from '../group/GroupEditForm.jsx';
 import ExpenseForm from '../expense/ExpenseForm.jsx';
 import ExpenseList from '../expense/ExpenseList.jsx';
 import AIChatPanel from '../chat/AIChatPanel.jsx';
@@ -119,9 +120,12 @@ const DashboardPage = () => {
     expenses,
     groups,
     myDues,
+    myLents,
     totalOwed,
+    totalLent,
     fetchExpenses,
     fetchMyDues,
+    fetchMyLents,
     fetchGroups,
     settleDue,
   } = useExpenses();
@@ -130,12 +134,20 @@ const DashboardPage = () => {
   const [activeModal, setActiveModal] = useState(null);
   const [settlingExpenseId, setSettlingExpenseId] = useState(null);
   const [editingExpense, setEditingExpense] = useState(null);
+  const [editingGroup, setEditingGroup] = useState(null);
 
   useEffect(() => {
+    console.log('DashboardPage: Initial data load');
     fetchExpenses();
     fetchMyDues();
+    fetchMyLents();
     fetchGroups();
   }, []);
+
+  // Debug logging for expenses changes
+  useEffect(() => {
+    console.log('DashboardPage: Expenses updated, count:', expenses.length);
+  }, [expenses]);
 
   useEffect(() => {
     if (!activeModal) {
@@ -365,40 +377,20 @@ const DashboardPage = () => {
   const userEmail = String(user?.email || '').toLowerCase();
   const userName = String(user?.name || '').toLowerCase();
 
-  const totalLent = useMemo(
-    () =>
-      expenses.reduce((sum, expense) => {
-        const paidBy = expense?.paidBy;
-        const paidById = String((typeof paidBy === 'object' ? paidBy?._id || paidBy?.id : paidBy) || '');
-        const paidByName = String(paidBy?.name || paidBy?.email || '').toLowerCase();
-        const isUserPayer =
-          (paidById && paidById === userId) ||
-          (!!userEmail && paidByName === userEmail) ||
-          (!!userName && paidByName === userName);
-
-        if (!isUserPayer) {
-          return sum;
-        }
-
-        const pendingAmount = (expense.participants || []).reduce(
-          (pendingSum, participant) =>
-            participant?.status === 'pending' ? pendingSum + Number(participant.amount || 0) : pendingSum,
-          0
-        );
-
-        return sum + pendingAmount;
-      }, 0),
-    [expenses, userId, userEmail, userName]
-  );
-
   const closeModal = () => {
     setActiveModal(null);
     setEditingExpense(null);
+    setEditingGroup(null);
   };
 
   const openEditExpense = (expense) => {
     setEditingExpense(expense);
     setActiveModal('expense');
+  };
+
+  const openEditGroup = (group) => {
+    setEditingGroup(group);
+    setActiveModal('editGroup');
   };
 
   const openGroupDetailsFor = (groupKey) => {
@@ -411,11 +403,31 @@ const DashboardPage = () => {
       setSettlingExpenseId(expenseId);
       await settleDue(expenseId);
       // Refresh all data after settling
-      await Promise.all([fetchExpenses(), fetchMyDues(), fetchGroups()]);
+      await Promise.all([fetchExpenses(), fetchMyDues(), fetchMyLents(), fetchGroups()]);
     } catch (_) {
     } finally {
       setSettlingExpenseId(null);
     }
+  };
+
+  const handleGroupUpdate = async () => {
+    // Refresh groups after editing
+    await fetchGroups();
+  };
+
+  const handleGroupDelete = async () => {
+    try {
+      // The deleteGroup function in the store already calls fetchGroups()
+      // We just need to close the modal after it completes
+      closeModal();
+    } catch (error) {
+      console.error('Error in handleGroupDelete:', error);
+    }
+  };
+
+  const handleMemberChange = async () => {
+    // Refresh groups after member changes without closing modal
+    await fetchGroups();
   };
 
   return (
@@ -517,9 +529,8 @@ const DashboardPage = () => {
                 ) : (
                   <div className="stack">
                     {prioritizedGroups.map((group) => (
-                      <button
+                      <div
                         key={group.groupKey}
-                        type="button"
                         className="group-card"
                         onClick={() => openGroupDetailsFor(group.groupKey)}
                         style={{
@@ -546,6 +557,9 @@ const DashboardPage = () => {
                                 {prettifyGroupType(group.type)} · {group.memberCount || 1} member
                                 {(group.memberCount || 1) !== 1 ? 's' : ''}
                               </div>
+                              {group.description && (
+                                <div className="group-description">{group.description}</div>
+                              )}
                             </div>
                           </div>
                           <div className="text-sm font-syne">
@@ -559,6 +573,19 @@ const DashboardPage = () => {
                           </div>
                         </div>
                         <div className="mt-2 text-sm muted">Total Spend: {currency(group.totalSpend)}</div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEditGroup(group);
+                            }}
+                            style={{ padding: '4px 8px', fontSize: '12px' }}
+                          >
+                            Edit
+                          </Button>
+                        </div>
                         {group.memberDues.length > 0 && (
                           <div className="mt-2 stack">
                             {group.memberDues.map((person, index) => (
@@ -573,7 +600,7 @@ const DashboardPage = () => {
                             ))}
                           </div>
                         )}
-                      </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -651,6 +678,15 @@ const DashboardPage = () => {
       </Modal>
 
       <Modal
+        isOpen={activeModal === 'editGroup'}
+        title="Edit Group"
+        subtitle="Update group details"
+        onClose={closeModal}
+      >
+        {editingGroup && <GroupEditForm group={editingGroup} onSuccess={handleGroupUpdate} onDelete={handleGroupDelete} onMemberChange={handleMemberChange} />}
+      </Modal>
+
+      <Modal
         isOpen={activeModal === 'expense'}
         title={editingExpense ? "Edit Expense" : "Add Expense"}
         subtitle={editingExpense ? "Update expense details" : "Add a split in a distraction-free modal"}
@@ -689,6 +725,15 @@ const DashboardPage = () => {
                   <span className="badge badge-violet">{prettifyGroupType(selectedGroup.type)}</span>
                   <span className="badge badge-amber">{selectedGroup.memberCount || 1} people</span>
                 </div>
+
+                {selectedGroup.description && (
+                  <div>
+                    <div className="metric-label" style={{ marginBottom: 8 }}>Description</div>
+                    <div className="text-sm" style={{ fontStyle: 'italic', color: 'var(--muted2)' }}>
+                      {selectedGroup.description}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between">
                   <div>

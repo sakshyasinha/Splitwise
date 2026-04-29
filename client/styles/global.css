@@ -712,11 +712,19 @@ textarea.input {
 
 select.input {
   appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23657082' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
 }
 
 select.input option {
-  background: #fff;
+  background: var(--card-strong);
   color: var(--text);
+}
+
+[data-theme='dark'] select.input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
 }
 
 .input-row {
@@ -751,6 +759,12 @@ select.input option {
   background: var(--success-dim);
   color: var(--success);
   border-color: var(--success-dim);
+}
+
+.banner.warning {
+  background: var(--warning-dim);
+  color: var(--warning);
+  border-color: var(--warning-dim);
 }
 
 .empty-state {
@@ -996,6 +1010,18 @@ select.input option {
   font-size: 11px;
   color: var(--muted);
   margin-top: 2px;
+}
+
+.group-description {
+  font-size: 12px;
+  color: var(--muted2);
+  margin-top: 4px;
+  font-style: italic;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 
 .due-item {

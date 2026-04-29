@@ -52,6 +52,10 @@ export default function ExpenseList({ onEdit }) {
   const [form, setForm] = useState({ description: '', amount: '' });
   const [confirmDelete, setConfirmDelete] = useState(null);
 
+  // Debug logging to track expenses changes
+  console.log('ExpenseList: Current expenses count:', expenses.length);
+  console.log('ExpenseList: Expenses:', expenses);
+
   const canSave = useMemo(
     () => form.description.trim() && Number(form.amount) > 0,
     [form]
@@ -85,11 +89,15 @@ export default function ExpenseList({ onEdit }) {
 
   const removeExpense = async (expenseId) => {
     try {
+      console.log('Deleting expense:', expenseId);
+      console.log('Current expenses count:', expenses.length);
       await deleteExpense(expenseId);
+      console.log('Delete completed');
       toast.success('Expense deleted successfully');
       if (editingId === expenseId) cancelEdit();
       setConfirmDelete(null);
     } catch (err) {
+      console.error('Delete error:', err);
       toast.error('Failed to delete expense');
     }
   };

@@ -1,14 +1,43 @@
 import express from 'express';
-import {addExpense, getExpenses, getMyDues, updateExpense, deleteExpense, settleDue} from '../controllers/expense.controller.js';
+import {
+    addExpense,
+    getExpenses,
+    updateExpense,
+    deleteExpense,
+    settleDue,
+    getMyDues,
+    getMyLents,
+    getExpenseById,
+    getGroupExpenses,
+    addPayer,
+    getExpenseAuditLog
+} from '../controllers/expense.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 
-const router=express.Router();
+const router = express.Router();
 
-router.post('/add',protect,addExpense);
-router.get('/',protect,getExpenses);
-router.get('/my',protect,getMyDues);
-router.patch('/:id/settle',protect,settleDue);
-router.put('/:id',protect,updateExpense);
-router.delete('/:id',protect,deleteExpense);
+// All expense routes require authentication
+router.use(protect);
+
+// Basic CRUD operations
+router.post('/add', addExpense);
+router.get('/', getExpenses);
+router.get('/my', getMyDues);
+router.get('/lent', getMyLents);
+router.get('/:id', getExpenseById);
+router.put('/:id', updateExpense);
+router.delete('/:id', deleteExpense);
+
+// Settlement operations
+router.patch('/:id/settle', settleDue);
+
+// Group operations
+router.get('/group/:groupId', getGroupExpenses);
+
+// Multi-payer support
+router.post('/:id/payers', addPayer);
+
+// Audit trail
+router.get('/:id/audit', getExpenseAuditLog);
 
 export default router;
