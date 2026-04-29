@@ -6,7 +6,7 @@ import Button from "../ui/Button.jsx";
 import Card from "../ui/Card.jsx";
 import Input from "../ui/Input.jsx";
 
-const GROUP_TYPES = ["trip", "home", "couple", "office", "friends", "other"];
+const GROUP_TYPES = ["🚞Trip", "🏠Home", "💓Couple", "💼Office", "🫂Friends", "Other"];
 
 const normalizeEmail = (value) => value.trim().toLowerCase();
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -18,7 +18,7 @@ export default function GroupEditForm({ group, onSuccess, onDelete, onMemberChan
 
   const [form, setForm] = useState({
     name: "",
-    type: "other",
+    type: "Other",
     description: "",
   });
 
@@ -34,7 +34,7 @@ export default function GroupEditForm({ group, onSuccess, onDelete, onMemberChan
     if (group) {
       setForm({
         name: group.name || "",
-        type: group.type || "other",
+        type: group.type || "Other",
         description: group.description || "",
       });
     }
