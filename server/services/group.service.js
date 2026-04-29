@@ -61,9 +61,10 @@ export const createGroup = async ({ name, type, description = "", userId, member
   const resolvedMembers = await resolveMemberUsers(members);
   const normalizedMembers = [...new Set([String(userId), ...resolvedMembers.map((user) => String(user._id))])];
 
-  // Check for existing groups with the same name by the same user
+  // Check for existing groups with the same name AND type by the same user
   const existingGroups = await Group.find({
     name: trimmedName,
+    type: normalizedType,
     createdBy: userId,
     archived: { $ne: true }
   });
@@ -71,7 +72,7 @@ export const createGroup = async ({ name, type, description = "", userId, member
   if (existingGroups.length > 0) {
     // Return existing group with a warning flag
     const existingGroup = existingGroups[0];
-    existingGroup.warning = `A group named "${trimmedName}" already exists.`;
+    existingGroup.warning = `A group named "${trimmedName}" of type "${normalizedType}" already exists.`;
     existingGroup.isExisting = true;
     return existingGroup;
   }
