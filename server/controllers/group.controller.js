@@ -5,12 +5,22 @@ export const createGroup=async(req,res)=>{
         const group = await groupService.createGroup({
             name: req.body.name,
             type: req.body.type,
+            description: req.body.description || "",
             userId: req.user?.id || req.body.userId,
             members: req.body.members || []
         });
         await group.populate("members", "name email");
         await group.populate("createdBy", "name email");
-        res.status(201).json(group);
+
+        const response = group.toObject();
+        const warning = group.warning;
+        const isExisting = group.isExisting;
+
+        if (warning) {
+            res.status(200).json({ ...response, warning, isExisting });
+        } else {
+            res.status(201).json(response);
+        }
     } catch (error) {
         res.status(error.statusCode || 500).json({ message: error.message });
     }
@@ -32,7 +42,8 @@ export const updateGroup = async (req, res) => {
             req.user?.id || req.body.userId,
             {
                 name: req.body.name,
-                type: req.body.type
+                type: req.body.type,
+                description: req.body.description
             }
         );
         await group.populate("members", "name email");
@@ -45,12 +56,13 @@ export const updateGroup = async (req, res) => {
 
 export const deleteGroup = async (req, res) => {
     try {
-        await groupService.deleteGroup(
+        const result = await groupService.deleteGroup(
             req.params.id,
             req.user?.id || req.body.userId
         );
-        res.status(200).json({ message: 'Group deleted successfully' });
+        res.status(200).json(result || { message: 'Group deleted successfully' });
     } catch (error) {
+        console.error('Error in deleteGroup controller:', error);
         res.status(error.statusCode || 500).json({ message: error.message });
     }
 };
@@ -66,6 +78,7 @@ export const addMember = async (req, res) => {
         await group.populate("createdBy", "name email");
         res.status(200).json(group);
     } catch (error) {
+        console.error('Error in addMember controller:', error);
         res.status(error.statusCode || 500).json({ message: error.message });
     }
 };
@@ -80,6 +93,16 @@ export const removeMember = async (req, res) => {
         await group.populate("members", "name email");
         await group.populate("createdBy", "name email");
         res.status(200).json(group);
+    } catch (error) {
+        console.error('Error in removeMember controller:', error);
+        res.status(error.statusCode || 500).json({ message: error.message });
+    }
+};
+
+export const getGroupBalance = async (req, res) => {
+    try {
+        const balance = await groupService.getGroupBalance(req.params.id);
+        res.status(200).json(balance);
     } catch (error) {
         res.status(error.statusCode || 500).json({ message: error.message });
     }

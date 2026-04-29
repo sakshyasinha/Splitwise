@@ -7,7 +7,7 @@ import Input from "../ui/Input.jsx";
 
 const normalizeEmail = (value) => value.trim().toLowerCase();
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-const GROUP_TYPES = ["trip", "home", "couple", "office", "friends", "other"];
+const GROUP_TYPES = ["🚞Trip", "🏠Home", "💓Couple", "💼Office", "🫂Friends", "Other"];
 
 export default function GroupForm({ onSuccess }) {
   const { user } = useAuth();
@@ -17,10 +17,12 @@ export default function GroupForm({ onSuccess }) {
 
   const [name, setName] = useState("");
   const [type, setType] = useState("other");
+  const [description, setDescription] = useState("");
   const [memberInput, setMemberInput] = useState("");
   const [members, setMembers] = useState([]);
   const [success, setSuccess] = useState("");
   const [localError, setLocalError] = useState("");
+  const [warning, setWarning] = useState("");
 
   const allMembers = useMemo(() => {
     const unique = [...new Set(members.map(normalizeEmail))];
@@ -71,6 +73,7 @@ export default function GroupForm({ onSuccess }) {
 
     setSuccess("");
     setLocalError("");
+    setWarning("");
     clearError();
 
     if (!name.trim()) {
@@ -84,18 +87,26 @@ export default function GroupForm({ onSuccess }) {
     }
 
     try {
-      await createGroup({
+      const result = await createGroup({
         name: name.trim(),
         type,
+        description: description.trim(),
         members,
       });
 
-      setSuccess("Group created successfully");
-      setName("");
-      setType("other");
-      setMembers([]);
-      if (onSuccess) {
-        onSuccess();
+      // Check if backend returned a warning about existing group
+      if (result?.warning) {
+        setWarning(result.warning);
+        setSuccess("Group created successfully");
+      } else {
+        setSuccess("Group created successfully");
+        setName("");
+        setType("other");
+        setDescription("");
+        setMembers([]);
+        if (onSuccess) {
+          onSuccess();
+        }
       }
     } catch (_) {}
   };
@@ -114,6 +125,15 @@ export default function GroupForm({ onSuccess }) {
           onChange={(e) => setName(e.target.value)}
           placeholder="Flatmates April"
           required
+        />
+
+        {/* Description */}
+        <Input
+          label="Description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Monthly rent and utilities"
+          multiline
         />
 
         <div className="input-block">
@@ -140,6 +160,7 @@ export default function GroupForm({ onSuccess }) {
           <label className="label">Members</label>
 
           {/* Input Row */}
+
           <div className="row">
             <input
               type="email"
@@ -179,6 +200,7 @@ export default function GroupForm({ onSuccess }) {
         </div>
 
         {error && <p className="banner error">{error}</p>}
+        {warning && <p className="banner warning">{warning}</p>}
         {success && <p className="banner success">{success}</p>}
 
         <Button type="submit" disabled={loading || !name.trim()}>
