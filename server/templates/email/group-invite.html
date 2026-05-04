@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>You're Invited to Join a Group</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .invite-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .invite-box h2 {
+            margin-top: 0;
+            color: #667eea;
+            font-size: 22px;
+        }
+        .detail-row {
+            display: flex;
+            margin: 10px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        .detail-label {
+            font-weight: 600;
+            color: #555;
+            width: 120px;
+            flex-shrink: 0;
+        }
+        .detail-value {
+            color: #333;
+            flex-grow: 1;
+        }
+        .inviter-info {
+            background-color: #e8f4f8;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .inviter-info img {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin-bottom: 10px;
+        }
+        .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            margin: 20px 0;
+            transition: transform 0.2s;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px solid #eee;
+        }
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        @media only screen and (max-width: 600px) {
+            .container {
+                width: 100%;
+                border-radius: 0;
+            }
+            .detail-row {
+                flex-direction: column;
+            }
+            .detail-label {
+                width: 100%;
+                margin-bottom: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎉 You're Invited!</h1>
+        </div>
+
+        <div class="content">
+            <p>Hello {{userName}},</p>
+
+            <p><strong>{{inviterName}}</strong> has invited you to join their group on Splitwise!</p>
+
+            <div class="invite-box">
+                <h2>{{groupName}}</h2>
+
+                <div class="detail-row">
+                    <div class="detail-label">Group Type:</div>
+                    <div class="detail-value">{{groupType}}</div>
+                </div>
+
+                {{#if groupDescription}}
+                <div class="detail-row">
+                    <div class="detail-label">Description:</div>
+                    <div class="detail-value">{{groupDescription}}</div>
+                </div>
+                {{/if}}
+
+                <div class="detail-row">
+                    <div class="detail-label">Members:</div>
+                    <div class="detail-value">{{memberCount}} members</div>
+                </div>
+            </div>
+
+            <div class="inviter-info">
+                <p><strong>{{inviterName}}</strong> thinks you'd be a great addition to this group for tracking shared expenses.</p>
+            </div>
+
+            <div style="text-align: center;">
+                <a href="{{appUrl}}" class="button">Accept Invitation</a>
+            </div>
+
+            <p style="text-align: center; color: #666; font-size: 14px; margin-top: 20px;">
+                Or copy and paste this link into your browser:<br>
+                <a href="{{appUrl}}" style="word-break: break-all;">{{appUrl}}</a>
+            </p>
+
+            <p style="color: #666; font-size: 14px; margin-top: 30px;">
+                If you don't want to join this group, you can safely ignore this email.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>
+                This invitation was sent by <strong>{{inviterName}}</strong> via Splitwise.<br>
+                <a href="{{unsubscribeUrl}}">Unsubscribe from email notifications</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

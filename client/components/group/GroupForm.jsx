@@ -4,10 +4,16 @@ import useExpenses from "../../hooks/useExpenses.js";
 import Button from "../ui/Button.jsx";
 import Card from "../ui/Card.jsx";
 import Input from "../ui/Input.jsx";
+import { normalizeEmail, isValidEmail } from "../../utils/validation.js";
 
-const normalizeEmail = (value) => value.trim().toLowerCase();
-const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-const GROUP_TYPES = ["🚞Trip", "🏠Home", "💓Couple", "💼Office", "🫂Friends", "Other"];
+const GROUP_TYPES = [
+  { value: "trip", label: "🚞Trip" },
+  { value: "home", label: "🏠Home" },
+  { value: "couple", label: "💓Couple" },
+  { value: "office", label: "💼Office" },
+  { value: "friends", label: "🫂Friends" },
+  { value: "other", label: "Other" }
+];
 
 export default function GroupForm({ onSuccess }) {
   const { user } = useAuth();
@@ -140,8 +146,8 @@ export default function GroupForm({ onSuccess }) {
           <span className="input-label">Group Type</span>
           <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
             {GROUP_TYPES.map((groupType) => (
-              <option key={groupType} value={groupType}>
-                {groupType.charAt(0).toUpperCase() + groupType.slice(1)}
+              <option key={groupType.value} value={groupType.value}>
+                {groupType.label}
               </option>
             ))}
           </select>
@@ -150,7 +156,7 @@ export default function GroupForm({ onSuccess }) {
         <div className="group-setup-preview">
           <div className="group-setup-preview-title">{displayTitle}</div>
           <div className="group-setup-preview-meta">
-            <span className="badge badge-violet">Type: {type}</span>
+            <span className="badge badge-violet">Type: {GROUP_TYPES.find(gt => gt.value === type)?.label || type}</span>
             <span className="badge badge-green">People: {totalPeople}</span>
           </div>
         </div>

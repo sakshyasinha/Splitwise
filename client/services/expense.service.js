@@ -34,3 +34,13 @@ export async function settleDue(expenseId) {
   const response = await API.patch(`/expenses/${expenseId}/settle`);
   return response.data;
 }
+
+export async function getExpenseBreakdown() {
+  const response = await API.get('/expenses/breakdown');
+  return response.data;
+}
+
+export async function getFriendsList() {
+  const response = await API.get('/expenses/friends');
+  return response.data;
+}

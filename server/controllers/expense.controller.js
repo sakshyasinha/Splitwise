@@ -43,12 +43,18 @@ const normalizeExpense = (expense) => {
 
 export const addExpense = async (req, res) => {
     try {
+        console.log('addExpense controller called with:', {
+            user: req.user,
+            body: req.body
+        });
+
         const expense = await expenseService.addExpense({
             userId: req.user?.id || req.body.userId,
             ...req.body
         });
         res.status(201).json(normalizeExpense(expense));
     } catch (error) {
+        console.error('Error in addExpense controller:', error);
         res.status(error.statusCode || 500).json({ message: error.message });
     }
 };
@@ -291,6 +297,24 @@ export const getExpenseAuditLog = async (req, res) => {
         );
 
         res.json({ auditLog: populatedAuditLog });
+    } catch (error) {
+        res.status(error.statusCode || 500).json({ message: error.message });
+    }
+};
+
+export const getExpenseBreakdown = async (req, res) => {
+    try {
+        const data = await expenseService.getExpenseBreakdown(req.user?.id);
+        res.json(data);
+    } catch (error) {
+        res.status(error.statusCode || 500).json({ message: error.message });
+    }
+};
+
+export const getFriendsList = async (req, res) => {
+    try {
+        const data = await expenseService.getFriendsList(req.user?.id);
+        res.json(data);
     } catch (error) {
         res.status(error.statusCode || 500).json({ message: error.message });
     }

@@ -4,7 +4,7 @@ const settlementSchema = new mongoose.Schema({
     expenseId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Expense',
-        required: true
+        required: false // Made optional for direct payments
     },
     from: {
         type: mongoose.Schema.Types.ObjectId,
