@@ -15,6 +15,11 @@ import settlementsRoutes from './routes/settlements.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import debtRoutes from './routes/debt.routes.js';
 import activityRoutes from './routes/activity.routes.js';
+import emailRoutes from './routes/email.routes.js';
+import smartSettlementRoutes from './routes/smart-settlement.routes.js';
+import recurringExpenseRoutes from './routes/recurring-expense.routes.js';
+import receiptRoutes from './routes/receipt.routes.js';
+import analyticsRoutes from './routes/analytics.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,6 +54,9 @@ app.use(expressWinston.logger({
 app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(express.json());
 
+// Serve static files for uploads
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
 });
@@ -65,6 +73,16 @@ app.use("/api/settlements",settlementsRoutes);
 app.use("/api/debt", debtRoutes);
 
 app.use("/api/activity", activityRoutes);
+
+app.use("/api/email", emailRoutes);
+
+app.use("/api/smart-settlements", smartSettlementRoutes);
+
+app.use("/api/recurring-expenses", recurringExpenseRoutes);
+
+app.use("/api/receipts", receiptRoutes);
+
+app.use("/api/analytics", analyticsRoutes);
 
 
 export const startServer = async () => {

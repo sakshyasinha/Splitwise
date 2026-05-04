@@ -193,7 +193,7 @@ export const getUserNetBalance = async (userId) => {
 
         expenses.forEach(expense => {
             const groupId = String(expense.group?._id);
-            const groupName = expense.group?.name || 'Unknown Group';
+            const groupName = String(expense.group?.name || '');
             const expenseAmount = Number(expense.amount) || 0;
 
             if (!groupBalances.has(groupId)) {

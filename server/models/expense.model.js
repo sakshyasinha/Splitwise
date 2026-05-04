@@ -42,7 +42,7 @@ const expenseSchema = new mongoose.Schema({
   group: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Group',
-    required: true,
+    required: false, // Made optional to support quick expenses without groups
     index: true
   },
 
@@ -86,7 +86,7 @@ const expenseSchema = new mongoose.Schema({
   // ADVANCED SPLIT TYPES
   splitType: {
     type: String,
-    enum: ['equal', 'percentage', 'shares', 'itemized', 'adjustment', 'custom'],
+    enum: ['equal', 'percentage', 'shares', 'itemized', 'adjustment', 'custom', 'payment'],
     required: true,
     default: 'equal'
   },

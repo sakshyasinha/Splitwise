@@ -12,15 +12,7 @@ export const createGroup=async(req,res)=>{
         await group.populate("members", "name email");
         await group.populate("createdBy", "name email");
 
-        const response = group.toObject();
-        const warning = group.warning;
-        const isExisting = group.isExisting;
-
-        if (warning) {
-            res.status(200).json({ ...response, warning, isExisting });
-        } else {
-            res.status(201).json(response);
-        }
+        res.status(201).json(group);
     } catch (error) {
         res.status(error.statusCode || 500).json({ message: error.message });
     }

@@ -2,6 +2,7 @@ import Group from "../models/group.model.js";
 import User from "../models/user.model.js";
 import Expense from "../models/expense.model.js";
 import mongoose from "mongoose";
+import * as emailService from './email.service.js';
 
 const ALLOWED_GROUP_TYPES = new Set(["trip", "home", "couple", "office", "friends", "other"]);
 
@@ -70,20 +71,41 @@ export const createGroup = async ({ name, type, description = "", userId, member
   });
 
   if (existingGroups.length > 0) {
-    // Return existing group with a warning flag
-    const existingGroup = existingGroups[0];
-    existingGroup.warning = `A group named "${trimmedName}" of type "${normalizedType}" already exists.`;
-    existingGroup.isExisting = true;
-    return existingGroup;
+    const error = new Error(`A group named "${trimmedName}" of type "${normalizedType}" already exists.`);
+    error.statusCode = 409; // Conflict status code
+    error.existingGroup = existingGroups[0];
+    throw error;
   }
 
-  return await Group.create({
+  const createdGroup = await Group.create({
     name: trimmedName,
     description: trimmedDescription,
     type: normalizedType,
     members: normalizedMembers,
     createdBy: [userId],
   });
+
+  // Send invite emails to new members (excluding the creator)
+  const newMemberIds = resolvedMembers
+    .filter(user => String(user._id) !== String(userId))
+    .map(user => user._id);
+
+  if (newMemberIds.length > 0) {
+    // Send emails asynchronously without blocking the response
+    setImmediate(async () => {
+      try {
+        await Promise.all(
+          newMemberIds.map(memberId =>
+            emailService.sendGroupInviteEmail(createdGroup._id, memberId, userId)
+          )
+        );
+      } catch (error) {
+        console.error('Failed to send group invite emails:', error);
+      }
+    });
+  }
+
+  return createdGroup;
 };
 
 export const getGroups = async (userId) => {
@@ -225,6 +247,15 @@ export const addMember = async (groupId, userId, memberId) => {
     if (!group.members.some(id => String(id) === memberIdStr)) {
       group.members.push(resolvedMemberId);
       await group.save();
+
+      // Send invite email to the new member asynchronously
+      setImmediate(async () => {
+        try {
+          await emailService.sendGroupInviteEmail(groupId, resolvedMemberId, userId);
+        } catch (error) {
+          console.error('Failed to send group invite email:', error);
+        }
+      });
     }
 
     return group;

@@ -5,11 +5,16 @@ import useToast from "../../hooks/useToast.js";
 import Button from "../ui/Button.jsx";
 import Card from "../ui/Card.jsx";
 import Input from "../ui/Input.jsx";
+import { normalizeEmail, isValidEmail } from "../../utils/validation.js";
 
-const GROUP_TYPES = ["🚞Trip", "🏠Home", "💓Couple", "💼Office", "🫂Friends", "Other"];
-
-const normalizeEmail = (value) => value.trim().toLowerCase();
-const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const GROUP_TYPES = [
+  { value: "trip", label: "🚞Trip" },
+  { value: "home", label: "🏠Home" },
+  { value: "couple", label: "💓Couple" },
+  { value: "office", label: "💼Office" },
+  { value: "friends", label: "🫂Friends" },
+  { value: "other", label: "Other" }
+];
 
 export default function GroupEditForm({ group, onSuccess, onDelete, onMemberChange }) {
   const { updateGroup, deleteGroup, addGroupMember, removeGroupMember, loading, error, clearError } = useExpenses();
@@ -32,9 +37,16 @@ export default function GroupEditForm({ group, onSuccess, onDelete, onMemberChan
 
   useEffect(() => {
     if (group) {
+      // Normalize the type to match clean values (remove emojis if present)
+      let normalizedType = group.type || "other";
+      const matchingType = GROUP_TYPES.find(gt => normalizedType.toLowerCase().includes(gt.value));
+      if (matchingType) {
+        normalizedType = matchingType.value;
+      }
+
       setForm({
         name: group.name || "",
-        type: group.type || "Other",
+        type: normalizedType,
         description: group.description || "",
       });
     }
@@ -165,9 +177,9 @@ export default function GroupEditForm({ group, onSuccess, onDelete, onMemberChan
               value={form.type}
               onChange={handleChange}
             >
-              {GROUP_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
+              {GROUP_TYPES.map((groupType) => (
+                <option key={groupType.value} value={groupType.value}>
+                  {groupType.label}
                 </option>
               ))}
             </select>

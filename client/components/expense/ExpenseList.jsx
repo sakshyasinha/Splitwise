@@ -3,46 +3,12 @@ import useExpenses from '../../hooks/useExpenses.js';
 import useAuth from '../../hooks/useAuth.js';
 import useToast from '../../hooks/useToast.js';
 import Card from '../ui/Card.jsx';
+import CategoryIcon from '../ui/CategoryIcon.jsx';
+import { formatCurrency } from '../../utils/formatCurrency.js';
+import { getPersonName } from '../../utils/personUtils.js';
 
-function formatAmount(value) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-  }).format(Number(value || 0));
-}
-
-const personName = (person, fallback = 'Unknown') => {
-  if (!person) return fallback;
-  if (typeof person === 'string') return person;
-  return person.name || person.email || fallback;
-};
-
-const CAT_COLORS = {
-  Food:      { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b' },
-  Travel:    { bg: 'rgba(124,110,255,0.12)', color: '#a594ff' },
-  Events:    { bg: 'rgba(244,63,94,0.12)',   color: '#f43f5e' },
-  Utilities: { bg: 'rgba(34,197,94,0.12)',   color: '#22c55e' },
-  Shopping:  { bg: 'rgba(56,189,248,0.12)',  color: '#38bdf8' },
-  General:   { bg: 'rgba(122,121,138,0.12)', color: '#7a798a' },
-};
-
-const CAT_EMOJI = {
-  Food: '🍕', Travel: '✈', Events: '🎉',
-  Utilities: '🏠', Shopping: '🛒', General: '🧾',
-};
-
-function CategoryIcon({ category }) {
-  const key = category || 'General';
-  const style = CAT_COLORS[key] || CAT_COLORS.General;
-  return (
-    <div
-      className="expense-icon"
-      style={{ background: style.bg, color: style.color, fontSize: 17 }}
-    >
-      {CAT_EMOJI[key] || '🧾'}
-    </div>
-  );
-}
+const CATEGORIES = ['Food', 'Travel', 'Events', 'Utilities', 'Shopping', 'General', 'Rent', 'Transport', 'Entertainment', 'Healthcare', 'Education', 'Other'];
+const SPLIT_TYPES = ['equal', 'percentage', 'shares', 'itemized', 'adjustment', 'custom', 'payment'];
 
 export default function ExpenseList({ onEdit }) {
   const { user } = useAuth();
@@ -52,6 +18,15 @@ export default function ExpenseList({ onEdit }) {
   const [form, setForm] = useState({ description: '', amount: '' });
   const [confirmDelete, setConfirmDelete] = useState(null);
 
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedSplitType, setSelectedSplitType] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [amountRange, setAmountRange] = useState({ min: '', max: '' });
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [showFilters, setShowFilters] = useState(false);
+
   // Debug logging to track expenses changes
   console.log('ExpenseList: Current expenses count:', expenses.length);
   console.log('ExpenseList: Expenses:', expenses);
@@ -60,6 +35,90 @@ export default function ExpenseList({ onEdit }) {
     () => form.description.trim() && Number(form.amount) > 0,
     [form]
   );
+
+  // Filter expenses based on search and filter criteria
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(expense => {
+      // Search query filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const description = (expense.description || '').toLowerCase();
+        const groupName = (expense.group?.name || '').toLowerCase();
+        const paidByName = (expense.paidBy?.name || expense.paidBy?.email || '').toLowerCase();
+
+        if (!description.includes(query) && !groupName.includes(query) && !paidByName.includes(query)) {
+          return false;
+        }
+      }
+
+      // Category filter
+      if (selectedCategory && expense.category !== selectedCategory) {
+        return false;
+      }
+
+      // Split type filter
+      if (selectedSplitType && expense.splitType !== selectedSplitType) {
+        return false;
+      }
+
+      // Status filter
+      if (selectedStatus) {
+        const pendingCount = (expense.participants || []).filter(p => p?.status === 'pending').length;
+        const totalParticipants = (expense.participants || []).length;
+        const isPersonalExpense = totalParticipants === 1;
+        const isPayment = expense.splitType === 'payment';
+
+        if (selectedStatus === 'pending' && (pendingCount === 0 || isPersonalExpense)) {
+          return false;
+        }
+        if (selectedStatus === 'settled' && pendingCount > 0) {
+          return false;
+        }
+        if (selectedStatus === 'personal' && !isPersonalExpense) {
+          return false;
+        }
+        if (selectedStatus === 'payment' && !isPayment) {
+          return false;
+        }
+      }
+
+      // Amount range filter
+      const amount = Number(expense.amount) || 0;
+      if (amountRange.min && amount < Number(amountRange.min)) {
+        return false;
+      }
+      if (amountRange.max && amount > Number(amountRange.max)) {
+        return false;
+      }
+
+      // Date range filter
+      const expenseDate = new Date(expense.date || expense.createdAt);
+      if (dateRange.start && expenseDate < new Date(dateRange.start)) {
+        return false;
+      }
+      if (dateRange.end && expenseDate > new Date(dateRange.end)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [expenses, searchQuery, selectedCategory, selectedSplitType, selectedStatus, amountRange, dateRange]);
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory('');
+    setSelectedSplitType('');
+    setSelectedStatus('');
+    setAmountRange({ min: '', max: '' });
+    setDateRange({ start: '', end: '' });
+  };
+
+  // Check if any filters are active
+  const hasActiveFilters = useMemo(() => {
+    return searchQuery || selectedCategory || selectedSplitType || selectedStatus ||
+           amountRange.min || amountRange.max || dateRange.start || dateRange.end;
+  }, [searchQuery, selectedCategory, selectedSplitType, selectedStatus, amountRange, dateRange]);
 
   const startEdit = (expense) => {
     setEditingId(expense._id);
@@ -122,11 +181,142 @@ export default function ExpenseList({ onEdit }) {
             <h2>Recent Expenses</h2>
             <p>Add, edit, or delete your entries</p>
           </div>
-          <span className="badge badge-violet">{expenses.length} items</span>
+          <span className="badge badge-violet">{filteredExpenses.length} of {expenses.length} items</span>
         </div>
       </div>
 
       <div className="card-content">
+        {/* ── SEARCH AND FILTER BAR ── */}
+        <div style={{ marginBottom: 16 }}>
+          {/* Search Input */}
+          <div className="input-row" style={{ marginBottom: 12 }}>
+            <input
+              type="text"
+              className="input"
+              placeholder="Search expenses by description, group, or person..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setShowFilters(!showFilters)}
+              style={{ marginLeft: 8 }}
+            >
+              {showFilters ? '▲ Filters' : '▼ Filters'}
+            </button>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={clearFilters}
+                style={{ marginLeft: 8, color: 'var(--danger)' }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          {/* Filter Options */}
+          {showFilters && (
+            <div className="card" style={{ padding: 12, marginBottom: 12, border: '1px solid #e0e0e0', borderRadius: 4 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                {/* Category Filter */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>Category</label>
+                  <select
+                    className="input"
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                  >
+                    <option value="">All Categories</option>
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Split Type Filter */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>Split Type</label>
+                  <select
+                    className="input"
+                    value={selectedSplitType}
+                    onChange={(e) => setSelectedSplitType(e.target.value)}
+                  >
+                    <option value="">All Types</option>
+                    {SPLIT_TYPES.map(type => (
+                      <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Status Filter */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>Status</label>
+                  <select
+                    className="input"
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                  >
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="settled">Settled</option>
+                    <option value="personal">Personal</option>
+                    <option value="payment">Payment</option>
+                  </select>
+                </div>
+
+                {/* Amount Range Filter */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>Amount Range (₹)</label>
+                  <div className="input-row">
+                    <input
+                      type="number"
+                      className="input"
+                      placeholder="Min"
+                      value={amountRange.min}
+                      onChange={(e) => setAmountRange(prev => ({ ...prev, min: e.target.value }))}
+                      style={{ width: '80px' }}
+                    />
+                    <span style={{ margin: '0 8px' }}>to</span>
+                    <input
+                      type="number"
+                      className="input"
+                      placeholder="Max"
+                      value={amountRange.max}
+                      onChange={(e) => setAmountRange(prev => ({ ...prev, max: e.target.value }))}
+                      style={{ width: '80px' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Date Range Filter */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>Date Range</label>
+                  <div className="input-row">
+                    <input
+                      type="date"
+                      className="input"
+                      value={dateRange.start}
+                      onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                      style={{ width: '120px' }}
+                    />
+                    <span style={{ margin: '0 8px' }}>to</span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={dateRange.end}
+                      onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                      style={{ width: '120px' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         {/* ── LOADING ── */}
         {loading && (
           <div className="empty-state">
@@ -138,6 +328,14 @@ export default function ExpenseList({ onEdit }) {
         {/* ── ERROR ── */}
         {error && <p className="banner error">{error}</p>}
 
+        {/* ── EMPTY FILTERED RESULTS ── */}
+        {!loading && filteredExpenses.length === 0 && expenses.length > 0 && (
+          <div className="empty-state">
+            <div className="empty-icon">🔍</div>
+            No expenses match your filters — try adjusting your search criteria.
+          </div>
+        )}
+
         {/* ── EMPTY ── */}
         {!loading && expenses.length === 0 && (
           <div className="empty-state">
@@ -147,23 +345,66 @@ export default function ExpenseList({ onEdit }) {
         )}
 
         {/* ── LIST ── */}
-        {!loading && expenses.length > 0 && (
+        {!loading && filteredExpenses.length > 0 && (
           <ul className="expense-list">
-            {expenses.map((expense) => {
+            {filteredExpenses.map((expense) => {
               const paidById = expense.paidBy?._id || expense.paidBy;
               const canManage = user?.id && String(paidById) === String(user.id);
               const isEditing = editingId === expense._id;
               const isConfirming = confirmDelete === expense._id;
-              const involvedPeople = [
-                personName(expense.paidBy, 'Payer'),
-                ...(expense.participants || []).map((participant) => personName(participant?.userId, 'Member')),
-              ];
+              const involvedPeople = (expense.participants || [])
+                .map((participant) => getPersonName(participant?.userId, 'Member'))
+                .filter((name, index, arr) => arr.indexOf(name) === index); // Remove duplicates
 
               return (
                 <li key={expense._id} className="expense-item" style={{ alignItems: 'flex-start', paddingTop: 14, paddingBottom: 14 }}>
 
                   {/* ICON */}
-                  {!isEditing && <CategoryIcon category={expense.category} />}
+                  {!isEditing && (
+                    <div style={{ position: 'relative' }}>
+                      <CategoryIcon category={expense.category} />
+                      {expense.splitType === 'payment' && (
+                        <div style={{
+                          position: 'absolute',
+                          top: -4,
+                          right: -4,
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          background: 'var(--primary)',
+                          color: 'white',
+                          fontSize: 10,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 'bold',
+                          border: '2px solid var(--card-strong)'
+                        }}>
+                          💳
+                        </div>
+                      )}
+                      {expense.participants?.length === 1 && (
+                        <div style={{
+                          position: 'absolute',
+                          top: -4,
+                          right: -4,
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          background: 'var(--success)',
+                          color: 'white',
+                          fontSize: 10,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 'bold',
+                          border: '2px solid var(--card-strong)'
+                        }}>
+                          👤
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* BODY */}
                   <div className="expense-info">
@@ -225,14 +466,26 @@ export default function ExpenseList({ onEdit }) {
                           <div className="expense-meta" style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
                             {(() => {
                               const pendingCount = (expense.participants || []).filter(p => p?.status === 'pending').length;
-                              const settledCount = (expense.participants || []).length - pendingCount;
-                              return (
-                                <>
-                                  {pendingCount > 0 && <span style={{ color: 'var(--danger)' }}>{pendingCount} pending</span>}
-                                  {pendingCount > 0 && settledCount > 0 && <span style={{ margin: '0 4px', opacity: 0.4 }}>·</span>}
-                                  {settledCount > 0 && <span style={{ color: 'var(--success)' }}>{settledCount} settled</span>}
-                                </>
-                              );
+                              const totalParticipants = (expense.participants || []).length;
+                              const isPersonalExpense = totalParticipants === 1;
+                              const isPayment = expense.splitType === 'payment';
+
+                              if (isPersonalExpense) {
+                                return <span style={{ color: 'var(--success)' }}>Personal expense</span>;
+                              }
+
+                              if (isPayment) {
+                                if (pendingCount === 0) {
+                                  return <span style={{ color: 'var(--success)' }}>Payment settled</span>;
+                                }
+                                return <span style={{ color: 'var(--danger)' }}>Payment pending</span>;
+                              }
+
+                             if (pendingCount === 0) {
+                                return <span style={{ color: 'var(--success)' }}>All settled</span>;
+                              }
+
+                              return <span style={{ color: 'var(--danger)' }}>{pendingCount} pending</span>;
                             })()}
                           </div>
                         )}
@@ -294,15 +547,24 @@ export default function ExpenseList({ onEdit }) {
                       {(() => {
                         const pendingParticipants = (expense.participants || []).filter(p => p?.status === 'pending');
                         const pendingCount = pendingParticipants.length;
+                        const totalParticipants = (expense.participants || []).length;
+                        const isPersonalExpense = totalParticipants === 1;
+                        const isPayment = expense.splitType === 'payment';
                         const hasPending = pendingCount > 0;
+
                         return (
                           <>
-                            <div className="expense-amount debit" style={{ color: hasPending ? 'var(--danger)' : 'var(--success)' }}>
-                              {hasPending ? formatAmount(expense.amount) : '✓'}
+                            <div className="expense-amount" style={{ color: isPersonalExpense ? 'var(--text)' : (hasPending ? 'var(--danger)' : 'var(--success)') }}>
+                              {formatCurrency(expense.amount)}
                             </div>
-                            {hasPending && (
+                            {!isPersonalExpense && !isPayment && hasPending && (
                               <div className="expense-share">
-                                ÷ {pendingCount + 1} people
+                                ÷ {totalParticipants} people
+                              </div>
+                            )}
+                            {isPayment && (
+                              <div className="expense-share" style={{ fontSize: 11, opacity: 0.7 }}>
+                                Direct payment
                               </div>
                             )}
                           </>

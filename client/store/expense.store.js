@@ -7,6 +7,8 @@ import {
   getMyLents as getMyLentsService,
   settleDue as settleDueService,
   getExpenses as getExpensesService,
+  getExpenseBreakdown as getExpenseBreakdownService,
+  getFriendsList as getFriendsListService,
 } from "../services/expense.service.js";
 
 import {
@@ -44,6 +46,18 @@ const useExpenseStore = create((set, get) => ({
   totalLent: 0,
   loading: false,
   error: null,
+  // New state for breakdown and friends
+  breakdown: {
+    personal: { total: 0, count: 0, expenses: [] },
+    shared: { total: 0, count: 0, expenses: [] },
+    total: 0
+  },
+  friends: {
+    friends: [],
+    totalOwedToMe: 0,
+    totalIOwe: 0,
+    netBalance: 0
+  },
 
   // ------------------ GROUPS ------------------
   fetchGroups: async () => {
@@ -375,6 +389,64 @@ const useExpenseStore = create((set, get) => ({
           error?.response?.data?.message ||
           error.message ||
           "Failed to remove member",
+      });
+      throw error;
+    }
+  },
+
+  // ------------------ BREAKDOWN & FRIENDS ------------------
+  fetchExpenseBreakdown: async () => {
+    try {
+      set({ loading: true, error: null });
+
+      const data = await getExpenseBreakdownService();
+
+      set({
+        breakdown: data || {
+          personal: { total: 0, count: 0, expenses: [] },
+          shared: { total: 0, count: 0, expenses: [] },
+          total: 0
+        },
+        loading: false,
+      });
+
+      return data;
+    } catch (error) {
+      set({
+        loading: false,
+        error:
+          error?.response?.data?.message ||
+          error.message ||
+          "Failed to fetch expense breakdown",
+      });
+      throw error;
+    }
+  },
+
+  fetchFriendsList: async () => {
+    try {
+      set({ loading: true, error: null });
+
+      const data = await getFriendsListService();
+
+      set({
+        friends: data || {
+          friends: [],
+          totalOwedToMe: 0,
+          totalIOwe: 0,
+          netBalance: 0
+        },
+        loading: false,
+      });
+
+      return data;
+    } catch (error) {
+      set({
+        loading: false,
+        error:
+          error?.response?.data?.message ||
+          error.message ||
+          "Failed to fetch friends list",
       });
       throw error;
     }

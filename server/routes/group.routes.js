@@ -17,26 +17,46 @@ router.post("/create", protect, createGroup);
 
 router.get("/", protect, async (req, res) => {
   try {
-    const [memberOrOwnerGroups, expenseGroupIds] = await Promise.all([
-      Group.find({
-        $or: [
-          { members: req.user.id },
-          { createdBy: req.user.id },
-        ],
-      }).select("_id"),
-      Expense.distinct("group", {
+    console.log('=== FETCHING GROUPS ===');
+    console.log('User ID:', req.user.id);
+    console.log('User:', req.user);
+
+    console.log('Step 1: Finding member/owner groups...');
+    const memberOrOwnerGroups = await Group.find({
+      $or: [
+        { members: req.user.id },
+        { createdBy: req.user.id },
+      ],
+    }).select("_id");
+
+    console.log('Found member/owner groups:', memberOrOwnerGroups.length);
+
+    console.log('Step 2: Finding expense group IDs...');
+    let expenseGroupIds = [];
+    try {
+      const allGroupIds = await Expense.distinct("group", {
         $or: [
           { paidBy: req.user.id },
           { "participants.userId": req.user.id },
         ],
-      }),
-    ]);
+        isDeleted: false
+      });
+      // Filter out null values - some expenses don't have groups (quick expenses)
+      expenseGroupIds = allGroupIds.filter(id => id !== null && id !== 'null');
+      console.log('Found expense group IDs:', expenseGroupIds.length);
+    } catch (expenseError) {
+      console.error('Error in Expense.distinct:', expenseError);
+      expenseGroupIds = [];
+    }
 
     const visibleGroupIds = [...new Set([
       ...memberOrOwnerGroups.map((group) => String(group._id)),
       ...expenseGroupIds.map((groupId) => String(groupId)),
     ])];
 
+    console.log('Visible group IDs:', visibleGroupIds);
+
+    console.log('Step 3: Finding groups by IDs...');
     const groups = await Group.find({
       _id: { $in: visibleGroupIds },
       archived: { $ne: true }
@@ -44,10 +64,14 @@ router.get("/", protect, async (req, res) => {
       .populate("members", "name email")
       .populate("createdBy", "name email");
 
+    console.log('Found groups:', groups.length);
+    console.log('Groups data:', JSON.stringify(groups, null, 2));
+
     const seen = new Set();
     const uniqueGroups = groups.filter((group) => {
       const key = getGroupDedupKey(group);
       if (seen.has(key)) {
+        console.log('Duplicate group filtered:', key);
         return false;
       }
 
@@ -55,9 +79,17 @@ router.get("/", protect, async (req, res) => {
       return true;
     });
 
+    console.log('Unique groups:', uniqueGroups.length);
+    console.log('=== END FETCHING GROUPS ===');
+
     res.json(uniqueGroups);
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch groups" });
+    console.error('=== ERROR FETCHING GROUPS ===');
+    console.error('Error:', err);
+    console.error('Error message:', err.message);
+    console.error('Error stack:', err.stack);
+    console.error('=== END ERROR ===');
+    res.status(500).json({ message: "Failed to fetch groups", error: err.message });
   }
 });
 

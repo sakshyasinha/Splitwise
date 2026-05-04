@@ -1051,6 +1051,7 @@ select.input option {
   color: var(--danger);
 }
 
+
 .due-name {
   flex: 1;
   font-size: 13px;
@@ -1568,6 +1569,110 @@ select.input option {
     padding: 9px 11px;
     font-size: 12px;
   }
+}
+
+/* Form Styles */
+.expense-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+}
+
+.form-group input {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border2);
+  background: var(--card);
+  color: var(--text);
+  font-size: 14px;
+  font-family: 'Manrope', sans-serif;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast), transform var(--transition-fast);
+  outline: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'] .form-group input {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.form-group input::placeholder {
+  color: var(--muted2);
+}
+
+.form-group input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-dim);
+  background: var(--card-strong);
+  transform: translateY(-1px);
+}
+
+[data-theme='dark'] .form-group input:focus {
+  background: var(--card-strong);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-dim);
+}
+
+.form-group input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Button Group Styles */
+.btn-group {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-group .btn {
+  flex: 1;
+  font-size: 12px;
+  padding: 8px 12px;
+  min-height: 38px;
+}
+
+.btn-group .btn:first-child {
+  border-radius: 14px 0 0 14px;
+}
+
+.btn-group .btn:last-child {
+  border-radius: 0 14px 14px 0;
+}
+
+.btn-group .btn:not(:first-child):not(:last-child) {
+  border-radius: 0;
+}
+
+.error-message {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--danger-dim);
+  color: var(--danger);
+  border: 1px solid var(--danger-dim);
+  font-size: 13px;
+  font-weight: 600;
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
 }
 
 /* Touch device optimizations */

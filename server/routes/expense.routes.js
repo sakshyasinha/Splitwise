@@ -10,7 +10,9 @@ import {
     getExpenseById,
     getGroupExpenses,
     addPayer,
-    getExpenseAuditLog
+    getExpenseAuditLog,
+    getExpenseBreakdown,
+    getFriendsList
 } from '../controllers/expense.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 
@@ -24,6 +26,8 @@ router.post('/add', addExpense);
 router.get('/', getExpenses);
 router.get('/my', getMyDues);
 router.get('/lent', getMyLents);
+router.get('/breakdown', getExpenseBreakdown);
+router.get('/friends', getFriendsList);
 router.get('/:id', getExpenseById);
 router.put('/:id', updateExpense);
 router.delete('/:id', deleteExpense);

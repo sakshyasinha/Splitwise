@@ -180,6 +180,32 @@ export const splitCustom = (totalAmount, participantIds, customAmounts) => {
 };
 
 /**
+ * Payment Split - Direct payment from payer to recipient
+ * The recipient owes the full amount to the payer
+ * @param {number} totalAmount - Total amount paid
+ * @param {string[]} participantIds - Array of participant user IDs [payerId, recipientId]
+ * @returns {Array} Array of {userId, amount} objects
+ */
+export const splitPayment = (totalAmount, participantIds) => {
+    if (!participantIds || participantIds.length !== 2) {
+        throw new Error('Payment split requires exactly 2 participants (payer and recipient)');
+    }
+
+    const [payerId, recipientId] = participantIds;
+
+    return [
+        {
+            userId: payerId,
+            amount: 0 // Payer doesn't owe anything, they paid
+        },
+        {
+            userId: recipientId,
+            amount: totalAmount // Recipient owes the full amount
+        }
+    ];
+};
+
+/**
  * Adjustment Split - Add adjustments to base equal split
  * Useful for adding tips, taxes, or adjustments to specific users
  * @param {number} totalAmount - Total amount to split
@@ -279,6 +305,14 @@ export const validateSplit = (splitType, splitDetails, totalAmount, participantI
                 }
                 break;
 
+            case 'payment':
+                // Payment requires exactly 2 participants
+                if (participantIds.length !== 2) {
+                    return { valid: false, error: 'Payment requires exactly 2 participants (payer and recipient)' };
+                }
+                // No additional validation needed for payment
+                break;
+
             default:
                 return { valid: false, error: `Invalid split type: ${splitType}` };
         }
@@ -295,6 +329,7 @@ export default {
     splitShares,
     splitItemized,
     splitCustom,
+    splitPayment,
     splitAdjustment,
     validateSplit
 };

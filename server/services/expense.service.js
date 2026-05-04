@@ -1,45 +1,71 @@
 import Expense from '../models/expense.model.js';
 import User from '../models/user.model.js';
 import mongoose from 'mongoose';
-import { splitEqual, splitPercentage, splitShares, splitItemized, splitCustom } from './split.service.js';
+import { splitEqual, splitPercentage, splitShares, splitItemized, splitCustom, splitPayment } from './split.service.js';
+import * as emailService from './email.service.js';
 
 const resolveParticipantUsers = async (participants) => {
+    console.log('resolveParticipantUsers called with:', participants);
     const cleaned = [...new Set(participants.map((item) => String(item).trim()).filter(Boolean))];
+    console.log('Cleaned participants:', cleaned);
     const users = [];
-    const missing = [];
 
     for (const identifier of cleaned) {
+        console.log('Processing identifier:', identifier);
         let user = null;
         if (mongoose.Types.ObjectId.isValid(identifier)) {
             user = await User.findById(identifier);
+            console.log('Found user by ID:', user);
         }
 
         if (!user) {
             user = await User.findOne({ email: identifier.toLowerCase() });
+            console.log('Found user by email:', user);
+        }
+
+        if (!user) {
+            // For quick expenses, create a new user if they don't exist
+            // This allows expenses with users who haven't signed up yet
+            console.log('User not found, creating new user for:', identifier);
+            try {
+                user = await User.create({
+                    email: identifier.toLowerCase(),
+                    name: identifier.split('@')[0], // Use email prefix as name
+                    password: 'temp_password_' + Date.now(), // Temporary password
+                    isTemporary: true // Flag to indicate this is a temporary user
+                });
+                console.log('Created new user:', user);
+            } catch (error) {
+                console.error('Error creating user:', error);
+                // If user creation fails (e.g., duplicate email), try to find again
+                if (error.code === 11000) {
+                    user = await User.findOne({ email: identifier.toLowerCase() });
+                    console.log('Found existing user after duplicate error:', user);
+                } else {
+                    throw error;
+                }
+            }
         }
 
         if (user) {
             users.push(user);
-        } else {
-            missing.push(identifier);
         }
     }
 
-    if (missing.length > 0) {
-        const error = new Error(`Users not found for: ${missing.join(', ')}`);
-        error.statusCode = 400;
-        throw error;
-    }
-
+    console.log('Final users array:', users);
     return users;
 };
 
 export const addExpense = async (data) => {
     try {
+        console.log('addExpense called with data:', data);
         const { userId, groupId, amount, description, participants, splitType = 'equal', splitDetails = {}, currency = 'INR' } = data;
 
-        if (!userId || !groupId || !amount || !description || !Array.isArray(participants) || participants.length === 0) {
-            const error = new Error('userId, groupId, amount, description and participants are required');
+        console.log('Extracted values:', { userId, groupId, amount, description, participants, splitType, currency });
+
+        if (!userId || !amount || !description || !Array.isArray(participants) || participants.length === 0) {
+            console.error('Validation failed:', { userId, amount, description, participants });
+            const error = new Error('userId, amount, description and participants are required');
             error.statusCode = 400;
             throw error;
         }
@@ -49,13 +75,16 @@ export const addExpense = async (data) => {
             .map((user) => user._id.toString())
             .filter((id) => id !== String(userId));
 
-        if (participantIds.length === 0) {
+        // Check if this is a personal expense (only the current user)
+        const isPersonalExpense = participants.length === 1 && String(participants[0]) === String(userId);
+
+        if (!isPersonalExpense && participantIds.length === 0) {
             const error = new Error('Add at least one participant other than the payer');
             error.statusCode = 400;
             throw error;
         }
 
-        const payerAwareParticipants = [String(userId), ...participantIds];
+        const payerAwareParticipants = isPersonalExpense ? [String(userId)] : [String(userId), ...participantIds];
         const numericAmount = Number(amount);
 
         // Calculate splits based on splitType
@@ -76,6 +105,9 @@ export const addExpense = async (data) => {
             case 'custom':
                 splits = splitCustom(numericAmount, payerAwareParticipants, splitDetails.customAmounts);
                 break;
+            case 'payment':
+                splits = splitPayment(numericAmount, payerAwareParticipants);
+                break;
             default:
                 splits = splitEqual(numericAmount, payerAwareParticipants);
         }
@@ -84,6 +116,7 @@ export const addExpense = async (data) => {
         // This ensures proper balance calculation
         const participantSplits = splits.map((split) => {
             const isPayer = String(split.userId) === String(userId);
+
             return {
                 userId: split.userId,
                 amount: split.amount, // Legacy field for backward compatibility
@@ -103,7 +136,7 @@ export const addExpense = async (data) => {
         }];
 
         const createdExpense = await Expense.create({
-            group: groupId,
+            group: groupId || null, // Allow null for quick expenses without groups
             amount: numericAmount,
             description,
             paidBy: userId, // Legacy field
@@ -123,6 +156,17 @@ export const addExpense = async (data) => {
                 reason: 'Initial expense creation'
             }]
         });
+
+        // Send expense alert emails to participants asynchronously
+        if (!isPersonalExpense && participantIds.length > 0) {
+            setImmediate(async () => {
+                try {
+                    await emailService.sendExpenseAlertEmail(createdExpense._id);
+                } catch (error) {
+                    console.error('Failed to send expense alert email:', error);
+                }
+            });
+        }
 
         return Expense.findById(createdExpense._id)
             .populate('group', 'name')
@@ -179,7 +223,9 @@ export const updateExpense = async (userId, expenseId, updates) => {
         throw error;
     }
 
-    let nextParticipants = expense.participants.map((entry) => String(entry.userId));
+    let nextParticipants = expense.participants
+        .map((entry) => String(entry.userId))
+        .filter((id) => id !== String(userId)); // Exclude payer from existing participants
 
     if (Array.isArray(updates.participants) && updates.participants.length > 0) {
         const participantUsers = await resolveParticipantUsers(updates.participants);
@@ -398,7 +444,7 @@ export const getMyDues = async (userId) => {
                 status: participant.status,
                 group: {
                     id: expense.group?._id,
-                    name: expense.group?.name || 'Unknown Group'
+                    name: expense.group?.name || '' // Default to 'Friends' if no group
                 },
                 paidTo: {
                     id: expense.paidBy?._id || expense.createdBy?._id,
@@ -423,12 +469,13 @@ export const getMyLents = async (userId) => {
             throw error;
         }
 
-        // Find expenses where the user is the payer
+        // Find expenses where the user is involved
         const expenses = await Expense.find({
             $or: [
                 { paidBy: userId },
                 { createdBy: userId },
-                { 'payers.userId': userId }
+                { 'payers.userId': userId },
+                { "participants.userId": userId }
             ],
             isDeleted: false
         })
@@ -440,35 +487,46 @@ export const getMyLents = async (userId) => {
 
         const lents = expenses
             .map((expense) => {
-                // Check if user is the payer
-                const isPayer = String(expense.paidBy?._id || expense.paidBy) === String(userId) ||
-                               String(expense.createdBy?._id || expense.createdBy) === String(userId) ||
-                               (expense.payers && expense.payers.some(p => String(p.userId?._id || p.userId) === String(userId)));
-
-                if (!isPayer) {
-                    return null;
-                }
-
-                // Calculate how much others owe this user
-                const otherParticipants = (expense.participants || []).filter(
-                    (entry) => {
-                        const participantId = String(entry.userId?._id || entry.userId);
-                        return participantId !== String(userId) && entry.status === 'pending';
-                    }
+                // Find the user's participant entry to get their balance
+                const userParticipant = (expense.participants || []).find(
+                    (entry) => String(entry.userId?._id || entry.userId) === String(userId)
                 );
 
-                if (otherParticipants.length === 0) {
+                if (!userParticipant) {
                     return null;
                 }
 
-                const totalOwedToUser = otherParticipants.reduce(
-                    (sum, entry) => sum + Number(entry.amount || entry.shareAmount || 0),
+                // Calculate how much the user is owed (positive balance)
+                // balance = paidAmount - shareAmount
+                // If positive, user paid more than their share = they lent money
+                const userBalance = Number(userParticipant.balance || 0);
+
+                if (userBalance <= 0) {
+                    return null; // User doesn't lent anything in this expense
+                }
+
+                // Find who owes the user (other participants with negative balance)
+                const debtors = (expense.participants || [])
+                    .filter((entry) => {
+                        const participantId = String(entry.userId?._id || entry.userId);
+                        const isNotUser = participantId !== String(userId);
+                        const owesMoney = Number(entry.balance || 0) < 0;
+                        return isNotUser && owesMoney;
+                    })
+                    .map((entry) => ({
+                        id: entry.userId?._id,
+                        name: entry.userId?.name || entry.userId?.email || 'Unknown',
+                        amount: Math.abs(Number(entry.balance || 0)) // They owe this amount
+                    }));
+
+                if (debtors.length === 0) {
+                    return null;
+                }
+
+                const totalOwedToUser = debtors.reduce(
+                    (sum, debtor) => sum + debtor.amount,
                     0
                 );
-
-                if (totalOwedToUser <= 0) {
-                    return null;
-                }
 
                 return {
                     expenseId: expense._id,
@@ -477,13 +535,9 @@ export const getMyLents = async (userId) => {
                     status: 'pending',
                     group: {
                         id: expense.group?._id,
-                        name: expense.group?.name || 'Unknown Group'
+                        name: expense.group?.name || 'Friends' // Default to 'Friends' if no group
                     },
-                    owedBy: otherParticipants.map(p => ({
-                        id: p.userId?._id,
-                        name: p.userId?.name || p.userId?.email || 'Unknown',
-                        amount: Number(p.amount || p.shareAmount || 0)
-                    })),
+                    owedBy: debtors,
                     createdAt: expense.createdAt
                 };
             })
@@ -494,6 +548,198 @@ export const getMyLents = async (userId) => {
         return { totalLent, lents };
     } catch (error) {
         console.error('Error in getMyLents:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get expense breakdown by type (Personal vs Shared)
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Object containing personal and shared expense totals
+ */
+export const getExpenseBreakdown = async (userId) => {
+    try {
+        if (!userId) {
+            const error = new Error("User ID is required");
+            error.statusCode = 400;
+            throw error;
+        }
+
+        // Find all expenses where the user is involved
+        const expenses = await Expense.find({
+            $or: [
+                { paidBy: userId },
+                { createdBy: userId },
+                { 'payers.userId': userId },
+                { "participants.userId": userId }
+            ],
+            isDeleted: false
+        })
+            .populate('paidBy', 'name email')
+            .populate('createdBy', 'name email')
+            .populate('group', 'name')
+            .populate('participants.userId', 'name email')
+            .sort({ createdAt: -1 });
+
+        let personalTotal = 0;
+        let sharedTotal = 0;
+        const personalExpenses = [];
+        const sharedExpenses = [];
+
+        expenses.forEach(expense => {
+            const expenseAmount = Number(expense.amount) || 0;
+            const participants = expense.participants || [];
+            const isPersonalExpense = participants.length === 1 &&
+                String(participants[0].userId?._id || participants[0].userId) === String(userId);
+
+            if (isPersonalExpense) {
+                personalTotal += expenseAmount;
+                personalExpenses.push({
+                    expenseId: expense._id,
+                    description: expense.description,
+                    amount: expenseAmount,
+                    category: expense.category,
+                    date: expense.date,
+                    createdAt: expense.createdAt
+                });
+            } else {
+                sharedTotal += expenseAmount;
+                sharedExpenses.push({
+                    expenseId: expense._id,
+                    description: expense.description,
+                    amount: expenseAmount,
+                    category: expense.category,
+                    splitType: expense.splitType,
+                    group: expense.group ? {
+                        id: expense.group._id,
+                        name: expense.group.name
+                    } : null,
+                    date: expense.date,
+                    createdAt: expense.createdAt
+                });
+            }
+        });
+
+        return {
+            personal: {
+                total: personalTotal,
+                count: personalExpenses.length,
+                expenses: personalExpenses
+            },
+            shared: {
+                total: sharedTotal,
+                count: sharedExpenses.length,
+                expenses: sharedExpenses
+            },
+            total: personalTotal + sharedTotal
+        };
+    } catch (error) {
+        console.error('Error in getExpenseBreakdown:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get friends list (people who owe you or you owe, outside of groups)
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Object containing friends and their relationships
+ */
+export const getFriendsList = async (userId) => {
+    try {
+        if (!userId) {
+            const error = new Error("User ID is required");
+            error.statusCode = 400;
+            throw error;
+        }
+
+        // Find expenses without groups (quick expenses) where user is involved
+        const expenses = await Expense.find({
+            $or: [
+                { paidBy: userId },
+                { createdBy: userId },
+                { 'payers.userId': userId },
+                { "participants.userId": userId }
+            ],
+            group: null, // Only expenses without groups
+            isDeleted: false
+        })
+            .populate('paidBy', 'name email')
+            .populate('createdBy', 'name email')
+            .populate('participants.userId', 'name email')
+            .sort({ createdAt: -1 });
+
+        const friendsMap = new Map();
+
+        expenses.forEach(expense => {
+            const participants = expense.participants || [];
+
+            participants.forEach(participant => {
+                const participantId = String(participant.userId?._id || participant.userId);
+                if (participantId === String(userId)) return; // Skip self
+
+                const friend = participant.userId;
+                if (!friend) return;
+
+                const friendId = friend._id || friend.id;
+                const friendName = friend.name || friend.email || 'Unknown';
+                const friendEmail = friend.email || '';
+
+                // Calculate balance for this friend
+                // If friend has negative balance, they owe money
+                // If friend has positive balance, I owe them money
+                const friendBalance = Number(participant.balance || 0);
+
+                if (!friendsMap.has(friendId)) {
+                    friendsMap.set(friendId, {
+                        id: friendId,
+                        name: friendName,
+                        email: friendEmail,
+                        totalOwed: 0, // They owe me
+                        totalOwe: 0,   // I owe them
+                        expenses: []
+                    });
+                }
+
+                const friendData = friendsMap.get(friendId);
+
+                if (friendBalance < 0) {
+                    // Friend owes money (negative balance means they haven't paid their share)
+                    friendData.totalOwed += Math.abs(friendBalance);
+                } else if (friendBalance > 0) {
+                    // I owe friend money (positive balance means I paid more than my share)
+                    friendData.totalOwe += friendBalance;
+                }
+
+                friendData.expenses.push({
+                    expenseId: expense._id,
+                    description: expense.description,
+                    amount: Math.abs(friendBalance),
+                    date: expense.date,
+                    createdAt: expense.createdAt
+                });
+            });
+        });
+
+        // Convert map to array and sort by total amount
+        const friends = Array.from(friendsMap.values())
+            .map(friend => ({
+                ...friend,
+                netBalance: friend.totalOwed - friend.totalOwe // Positive = they owe me, Negative = I owe them
+            }))
+            .sort((a, b) => Math.abs(b.netBalance) - Math.abs(a.netBalance));
+
+        // Calculate totals
+        const totalOwedToMe = friends.reduce((sum, f) => sum + f.totalOwed, 0);
+        const totalIOwe = friends.reduce((sum, f) => sum + f.totalOwe, 0);
+
+        return {
+            friends,
+            totalOwedToMe,
+            totalIOwe,
+            netBalance: totalOwedToMe - totalIOwe
+        };
+    } catch (error) {
+        console.error('Error in getFriendsList:', error);
         throw error;
     }
 };

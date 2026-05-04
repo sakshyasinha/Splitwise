@@ -1,118 +1,25 @@
+
 import { useEffect, useMemo, useState } from 'react';
 import useAuth from '../../hooks/useAuth.js';
 import useExpenses from '../../hooks/useExpenses.js';
-import Button from '../ui/Button.jsx';
 import Card from '../ui/Card.jsx';
+import Modal from '../ui/Modal.jsx';
 import GroupForm from '../group/GroupForm.jsx';
 import GroupEditForm from '../group/GroupEditForm.jsx';
 import ExpenseForm from '../expense/ExpenseForm.jsx';
 import ExpenseList from '../expense/ExpenseList.jsx';
 import AIChatPanel from '../chat/AIChatPanel.jsx';
-import ThemeToggle from '../ui/ThemeToggle.jsx';
-
-const currency = (amount) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(amount || 0);
-};
-
-const getPersonLabel = (person, index, currentUser) => {
-  if (person && typeof person === 'object') {
-    const personId = String(person._id || person.id || '');
-    const currentUserId = String(currentUser?._id || currentUser?.id || '');
-    const currentUserEmail = String(currentUser?.email || '').toLowerCase();
-    const currentUserName = String(currentUser?.name || '').toLowerCase();
-    const personName = String(person.name || person.email || '').toLowerCase();
-
-    if (
-      (personId && personId === currentUserId) ||
-      (currentUserEmail && personName === currentUserEmail) ||
-      (currentUserName && personName === currentUserName)
-    ) {
-      return 'You';
-    }
-
-    return person.name || person.email || `Member ${index + 1}`;
-  }
-
-  return `Member ${index + 1}`;
-};
-
-const normalizeGroupName = (value) =>
-  String(value || '')
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[\s\u200B-\u200D\uFEFF]+/g, '');
-
-const normalizePersonLabel = (value) => String(value || '').trim();
-
-const dedupeNames = (values = []) => {
-  const seen = new Set();
-
-  return values.filter((value) => {
-    const normalized = normalizePersonLabel(value).toLowerCase();
-    if (!normalized || seen.has(normalized)) {
-      return false;
-    }
-
-    seen.add(normalized);
-    return true;
-  });
-};
-
-const prettifyGroupType = (value) => {
-  const normalized = String(value || 'other').trim().toLowerCase();
-  if (!normalized) return 'Other';
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-};
-
-const Modal = ({ isOpen, title, subtitle, onClose, children }) => {
-  const [isClosing, setIsClosing] = useState(false);
-
-  const handleClose = () => {
-    setIsClosing(true);
-    setTimeout(() => {
-      setIsClosing(false);
-      onClose();
-    }, 200);
-  };
-
-  if (!isOpen && !isClosing) return null;
-
-  return (
-    <div
-      className={`modal-overlay ${isClosing ? 'closing' : ''}`}
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      onClick={handleClose}
-    >
-      <div
-        className="modal-shell"
-        onClick={(e) => e.stopPropagation()}
-        role="document"
-      >
-        <div className="modal-header">
-          <div>
-            <h2>{title}</h2>
-            {subtitle ? <p>{subtitle}</p> : null}
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleClose}
-            aria-label="Close modal"
-          >
-            Close
-          </Button>
-        </div>
-        <div className="modal-body">{children}</div>
-      </div>
-    </div>
-  );
-};
+import DashboardHeader from './DashboardHeader.jsx';
+import HeroStrip from './HeroStrip.jsx';
+import StatsGrid from './StatsGrid.jsx';
+import QuickActions from './QuickActions.jsx';
+import GroupList from './GroupList.jsx';
+import DuesList from './DuesList.jsx';
+import GroupDetails from './GroupDetails.jsx';
+import ActivityFeed from './ActivityFeed.jsx';
+import { formatCurrency } from '../../utils/formatCurrency.js';
+import { getPersonLabel } from '../../utils/personUtils.js';
+import { normalizeGroupName, dedupeValues, prettifyGroupType } from '../../utils/stringUtils.js';
 
 const DashboardPage = () => {
   const { logout, user } = useAuth();
@@ -128,6 +35,8 @@ const DashboardPage = () => {
     fetchMyLents,
     fetchGroups,
     settleDue,
+    fetchExpenseBreakdown,
+    fetchFriendsList,
   } = useExpenses();
 
   const [selectedGroupId, setSelectedGroupId] = useState(null);
@@ -138,10 +47,21 @@ const DashboardPage = () => {
 
   useEffect(() => {
     console.log('DashboardPage: Initial data load');
-    fetchExpenses();
-    fetchMyDues();
-    fetchMyLents();
-    fetchGroups();
+    const loadData = async () => {
+      try {
+        await Promise.all([
+          fetchExpenses(),
+          fetchMyDues(),
+          fetchMyLents(),
+          fetchGroups(),
+          fetchExpenseBreakdown(),
+          fetchFriendsList()
+        ]);
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+      }
+    };
+    loadData();
   }, []);
 
   // Debug logging for expenses changes
@@ -216,7 +136,7 @@ const DashboardPage = () => {
           0
         );
         const memberDues = dues.map((due) => ({ name: due.paidTo?.name || due.paidTo?.email, amount: due.amount }));
-        const memberNames = dedupeNames([
+        const memberNames = dedupeValues([
           ...(group.members || []).map((member, index) => getPersonLabel(member, index, user)),
           ...groupExpenses.flatMap((expense) =>
             getExpensePeople(expense).map((person, index) => getPersonLabel(person, index, user))
@@ -272,7 +192,7 @@ const DashboardPage = () => {
       });
       existing.dues = Array.from(dueMap.values());
 
-      existing.memberNames = dedupeNames([...(existing.memberNames || []), ...(group.memberNames || [])]);
+      existing.memberNames = dedupeValues([...(existing.memberNames || []), ...(group.memberNames || [])]);
     }
 
     return Array.from(byName.values()).map((group) => {
@@ -292,7 +212,7 @@ const DashboardPage = () => {
         name: due.paidTo?.name || due.paidTo?.email,
         amount: due.amount,
       }));
-      const memberNames = dedupeNames([
+      const memberNames = dedupeValues([
         ...(group.memberNames || []),
         ...(group.dues || []).map((due) => getPersonLabel(due.paidTo, 0, user)),
         ...(group.groupExpenses || []).map((expense) => getPersonLabel(expense.paidBy, 0, user)),
@@ -341,7 +261,7 @@ const DashboardPage = () => {
     : [];
 
   const selectedGroupMemberNames = selectedGroup
-    ? dedupeNames([
+    ? dedupeValues([
         ...(selectedGroup.members || []).map((member, index) => getPersonLabel(member, index, user)),
         ...selectedGroupExpenses.flatMap((expense) =>
           getExpensePeople(expense).map((person, index) => getPersonLabel(person, index, user))
@@ -433,235 +353,43 @@ const DashboardPage = () => {
   return (
     <>
       <main className="dashboard-layout">
-        <header className="topbar">
-          <div className="topbar-brand">
-            <div className="topbar-logo">SS</div>
-            <div>
-              <div className="topbar-title">SplitSense</div>
-              <div className="topbar-sub">Money clarity for your group life</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-            <Button variant="ghost" onClick={logout}>
-              Sign out →
-            </Button>
-          </div>
-        </header>
+        <DashboardHeader onLogout={logout} />
 
-        <section className="hero-strip">
-          <div>
-            <h1>Your shared finances,&nbsp;at a glance.</h1>
-            <p>Shared money is less stressful when everyone sees the same truth.</p>
-          </div>
-          <span className="due-pill">
-            {myDues.length === 0 ? '✓ All dues settled' : `${myDues.length} pending due${myDues.length !== 1 ? 's' : ''}`}
-          </span>
-        </section>
+        <HeroStrip pendingDuesCount={myDues.length} />
 
-        <section className="stats-grid">
-          <Card className="stat-violet">
-            <div className="card-content">
-              <div className="metric-icon">👥</div>
-              <div className="metric-label">Groups</div>
-              <div className="metric">{prioritizedGroups.length}</div>
-              <div className="metric-sub">Active shared circles</div>
-            </div>
-          </Card>
-          <Card className="stat-green">
-            <div className="card-content">
-              <div className="metric-icon">🟢</div>
-              <div className="metric-label">You Lent</div>
-              <div className="metric" style={{ color: 'var(--success)' }}>{currency(totalLent)}</div>
-              <div className="metric-sub">Others owe you</div>
-            </div>
-          </Card>
-          <Card className="stat-red">
-            <div className="card-content">
-              <div className="metric-icon">🟠</div>
-              <div className="metric-label">You Borrowed</div>
-              <div className="metric" style={{ color: 'var(--danger)' }}>{currency(totalOwed)}</div>
-              <div className="metric-sub">Pending dues</div>
-            </div>
-          </Card>
-          <Card className="stat-amber">
-            <div className="card-content">
-              <div className="metric-icon">🧾</div>
-              <div className="metric-label">Expenses</div>
-              <div className="metric">{totals.expenseCount}</div>
-              <div className="metric-sub">Total spend {currency(totals.totalSpend)}</div>
-            </div>
-          </Card>
-        </section>
+        <StatsGrid
+          groupCount={prioritizedGroups.length}
+          totalLent={totalLent}
+          totalOwed={totalOwed}
+          expenseCount={totals.expenseCount}
+          totalSpend={totals.totalSpend}
+        />
 
         <section className="content-grid">
           <div className="left-column stack-lg">
-            <Card>
-              <div className="card-header">
-                <h2>Quick Actions</h2>
-                <p>Open focused modals and avoid long scroll forms</p>
-              </div>
-              <div className="card-content quick-actions-panel">
-                <Button type="button" onClick={() => setActiveModal('group')}>
-                  + Create Group
-                </Button>
-                <Button type="button" variant="ghost" onClick={() => setActiveModal('expense')}>
-                  + Add Expense
-                </Button>
-                <div className="quick-actions-hints">
-                  <span className="badge badge-green">Lent is Green</span>
-                  <span className="badge badge-red">Borrowed is Red-Orange</span>
-                </div>
-              </div>
-            </Card>
+            <QuickActions
+              onCreateGroup={() => setActiveModal('group')}
+              onAddExpense={() => setActiveModal('expense')}
+            />
 
-            <Card>
-              <div className="card-header">
-                <h2>Groups</h2>
-                <p>Your active shared circles</p>
-              </div>
-              <div className="card-content">
-                {prioritizedGroups.length === 0 ? (
-                  <div className="empty-state">
-                    <div className="empty-icon">👥</div>
-                    No groups yet. Create one to start splitting.
-                  </div>
-                ) : (
-                  <div className="stack">
-                    {prioritizedGroups.map((group) => (
-                      <div
-                        key={group.groupKey}
-                        className="group-card"
-                        onClick={() => openGroupDetailsFor(group.groupKey)}
-                        style={{
-                          flexDirection: 'column',
-                          alignItems: 'flex-start',
-                          width: '100%',
-                          cursor: 'pointer',
-                          border:
-                            String(selectedGroup?.groupKey) === String(group.groupKey)
-                              ? '1px solid var(--primary)'
-                              : undefined,
-                          boxShadow:
-                            String(selectedGroup?.groupKey) === String(group.groupKey)
-                              ? '0 0 0 3px rgba(74, 144, 226, 0.12)'
-                              : undefined,
-                        }}
-                      >
-                        <div className="flex items-center gap-3 justify-between" style={{ width: '100%' }}>
-                          <div className="flex items-center gap-3">
-                            <div className="group-emoji">{group.name?.[0]?.toUpperCase() || 'G'}</div>
-                            <div>
-                              <div className="group-name">{group.name}</div>
-                              <div className="group-meta">
-                                {prettifyGroupType(group.type)} · {group.memberCount || 1} member
-                                {(group.memberCount || 1) !== 1 ? 's' : ''}
-                              </div>
-                              {group.description && (
-                                <div className="group-description">{group.description}</div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-sm font-syne">
-                            {group.myTotalDue > 0 ? (
-                              <span style={{ color: 'var(--danger)' }}>You borrowed {currency(group.myTotalDue)}</span>
-                            ) : group.totalDue > 0 ? (
-                              <span style={{ color: 'var(--success)' }}>You lent {currency(group.totalDue)}</span>
-                            ) : (
-                              <span style={{ color: 'var(--success)' }}>Settled</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="mt-2 text-sm muted">Total Spend: {currency(group.totalSpend)}</div>
-                        <div className="mt-2 flex items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditGroup(group);
-                            }}
-                            style={{ padding: '4px 8px', fontSize: '12px' }}
-                          >
-                            Edit
-                          </Button>
-                        </div>
-                        {group.memberDues.length > 0 && (
-                          <div className="mt-2 stack">
-                            {group.memberDues.map((person, index) => (
-                              <div
-                                key={`${person.name}-${index}`}
-                                className="text-sm"
-                                style={{ display: 'flex', alignItems: 'center', gap: 10, width: 'fit-content' }}
-                              >
-                                <span>{person.name}</span>
-                                <span style={{ color: 'var(--danger)' }}>{currency(person.amount)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </Card>
+            <GroupList
+              groups={prioritizedGroups}
+              selectedGroupId={selectedGroupId}
+              onGroupClick={openGroupDetailsFor}
+              onGroupEdit={openEditGroup}
+            />
 
             <ExpenseList onEdit={openEditExpense} />
           </div>
 
           <div className="right-column stack-lg">
-            <Card>
-              <div className="card-header">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2>My Dues</h2>
-                    <p>Settle up directly from here</p>
-                  </div>
-                  <span className={`badge ${myDues.length === 0 ? 'badge-green' : 'badge-red'}`}>
-                    {myDues.length === 0 ? 'Settled' : `${myDues.length} pending`}
-                  </span>
-                </div>
-              </div>
-              <div className="card-content">
-                {myDues.length === 0 ? (
-                  <div className="empty-state">
-                    <div className="empty-icon">✅</div>
-                    You're all clear — no pending dues.
-                  </div>
-                ) : (
-                  <ul className="expense-list">
-                    {myDues.map((due) => (
-                      <li key={due.expenseId} className="expense-item">
-                        <div className="due-avatar" style={{ background: 'var(--danger-dim)', color: 'var(--danger)' }}>
-                          {(due.paidTo?.name || due.paidTo?.email || '?')[0].toUpperCase()}
-                        </div>
-                        <div className="expense-info">
-                          <div className="expense-title">{due.description}</div>
-                          <div className="expense-meta">
-                            Pay → {due.paidTo?.name || due.paidTo?.email}
-                            {due.group?.name ? ` · ${due.group.name}` : ''}
-                          </div>
-                          <div className="settle-row">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() => handleSettleDue(due.expenseId)}
-                              disabled={settlingExpenseId === due.expenseId}
-                            >
-                              {settlingExpenseId === due.expenseId ? 'Settling...' : 'Settle Up'}
-                            </Button>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="expense-amount debit">{currency(due.amount)}</div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </Card>
+            <DuesList
+              dues={myDues}
+              settlingExpenseId={settlingExpenseId}
+              onSettleDue={handleSettleDue}
+            />
+
+            
 
             <AIChatPanel />
           </div>
@@ -689,7 +417,7 @@ const DashboardPage = () => {
       <Modal
         isOpen={activeModal === 'expense'}
         title={editingExpense ? "Edit Expense" : "Add Expense"}
-        subtitle={editingExpense ? "Update expense details" : "Add a split in a distraction-free modal"}
+        subtitle={editingExpense ? "Update expense details" : "Add a splitting expense to a group"}
         onClose={closeModal}
       >
         <ExpenseForm onSuccess={closeModal} editingExpense={editingExpense} />
@@ -701,119 +429,12 @@ const DashboardPage = () => {
         subtitle={selectedGroup ? 'Deep dive into members, outstanding, and expenses' : 'Choose a group first'}
         onClose={closeModal}
       >
-        {!selectedGroup ? (
-          <div className="empty-state">
-            <div className="empty-icon">👆</div>
-            Select a group from the list to view details.
-          </div>
-        ) : (
-          <Card>
-            <div className="card-header">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2>Group Details</h2>
-                  <p>{selectedGroup.name}</p>
-                </div>
-                <span className={`badge ${selectedGroupPosition.badgeClass}`}>
-                  {selectedGroupPosition.badgeText}
-                </span>
-              </div>
-            </div>
-            <div className="card-content">
-              <div className="stack-lg">
-                <div className="group-detail-head">
-                  <span className="badge badge-violet">{prettifyGroupType(selectedGroup.type)}</span>
-                  <span className="badge badge-amber">{selectedGroup.memberCount || 1} people</span>
-                </div>
-
-                {selectedGroup.description && (
-                  <div>
-                    <div className="metric-label" style={{ marginBottom: 8 }}>Description</div>
-                    <div className="text-sm" style={{ fontStyle: 'italic', color: 'var(--muted2)' }}>
-                      {selectedGroup.description}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="metric-label">Members</div>
-                    <div className="metric">{selectedGroup.memberCount || 1}</div>
-                  </div>
-                  <div>
-                    <div className="metric-label">Spend</div>
-                    <div className="metric">{currency(selectedGroup.totalSpend)}</div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="metric-label" style={{ marginBottom: 8 }}>Member names</div>
-                  <div className="stack">
-                    {selectedGroupMemberNames.length === 0 ? (
-                      <div className="text-sm muted">No members found for this group.</div>
-                    ) : (
-                      selectedGroupMemberNames.map((memberName, index) => (
-                        <div key={`${memberName}-${index}`} className="text-sm">
-                          {memberName}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="metric-label" style={{ marginBottom: 8 }}>Outstanding</div>
-                  <div
-                    className="metric"
-                    style={{ color: selectedGroupPosition.tone === 'danger' ? 'var(--danger)' : 'var(--success)' }}
-                  >
-                    {selectedGroupPosition.amount > 0 ? currency(selectedGroupPosition.amount) : 'Settled'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="metric-label" style={{ marginBottom: 8 }}>Recent expenses</div>
-                  {selectedGroupExpenses.length === 0 ? (
-                    <div className="empty-state" style={{ marginTop: 8 }}>
-                      <div className="empty-icon">🧾</div>
-                      No expenses in this group yet.
-                    </div>
-                  ) : (
-                    <div className="stack">
-                      {selectedGroupExpenses.slice(0, 8).map((expense) => {
-                        const participants = (expense.participants || [])
-                          .map((participant) => participant?.userId?.name || participant?.userId?.email)
-                          .filter(Boolean);
-                        const pendingParticipants = (expense.participants || []).filter(p => p?.status === 'pending');
-                        const hasPending = pendingParticipants.length > 0;
-
-                        return (
-                          <div key={expense._id} className="group-expense-row">
-                            <div>
-                              <div className="text-sm" style={{ fontWeight: 700 }}>{expense.description}</div>
-                              <div className="expense-meta">
-                                Involved: {dedupeNames([
-                                  expense.paidBy?.name || expense.paidBy?.email || 'Payer',
-                                  ...participants,
-                                ]).join(' · ')}
-                              </div>
-                              {!hasPending && (
-                                <div className="expense-meta" style={{ marginTop: 4, color: 'var(--success)' }}>✓ Settled</div>
-                              )}
-                            </div>
-                            <span className="text-sm" style={{ fontWeight: 700, color: hasPending ? 'var(--danger)' : 'var(--success)' }}>
-                              {hasPending ? currency(expense.amount) : '✓'}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
+        <GroupDetails
+          group={selectedGroup}
+          memberNames={selectedGroupMemberNames}
+          expenses={selectedGroupExpenses}
+          position={selectedGroupPosition}
+        />
       </Modal>
     </>
   );
