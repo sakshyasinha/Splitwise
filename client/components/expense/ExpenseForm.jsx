@@ -32,9 +32,11 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
   });
 
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [paidByEmail, setPaidByEmail] = useState("");
   const [participantInput, setParticipantInput] = useState("");
   const [participants, setParticipants] = useState([]);
   const [paymentFriends, setPaymentFriends] = useState([]); // For multiple friends in payment
+  const [paymentPaidByEmail, setPaymentPaidByEmail] = useState("");
   const [paymentFriendInput, setPaymentFriendInput] = useState("");
   const [paymentSplitType, setPaymentSplitType] = useState("equal"); // Split type for payments
   const [paymentSplitDetails, setPaymentSplitDetails] = useState({}); // Store split details per friend
@@ -52,6 +54,18 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
   const currentUserEmail = user?.email?.toLowerCase();
   const isEditing = !!editingExpense;
   const isPayment = activeTab === "payment";
+
+  useEffect(() => {
+    if (!paidByEmail && currentUserEmail) {
+      setPaidByEmail(currentUserEmail);
+    }
+  }, [currentUserEmail, paidByEmail]);
+
+  useEffect(() => {
+    if (!paymentPaidByEmail && currentUserEmail) {
+      setPaymentPaidByEmail(currentUserEmail);
+    }
+  }, [currentUserEmail, paymentPaidByEmail]);
 
   // Validation functions
   const validateField = (name, value) => {
@@ -95,34 +109,51 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       setParticipants(
         (editingExpense.participants || []).map((p) => p.userId?.email || p.userId || p)
       );
+      setPaidByEmail(String(editingExpense.paidBy?.email || editingExpense.createdBy?.email || currentUserEmail || '').toLowerCase());
       // Default to expense tab when editing
       setActiveTab("expense");
     }
-  }, [editingExpense]);
+  }, [editingExpense, currentUserEmail]);
+
+  const paymentRecipients = useMemo(
+    () => paymentFriends.filter((email) => String(email).toLowerCase() !== String(paymentPaidByEmail).toLowerCase()),
+    [paymentFriends, paymentPaidByEmail]
+  );
+
+  const paymentPayerOptions = useMemo(() => {
+    const options = new Set();
+    if (currentUserEmail) options.add(currentUserEmail);
+    paymentFriends.forEach((email) => options.add(String(email).toLowerCase()));
+    return Array.from(options);
+  }, [currentUserEmail, paymentFriends]);
 
   const validatePaymentSplit = () => {
     const totalAmount = Number(form.amount) || 0;
+
+    if (paymentRecipients.length === 0) {
+      return false;
+    }
 
     if (paymentSplitType === 'equal') {
       return true; // Equal split is always valid
     }
 
     if (paymentSplitType === 'exact') {
-      const totalExact = paymentFriends.reduce((sum, email) => {
+      const totalExact = paymentRecipients.reduce((sum, email) => {
         return sum + (Number(paymentSplitDetails[email]) || 0);
       }, 0);
       return Math.abs(totalExact - totalAmount) < 0.01;
     }
 
     if (paymentSplitType === 'percentage') {
-      const totalPercentage = paymentFriends.reduce((sum, email) => {
+      const totalPercentage = paymentRecipients.reduce((sum, email) => {
         return sum + (Number(paymentSplitDetails[email]) || 0);
       }, 0);
       return Math.abs(totalPercentage - 100) < 0.01;
     }
 
     if (paymentSplitType === 'ratio') {
-      const totalRatio = paymentFriends.reduce((sum, email) => {
+      const totalRatio = paymentRecipients.reduce((sum, email) => {
         return sum + (Number(paymentSplitDetails[email]) || 0);
       }, 0);
       return totalRatio > 0;
@@ -176,25 +207,29 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
     const totalAmount = Number(form.amount) || 0;
     const amounts = {};
 
+    if (paymentRecipients.length === 0) {
+      return amounts;
+    }
+
     if (paymentSplitType === 'equal') {
-      const amountPerFriend = totalAmount / paymentFriends.length;
-      paymentFriends.forEach(email => {
+      const amountPerFriend = totalAmount / paymentRecipients.length;
+      paymentRecipients.forEach(email => {
         amounts[email] = amountPerFriend;
       });
     } else if (paymentSplitType === 'exact') {
-      paymentFriends.forEach(email => {
+      paymentRecipients.forEach(email => {
         amounts[email] = Number(paymentSplitDetails[email]) || 0;
       });
     } else if (paymentSplitType === 'percentage') {
-      paymentFriends.forEach(email => {
+      paymentRecipients.forEach(email => {
         const percentage = Number(paymentSplitDetails[email]) || 0;
         amounts[email] = (totalAmount * percentage) / 100;
       });
     } else if (paymentSplitType === 'ratio') {
-      const totalRatio = paymentFriends.reduce((sum, email) => {
+      const totalRatio = paymentRecipients.reduce((sum, email) => {
         return sum + (Number(paymentSplitDetails[email]) || 0);
       }, 0);
-      paymentFriends.forEach(email => {
+      paymentRecipients.forEach(email => {
         const ratio = Number(paymentSplitDetails[email]) || 0;
         amounts[email] = (totalAmount * ratio) / totalRatio;
       });
@@ -271,7 +306,8 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       return (
         form.description.trim() &&
         Number(form.amount) > 0 &&
-        paymentFriends.length > 0 &&
+        paymentRecipients.length > 0 &&
+        paymentPaidByEmail &&
         hasValidSplit &&
         !hasErrors
       );
@@ -283,11 +319,12 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       form.description.trim() &&
       Number(form.amount) > 0 &&
       form.groupId &&
+      paidByEmail &&
       participants.length > 0 &&
       hasValidSplit &&
       !hasErrors
     );
-  }, [form, participants, paymentFriends, paymentSplitType, paymentSplitDetails, expenseSplitType, expenseSplitDetails, hasErrors, isPayment]);
+  }, [form, participants, paymentFriends, paymentRecipients, paymentSplitType, paymentSplitDetails, expenseSplitType, expenseSplitDetails, hasErrors, isPayment, paidByEmail, paymentPaidByEmail]);
 
   const normalizeGroupName = (value) =>
     String(value || "").normalize("NFKC").trim().toLowerCase().replace(/[\s​-‍﻿]+/g, "");
@@ -315,6 +352,80 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
     return Array.from(byName.values()).map(({ group }) => group);
   }, [groups, expenses]);
 
+  const selectedGroup = useMemo(
+    () => groupOptions.find((group) => String(group._id) === String(form.groupId)) || null,
+    [groupOptions, form.groupId]
+  );
+
+  const selectedGroupMemberEmails = useMemo(() => {
+    if (!selectedGroup) return new Set();
+
+    const emails = [];
+    for (const member of selectedGroup.members || []) {
+      if (typeof member === 'string') continue;
+      if (member?.email) emails.push(String(member.email).toLowerCase());
+    }
+
+    return new Set(emails);
+  }, [selectedGroup]);
+
+  const selectedGroupMembers = useMemo(() => {
+    if (!selectedGroup) return [];
+
+    const byEmail = new Map();
+    for (const member of selectedGroup.members || []) {
+      if (!member || typeof member === 'string' || !member.email) continue;
+
+      const email = String(member.email).toLowerCase();
+      byEmail.set(email, {
+        email,
+        label: member.name ? `${member.name} (${member.email})` : member.email,
+      });
+    }
+
+    if (currentUserEmail && !byEmail.has(currentUserEmail)) {
+      byEmail.set(currentUserEmail, {
+        email: currentUserEmail,
+        label: user?.name ? `${user.name} (${user.email})` : user?.email || currentUserEmail,
+      });
+    }
+
+    return Array.from(byEmail.values());
+  }, [selectedGroup, currentUserEmail, user?.name, user?.email]);
+
+  useEffect(() => {
+    if (!form.groupId || selectedGroupMemberEmails.size === 0) return;
+
+    setParticipants((prev) => prev.filter((email) => selectedGroupMemberEmails.has(String(email).toLowerCase())));
+    setExpenseSplitDetails((prev) => {
+      const next = {};
+      Object.entries(prev || {}).forEach(([email, value]) => {
+        if (selectedGroupMemberEmails.has(String(email).toLowerCase())) {
+          next[email] = value;
+        }
+      });
+      return next;
+    });
+  }, [form.groupId, selectedGroupMemberEmails]);
+
+  useEffect(() => {
+    if (!form.groupId || selectedGroupMemberEmails.size === 0) return;
+
+    if (!paidByEmail || !selectedGroupMemberEmails.has(String(paidByEmail).toLowerCase())) {
+      if (currentUserEmail && selectedGroupMemberEmails.has(currentUserEmail)) {
+        setPaidByEmail(currentUserEmail);
+      } else {
+        const [firstEmail] = Array.from(selectedGroupMemberEmails);
+        setPaidByEmail(firstEmail || '');
+      }
+    }
+  }, [form.groupId, selectedGroupMemberEmails, paidByEmail, currentUserEmail]);
+
+  useEffect(() => {
+    if (!paidByEmail) return;
+    setParticipants((prev) => prev.filter((email) => String(email).toLowerCase() !== String(paidByEmail).toLowerCase()));
+  }, [paidByEmail]);
+
   const onChange = (e) => {
     clearError();
     const { name, value } = e.target;
@@ -337,8 +448,18 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       return;
     }
 
-    if (email === currentUserEmail) {
-      setLocalError("You cannot add yourself as a participant");
+    if (email === String(paidByEmail).toLowerCase()) {
+      setLocalError("Payer cannot also be a participant");
+      return;
+    }
+
+    if (!form.groupId) {
+      setLocalError("Select a group first");
+      return;
+    }
+
+    if (selectedGroupMemberEmails.size > 0 && !selectedGroupMemberEmails.has(email)) {
+      setLocalError("This user is not a member of the selected group");
       return;
     }
 
@@ -448,22 +569,24 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       // Calculate amounts based on split type
       const paymentAmounts = calculatePaymentAmounts();
 
-      // Create settlements for each friend with their calculated amount
-      const paymentPromises = paymentFriends.map(async (friendEmail) => {
+      // Create settlements for each recipient with their calculated amount
+      const paymentPromises = paymentRecipients.map(async (friendEmail) => {
         const amount = paymentAmounts[friendEmail];
         const paymentData = {
           description: `${form.description} (to ${friendEmail})`,
           amount: amount,
           toEmail: friendEmail,
+          fromEmail: paymentPaidByEmail,
         };
         return createSettlement(paymentData);
       });
 
       await Promise.all(paymentPromises);
-      toast.success(`Payment recorded successfully to ${paymentFriends.length} friend(s)`);
+      toast.success(`Payment recorded successfully to ${paymentRecipients.length} participant(s)`);
 
       setForm({ description: "", amount: "", groupId: "", friendEmail: "" });
       setPaymentFriends([]);
+      setPaymentPaidByEmail(currentUserEmail || "");
       setPaymentSplitDetails({});
       setPaymentSplitType("equal");
       setSelectedCategory("");
@@ -505,12 +628,6 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
         // Calculate amounts based on split type
         const expenseAmounts = calculateExpenseAmounts();
 
-        // Create participants array with calculated amounts
-        const participantsWithAmounts = participants.map(email => ({
-          email,
-          amount: expenseAmounts[email]
-        }));
-
         // Prepare split details based on split type
         let splitDetails = {};
         let backendSplitType = expenseSplitType;
@@ -537,13 +654,15 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
           description: form.description,
           amount: Number(form.amount),
           groupId: form.groupId,
-          participants: participantsWithAmounts,
+          paidBy: paidByEmail,
+          participants,
           category: selectedCategory,
           splitType: backendSplitType,
           splitDetails: splitDetails,
         });
         toast.success("Expense added successfully");
         setForm({ description: "", amount: "", groupId: "", friendEmail: "" });
+        setPaidByEmail(currentUserEmail || "");
         setParticipants([]);
         setExpenseSplitDetails({});
         setExpenseSplitType("equal");
@@ -701,6 +820,11 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                 ))}
               </select>
               {isEditing && <p className="text-sm muted" style={{ marginTop: 4 }}>Cannot change group for existing expense</p>}
+              {!isEditing && form.groupId && (
+                <p className="text-sm muted" style={{ marginTop: 4 }}>
+                  Only members of this group can be added as participants.
+                </p>
+              )}
               {getFieldError('groupId') && !isEditing && (
                 <p id="group-error" className="banner error" style={{ marginTop: '4px', fontSize: '12px' }}>
                   {getFieldError('groupId')}
@@ -709,30 +833,67 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
             </div>
           )}
 
+          {!isPayment && (
+            <div className="input-block">
+              <span className="input-label">Paid by</span>
+              <select
+                className="input"
+                value={paidByEmail}
+                onChange={(e) => {
+                  setPaidByEmail(e.target.value);
+                  setLocalError('');
+                }}
+                required
+                disabled={!form.groupId}
+              >
+                <option value="">Select who paid</option>
+                {selectedGroupMembers.map((member) => (
+                  <option key={member.email} value={member.email}>
+                    {member.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* ── FRIEND EMAILS (Only for Payment) ── */}
           {isPayment && (
             <div className="input-block">
               <span className="input-label">Pay to</span>
               <div className="input-row" style={{ marginTop: 4 }}>
-                <input
-                  type="email"
-                  className="input"
-                  placeholder="friend@email.com"
-                  value={paymentFriendInput}
-                  onChange={(e) => {
-                    setPaymentFriendInput(e.target.value);
-                    setLocalError('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddPaymentFriend();
-                    }
-                  }}
-                  aria-label="Add friend email"
-                  aria-invalid={!!localError}
-                  aria-describedby={localError ? 'payment-friend-error' : undefined}
-                />
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input
+                    type="email"
+                    className="input"
+                    placeholder="friend@email.com"
+                    list="payment-friends-datalist"
+                    value={paymentFriendInput}
+                    onChange={(e) => {
+                      setPaymentFriendInput(e.target.value);
+                      setLocalError('');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddPaymentFriend();
+                      }
+                    }}
+                    aria-label="Add friend email"
+                    aria-invalid={!!localError}
+                    aria-describedby={localError ? 'payment-friend-error' : undefined}
+                  />
+                  {selectedGroupMembers.length > 0 && (
+                    <datalist id="payment-friends-datalist">
+                      {selectedGroupMembers
+                        .filter(member => member.email !== currentUserEmail)
+                        .map((member) => (
+                          <option key={member.email} value={member.email}>
+                            {member.label}
+                          </option>
+                        ))}
+                    </datalist>
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="ghost"
@@ -753,8 +914,8 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
               {paymentFriends.length > 0 && (
                 <div className="chips" style={{ marginTop: 10 }} role="list" aria-label="Added friends">
                   {paymentFriends.map((email) => (
-                    <div key={email} className="chip primary" role="listitem">
-                      {email}
+                    <div key={email} className={`chip ${email === paymentPaidByEmail ? "" : "primary"}`} role="listitem">
+                      {email}{email === paymentPaidByEmail ? ' (payer)' : ''}
                       <span
                         onClick={() => removePaymentFriend(email)}
                         onKeyDown={(e) => {
@@ -776,8 +937,26 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                 </div>
               )}
 
+              {paymentPayerOptions.length > 0 && (
+                <div className="input-block" style={{ marginTop: 12 }}>
+                  <span className="input-label">Paid by</span>
+                  <select
+                    className="input"
+                    value={paymentPaidByEmail}
+                    onChange={(e) => setPaymentPaidByEmail(e.target.value)}
+                    required
+                  >
+                    {paymentPayerOptions.map((email) => (
+                      <option key={email} value={email}>
+                        {email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* ── SPLIT TYPE SELECTOR (Only for Payment) ── */}
-              {paymentFriends.length > 0 && (
+              {paymentRecipients.length > 0 && (
                 <div className="input-block" style={{ marginTop: 15 }}>
                   <span className="input-label">Split Type</span>
                   <div className="chips" style={{ marginTop: 6 }}>
@@ -804,7 +983,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
               )}
 
               {/* ── SPLIT DETAILS INPUT (Only for Payment) ── */}
-              {paymentFriends.length > 0 && paymentSplitType !== 'equal' && (
+              {paymentRecipients.length > 0 && paymentSplitType !== 'equal' && (
                 <div className="input-block" style={{ marginTop: 15 }}>
                   <span className="input-label">
                     {paymentSplitType === 'exact' ? 'Amount per friend (₹)' :
@@ -812,7 +991,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                      'Ratio per friend'}
                   </span>
                   <div style={{ marginTop: 8 }}>
-                    {paymentFriends.map((email) => (
+                    {paymentRecipients.map((email) => (
                       <div key={email} className="input-row" style={{ marginBottom: 8 }}>
                         <span style={{
                           minWidth: 200,
@@ -854,7 +1033,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                       const totalAmount = Number(form.amount) || 0;
 
                       if (paymentSplitType === 'exact') {
-                        const totalExact = paymentFriends.reduce((sum, email) => {
+                        const totalExact = paymentRecipients.reduce((sum, email) => {
                           return sum + (Number(paymentSplitDetails[email]) || 0);
                         }, 0);
                         const remaining = totalAmount - totalExact;
@@ -868,7 +1047,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                       }
 
                       if (paymentSplitType === 'percentage') {
-                        const totalPercentage = paymentFriends.reduce((sum, email) => {
+                        const totalPercentage = paymentRecipients.reduce((sum, email) => {
                           return sum + (Number(paymentSplitDetails[email]) || 0);
                         }, 0);
                         return (
@@ -881,7 +1060,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                       }
 
                       if (paymentSplitType === 'ratio') {
-                        const totalRatio = paymentFriends.reduce((sum, email) => {
+                        const totalRatio = paymentRecipients.reduce((sum, email) => {
                           return sum + (Number(paymentSplitDetails[email]) || 0);
                         }, 0);
                         const amounts = calculatePaymentAmounts();
@@ -898,22 +1077,22 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                 </div>
               )}
 
-              {paymentFriends.length > 0 && (
+              {paymentRecipients.length > 0 && (
                 <p className="text-sm muted" style={{ marginTop: 6 }}>
                   {(() => {
                     const amounts = calculatePaymentAmounts();
-                    const amountList = paymentFriends.map(email => `₹${amounts[email].toFixed(2)}`).join(', ');
+                    const amountList = paymentRecipients.map(email => `₹${amounts[email].toFixed(2)}`).join(', ');
 
                     if (paymentSplitType === 'equal') {
-                      return `Splitting ₹${form.amount || 0} equally among ${paymentFriends.length} ${paymentFriends.length === 1 ? 'friend' : 'friends'} (₹${(Number(form.amount) / paymentFriends.length).toFixed(2)} each)`;
+                      return `${paymentPaidByEmail} pays ₹${form.amount || 0} split equally among ${paymentRecipients.length} ${paymentRecipients.length === 1 ? 'participant' : 'participants'} (₹${(Number(form.amount) / paymentRecipients.length).toFixed(2)} each)`;
                     } else if (paymentSplitType === 'exact') {
-                      return `Splitting ₹${form.amount || 0} by exact amounts: ${amountList}`;
+                      return `${paymentPaidByEmail} pays ₹${form.amount || 0} by exact amounts: ${amountList}`;
                     } else if (paymentSplitType === 'percentage') {
-                      return `Splitting ₹${form.amount || 0} by percentage: ${paymentFriends.map(email => `${paymentSplitDetails[email] || 0}%`).join(', ')}`;
+                      return `${paymentPaidByEmail} pays ₹${form.amount || 0} by percentage: ${paymentRecipients.map(email => `${paymentSplitDetails[email] || 0}%`).join(', ')}`;
                     } else if (paymentSplitType === 'ratio') {
-                      return `Splitting ₹${form.amount || 0} by ratio: ${paymentFriends.map(email => `${paymentSplitDetails[email] || 0}:₹${amounts[email].toFixed(2)}`).join(', ')}`;
+                      return `${paymentPaidByEmail} pays ₹${form.amount || 0} by ratio: ${paymentRecipients.map(email => `${paymentSplitDetails[email] || 0}:₹${amounts[email].toFixed(2)}`).join(', ')}`;
                     }
-                    return `Splitting ₹${form.amount || 0} among ${paymentFriends.length} ${paymentFriends.length === 1 ? 'friend' : 'friends'}`;
+                    return `${paymentPaidByEmail} pays ₹${form.amount || 0} among ${paymentRecipients.length} ${paymentRecipients.length === 1 ? 'participant' : 'participants'}`;
                   })()}
                 </p>
               )}
@@ -925,25 +1104,39 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
             <div className="input-block">
               <span className="input-label">Split with</span>
               <div className="input-row" style={{ marginTop: 4 }}>
-                <input
-                  type="email"
-                  className="input"
-                  placeholder="participant@email.com"
-                  value={participantInput}
-                  onChange={(e) => {
-                    setParticipantInput(e.target.value);
-                    setLocalError('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddParticipant();
-                    }
-                  }}
-                  aria-label="Add participant email"
-                  aria-invalid={!!localError}
-                  aria-describedby={localError ? 'participant-error' : undefined}
-                />
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input
+                    type="email"
+                    className="input"
+                    placeholder="participant@email.com"
+                    list="participants-datalist"
+                    value={participantInput}
+                    onChange={(e) => {
+                      setParticipantInput(e.target.value);
+                      setLocalError('');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddParticipant();
+                      }
+                    }}
+                    aria-label="Add participant email"
+                    aria-invalid={!!localError}
+                    aria-describedby={localError ? 'participant-error' : undefined}
+                  />
+                  {selectedGroupMembers.length > 0 && (
+                    <datalist id="participants-datalist">
+                      {selectedGroupMembers
+                        .filter(member => member.email !== String(paidByEmail).toLowerCase())
+                        .map((member) => (
+                          <option key={member.email} value={member.email}>
+                            {member.label}
+                          </option>
+                        ))}
+                    </datalist>
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="ghost"
@@ -1269,7 +1462,9 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                     const amounts = calculateExpenseAmounts();
 
                     if (expenseSplitType === 'equal') {
-                      return `Splitting ₹${form.amount || 0} equally among ${participants.length} ${participants.length === 1 ? 'person' : 'people'} (₹${(Number(form.amount) / participants.length).toFixed(2)} each)`;
+                      const totalPeople = participants.length + 1; // +1 for the payer
+                      const amountPerPerson = Number(form.amount) / totalPeople;
+                      return `Splitting ₹${form.amount || 0} equally among ${totalPeople} ${totalPeople === 1 ? 'person' : 'people'} (₹${amountPerPerson.toFixed(2)} each)`;
                     }
 
                     if (expenseSplitType === 'exact') {

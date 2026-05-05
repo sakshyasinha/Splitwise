@@ -93,8 +93,8 @@ export const createPayment = async (req, res) => {
       user: req.user
     });
 
-    const { description, amount, groupId, toEmail } = req.body;
-    const from = req.user?.id || req.user?._id;
+    const { description, amount, groupId, toEmail, fromEmail } = req.body;
+    let from = req.user?.id || req.user?._id;
 
     console.log('Parsed values:', { description, amount, groupId, toEmail, from });
 
@@ -104,6 +104,14 @@ export const createPayment = async (req, res) => {
         message: 'Missing required fields',
         details: { description: !!description, amount: !!amount, from: !!from }
       });
+    }
+
+    if (fromEmail) {
+      const fromUser = await User.findOne({ email: String(fromEmail).toLowerCase() });
+      if (!fromUser) {
+        return res.status(404).json({ message: 'Payer not found with that email' });
+      }
+      from = fromUser._id;
     }
 
     if (!groupId && !toEmail) {
