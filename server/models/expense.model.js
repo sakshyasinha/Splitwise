@@ -97,12 +97,13 @@ const expenseSchema = new mongoose.Schema({
 
     // For 'percentage' split:
     percentages: {
-      type: Map,
-      of: Number, // userId -> percentage (0-100)
+      type: Object,
       validate: {
         validator: function(v) {
           if (this.splitType !== 'percentage') return true;
-          const total = Array.from(v.values()).reduce((sum, val) => sum + val, 0);
+          if (!v || typeof v !== 'object') return true;
+          const values = v instanceof Map ? Array.from(v.values()) : Object.values(v);
+          const total = values.reduce((sum, val) => sum + Number(val), 0);
           return Math.abs(total - 100) < 0.01; // Allow small floating point errors
         },
         message: 'Percentages must sum to 100%'
@@ -111,12 +112,13 @@ const expenseSchema = new mongoose.Schema({
 
     // For 'shares' split:
     shares: {
-      type: Map,
-      of: Number, // userId -> share count (positive integers)
+      type: Object,
       validate: {
         validator: function(v) {
           if (this.splitType !== 'shares') return true;
-          return Array.from(v.values()).every(val => val > 0 && Number.isInteger(val));
+          if (!v || typeof v !== 'object') return true;
+          const values = v instanceof Map ? Array.from(v.values()) : Object.values(v);
+          return values.every(val => val > 0 && Number.isInteger(Number(val)));
         },
         message: 'Shares must be positive integers'
       }
@@ -134,13 +136,13 @@ const expenseSchema = new mongoose.Schema({
 
     // For 'adjustment' split:
     adjustments: {
-      type: Map,
-      of: mongoose.Schema.Types.Decimal128, // userId -> adjustment amount
+      type: Object,
       validate: {
         validator: function(v) {
           if (this.splitType !== 'adjustment') return true;
-          const total = Array.from(v.values())
-            .reduce((sum, val) => sum + Number(val), 0);
+          if (!v || typeof v !== 'object') return true;
+          const values = v instanceof Map ? Array.from(v.values()) : Object.values(v);
+          const total = values.reduce((sum, val) => sum + Number(val), 0);
           return Math.abs(total - Number(this.amount)) < 0.01;
         },
         message: 'Adjustments must sum to total amount'
@@ -149,13 +151,13 @@ const expenseSchema = new mongoose.Schema({
 
     // For 'custom' split:
     customAmounts: {
-      type: Map,
-      of: mongoose.Schema.Types.Decimal128, // userId -> exact amount
+      type: Object,
       validate: {
         validator: function(v) {
           if (this.splitType !== 'custom') return true;
-          const total = Array.from(v.values())
-            .reduce((sum, val) => sum + Number(val), 0);
+          if (!v || typeof v !== 'object') return true;
+          const values = v instanceof Map ? Array.from(v.values()) : Object.values(v);
+          const total = values.reduce((sum, val) => sum + Number(val), 0);
           return Math.abs(total - Number(this.amount)) < 0.01;
         },
         message: 'Custom amounts must sum to total amount'

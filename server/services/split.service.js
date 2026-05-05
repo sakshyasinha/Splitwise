@@ -3,6 +3,24 @@
  * Handles all split types: equal, percentage, shares, itemized, custom
  */
 
+const isMap = (value) => value instanceof Map;
+
+const getEntries = (value) => {
+    if (!value) return [];
+    if (isMap(value)) return Array.from(value.entries());
+    if (typeof value === 'object') return Object.entries(value);
+    return [];
+};
+
+const getValues = (value) => getEntries(value).map(([, val]) => val);
+
+const getByKey = (value, key) => {
+    if (!value) return undefined;
+    if (isMap(value)) return value.get(key);
+    if (typeof value === 'object') return value[key];
+    return undefined;
+};
+
 /**
  * Equal Split - Divide amount equally among all participants
  * @param {number} totalAmount - Total amount to split
@@ -38,12 +56,12 @@ export const splitEqual = (totalAmount, participantIds) => {
  * @returns {Array} Array of {userId, amount} objects
  */
 export const splitPercentage = (totalAmount, participantIds, percentages) => {
-    if (!percentages || percentages.size === 0) {
+    if (getEntries(percentages).length === 0) {
         throw new Error('Percentages map is required for percentage split');
     }
 
     // Validate percentages sum to 100
-    const totalPercentage = Array.from(percentages.values())
+    const totalPercentage = getValues(percentages)
         .reduce((sum, val) => sum + val, 0);
 
     if (Math.abs(totalPercentage - 100) > 0.01) {
@@ -51,7 +69,7 @@ export const splitPercentage = (totalAmount, participantIds, percentages) => {
     }
 
     return participantIds.map(userId => {
-        const percentage = percentages.get(userId) || 0;
+        const percentage = getByKey(percentages, userId) || 0;
         const amount = (totalAmount * percentage) / 100;
         return {
             userId,
@@ -68,12 +86,12 @@ export const splitPercentage = (totalAmount, participantIds, percentages) => {
  * @returns {Array} Array of {userId, amount} objects
  */
 export const splitShares = (totalAmount, participantIds, shares) => {
-    if (!shares || shares.size === 0) {
+    if (getEntries(shares).length === 0) {
         throw new Error('Shares map is required for shares split');
     }
 
     // Calculate total shares
-    const totalShares = Array.from(shares.values())
+    const totalShares = getValues(shares)
         .reduce((sum, val) => sum + val, 0);
 
     if (totalShares === 0) {
@@ -84,7 +102,7 @@ export const splitShares = (totalAmount, participantIds, shares) => {
     const valuePerShare = totalAmount / totalShares;
 
     return participantIds.map(userId => {
-        const shareCount = shares.get(userId) || 0;
+        const shareCount = getByKey(shares, userId) || 0;
         const amount = shareCount * valuePerShare;
         return {
             userId,
@@ -158,12 +176,12 @@ export const splitItemized = (totalAmount, participantIds, items) => {
  * @returns {Array} Array of {userId, amount} objects
  */
 export const splitCustom = (totalAmount, participantIds, customAmounts) => {
-    if (!customAmounts || customAmounts.size === 0) {
+    if (getEntries(customAmounts).length === 0) {
         throw new Error('Custom amounts map is required for custom split');
     }
 
     // Validate custom amounts sum to total
-    const customTotal = Array.from(customAmounts.values())
+    const customTotal = getValues(customAmounts)
         .reduce((sum, val) => sum + Number(val), 0);
 
     if (Math.abs(customTotal - totalAmount) > 0.01) {
@@ -171,7 +189,7 @@ export const splitCustom = (totalAmount, participantIds, customAmounts) => {
     }
 
     return participantIds.map(userId => {
-        const amount = customAmounts.get(userId) || 0;
+        const amount = getByKey(customAmounts, userId) || 0;
         return {
             userId,
             amount: Math.round(amount * 100) / 100
@@ -214,13 +232,13 @@ export const splitPayment = (totalAmount, participantIds) => {
  * @returns {Array} Array of {userId, amount} objects
  */
 export const splitAdjustment = (totalAmount, participantIds, adjustments) => {
-    if (!adjustments || adjustments.size === 0) {
+    if (getEntries(adjustments).length === 0) {
         // If no adjustments, fall back to equal split
         return splitEqual(totalAmount, participantIds);
     }
 
     // Calculate total adjustments
-    const totalAdjustments = Array.from(adjustments.values())
+    const totalAdjustments = getValues(adjustments)
         .reduce((sum, val) => sum + Number(val), 0);
 
     // Calculate base amount (total minus adjustments)
@@ -231,7 +249,7 @@ export const splitAdjustment = (totalAmount, participantIds, adjustments) => {
 
     // Apply adjustments
     return baseSplits.map(split => {
-        const adjustment = adjustments.get(split.userId) || 0;
+        const adjustment = getByKey(adjustments, split.userId) || 0;
         return {
             userId: split.userId,
             amount: Math.round((split.amount + adjustment) * 100) / 100
@@ -270,7 +288,7 @@ export const validateSplit = (splitType, splitDetails, totalAmount, participantI
                 if (!splitDetails.percentages) {
                     return { valid: false, error: 'Percentages are required for percentage split' };
                 }
-                const totalPercentage = Array.from(splitDetails.percentages.values())
+                const totalPercentage = getValues(splitDetails.percentages)
                     .reduce((sum, val) => sum + val, 0);
                 if (Math.abs(totalPercentage - 100) > 0.01) {
                     return { valid: false, error: `Percentages must sum to 100%, got ${totalPercentage}%` };
@@ -281,7 +299,7 @@ export const validateSplit = (splitType, splitDetails, totalAmount, participantI
                 if (!splitDetails.shares) {
                     return { valid: false, error: 'Shares are required for shares split' };
                 }
-                const totalShares = Array.from(splitDetails.shares.values())
+                const totalShares = getValues(splitDetails.shares)
                     .reduce((sum, val) => sum + val, 0);
                 if (totalShares <= 0) {
                     return { valid: false, error: 'Total shares must be greater than 0' };
@@ -298,7 +316,7 @@ export const validateSplit = (splitType, splitDetails, totalAmount, participantI
                 if (!splitDetails.customAmounts) {
                     return { valid: false, error: 'Custom amounts are required for custom split' };
                 }
-                const customTotal = Array.from(splitDetails.customAmounts.values())
+                const customTotal = getValues(splitDetails.customAmounts)
                     .reduce((sum, val) => sum + Number(val), 0);
                 if (Math.abs(customTotal - totalAmount) > 0.01) {
                     return { valid: false, error: `Custom amounts must sum to total amount` };

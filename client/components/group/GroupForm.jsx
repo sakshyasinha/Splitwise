@@ -377,12 +377,16 @@ export default function GroupForm({ onSuccess }) {
               <p className="text-sm muted" style={{ marginTop: 12 }}>
                 {expenseSplitType === 'equal'
                   ? (() => {
-                      const splitCount = expensePaidBy 
+                      const splitCount = expensePaidBy
                         ? allMembers.filter(email => email !== expensePaidBy).length + 1
                         : allMembers.length;
                       const perPerson = (Number(expenseAmount) / splitCount).toFixed(2);
                       return `Splitting ₹${expenseAmount || 0} equally among ${splitCount} people (₹${perPerson}/person)`;
                     })()
+                  : expenseSplitType === 'exact'
+                  ? `Enter exact amounts for each person (total: ₹${expenseAmount || 0})`
+                  : expenseSplitType === 'percentage'
+                  ? `Enter percentage for each person (total: 100%)`
                   : `Custom split for ₹${expenseAmount || 0}`}
               </p>
             </div>

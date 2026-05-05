@@ -164,27 +164,28 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
 
   const validateExpenseSplit = () => {
     const totalAmount = Number(form.amount) || 0;
+    const allParticipants = [...new Set([paidByEmail, ...participants])]; // Include payer
 
     if (expenseSplitType === 'equal') {
       return true; // Equal split is always valid
     }
 
     if (expenseSplitType === 'exact') {
-      const totalExact = participants.reduce((sum, email) => {
+      const totalExact = allParticipants.reduce((sum, email) => {
         return sum + (Number(expenseSplitDetails[email]) || 0);
       }, 0);
       return Math.abs(totalExact - totalAmount) < 0.01;
     }
 
     if (expenseSplitType === 'percentage') {
-      const totalPercentage = participants.reduce((sum, email) => {
+      const totalPercentage = allParticipants.reduce((sum, email) => {
         return sum + (Number(expenseSplitDetails[email]) || 0);
       }, 0);
       return Math.abs(totalPercentage - 100) < 0.01;
     }
 
     if (expenseSplitType === 'ratio') {
-      const totalRatio = participants.reduce((sum, email) => {
+      const totalRatio = allParticipants.reduce((sum, email) => {
         return sum + (Number(expenseSplitDetails[email]) || 0);
       }, 0);
       return totalRatio > 0;
@@ -241,32 +242,33 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
   const calculateExpenseAmounts = () => {
     const totalAmount = Number(form.amount) || 0;
     const amounts = {};
+    const allParticipants = [...new Set([paidByEmail, ...participants])]; // Include payer
 
     if (expenseSplitType === 'equal') {
-      const amountPerPerson = totalAmount / participants.length;
-      participants.forEach(email => {
+      const amountPerPerson = totalAmount / allParticipants.length;
+      allParticipants.forEach(email => {
         amounts[email] = amountPerPerson;
       });
     } else if (expenseSplitType === 'exact') {
-      participants.forEach(email => {
+      allParticipants.forEach(email => {
         amounts[email] = Number(expenseSplitDetails[email]) || 0;
       });
     } else if (expenseSplitType === 'percentage') {
-      participants.forEach(email => {
+      allParticipants.forEach(email => {
         const percentage = Number(expenseSplitDetails[email]) || 0;
         amounts[email] = (totalAmount * percentage) / 100;
       });
     } else if (expenseSplitType === 'ratio') {
-      const totalRatio = participants.reduce((sum, email) => {
+      const totalRatio = allParticipants.reduce((sum, email) => {
         return sum + (Number(expenseSplitDetails[email]) || 0);
       }, 0);
-      participants.forEach(email => {
+      allParticipants.forEach(email => {
         const ratio = Number(expenseSplitDetails[email]) || 0;
         amounts[email] = (totalAmount * ratio) / totalRatio;
       });
     } else if (expenseSplitType === 'itemized') {
       // Initialize amounts for each participant
-      participants.forEach(email => {
+      allParticipants.forEach(email => {
         amounts[email] = 0;
       });
 
@@ -277,8 +279,8 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
 
         if (assignedTo.length === 0) {
           // If no one is assigned, split equally among all participants
-          const share = itemAmount / participants.length;
-          participants.forEach(email => {
+          const share = itemAmount / allParticipants.length;
+          allParticipants.forEach(email => {
             amounts[email] = (amounts[email] || 0) + share;
           });
         } else {
@@ -291,7 +293,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       });
     } else if (expenseSplitType === 'adjustment') {
       // For adjustment split, use the exact adjustments as amounts
-      participants.forEach(email => {
+      allParticipants.forEach(email => {
         amounts[email] = Number(adjustments[email]) || 0;
       });
     }
@@ -421,10 +423,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
     }
   }, [form.groupId, selectedGroupMemberEmails, paidByEmail, currentUserEmail]);
 
-  useEffect(() => {
-    if (!paidByEmail) return;
-    setParticipants((prev) => prev.filter((email) => String(email).toLowerCase() !== String(paidByEmail).toLowerCase()));
-  }, [paidByEmail]);
+  // Allow payer to be included in participants - no longer filtering them out
 
   const onChange = (e) => {
     clearError();
@@ -448,13 +447,13 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       return;
     }
 
-    if (email === String(paidByEmail).toLowerCase()) {
-      setLocalError("Payer cannot also be a participant");
+    if (!form.groupId) {
+      setLocalError("Select a group first");
       return;
     }
 
-    if (!form.groupId) {
-      setLocalError("Select a group first");
+    if (email === paidByEmail) {
+      setLocalError("Payer cannot be added as a participant");
       return;
     }
 
@@ -655,7 +654,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
           amount: Number(form.amount),
           groupId: form.groupId,
           paidBy: paidByEmail,
-          participants,
+          participants: [...new Set([paidByEmail, ...participants])], // Include payer in participants
           category: selectedCategory,
           splitType: backendSplitType,
           splitDetails: splitDetails,
@@ -1128,7 +1127,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                   {selectedGroupMembers.length > 0 && (
                     <datalist id="participants-datalist">
                       {selectedGroupMembers
-                        .filter(member => member.email !== String(paidByEmail).toLowerCase())
+                        .filter(member => member.email !== paidByEmail)
                         .map((member) => (
                           <option key={member.email} value={member.email}>
                             {member.label}
@@ -1222,7 +1221,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                   </span>
 
                   <div style={{ marginTop: 8 }}>
-                    {participants.map((email) => (
+                    {[...new Set([paidByEmail, ...participants])].map((email) => (
                       <div
                         key={email}
                         className="input-row"
@@ -1234,9 +1233,10 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                           color: 'var(--text-muted)',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
+                          whiteSpace: 'nowrap',
+                          fontWeight: email === paidByEmail ? '600' : '400'
                         }}>
-                          {email}
+                          {email} {email === paidByEmail ? '(Payer)' : ''}
                         </span>
                         <input
                           type="number"
@@ -1265,9 +1265,10 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                   <div style={{ marginTop: 8, fontSize: 12 }}>
                     {(() => {
                       const totalAmount = Number(form.amount) || 0;
+                      const allParticipants = [...new Set([paidByEmail, ...participants])];
 
                       if (expenseSplitType === 'exact') {
-                        const totalExact = participants.reduce((sum, email) => {
+                        const totalExact = allParticipants.reduce((sum, email) => {
                           return sum + (Number(expenseSplitDetails[email]) || 0);
                         }, 0);
                         const remaining = totalAmount - totalExact;
@@ -1282,7 +1283,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                       }
 
                       if (expenseSplitType === 'percentage') {
-                        const totalPercentage = participants.reduce((sum, email) => {
+                        const totalPercentage = allParticipants.reduce((sum, email) => {
                           return sum + (Number(expenseSplitDetails[email]) || 0);
                         }, 0);
 
@@ -1296,7 +1297,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                       }
 
                       if (expenseSplitType === 'ratio') {
-                        const totalRatio = participants.reduce((sum, email) => {
+                        const totalRatio = allParticipants.reduce((sum, email) => {
                           return sum + (Number(expenseSplitDetails[email]) || 0);
                         }, 0);
 
@@ -1354,7 +1355,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                         <div>
                           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Split between:</span>
                           <div className="chips" style={{ marginTop: 4 }}>
-                            {participants.map(email => (
+                            {[...new Set([paidByEmail, ...participants])].map(email => (
                               <button
                                 key={email}
                                 type="button"
@@ -1362,7 +1363,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                                 onClick={() => toggleItemAssignment(item.id, email)}
                                 style={{ fontSize: 12 }}
                               >
-                                {email.split('@')[0]}
+                                {email.split('@')[0]} {email === paidByEmail ? '(Payer)' : ''}
                               </button>
                             ))}
                           </div>
@@ -1407,7 +1408,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                   </p>
 
                   <div style={{ marginTop: 10 }}>
-                    {participants.map((email) => (
+                    {[...new Set([paidByEmail, ...participants])].map((email) => (
                       <div
                         key={email}
                         className="input-row"
@@ -1419,9 +1420,10 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                           color: 'var(--text-muted)',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
+                          whiteSpace: 'nowrap',
+                          fontWeight: email === paidByEmail ? '600' : '400'
                         }}>
-                          {email}
+                          {email} {email === paidByEmail ? '(Payer)' : ''}
                         </span>
                         <input
                           type="number"
@@ -1460,23 +1462,32 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                 <p className="text-sm muted" style={{ marginTop: 6 }}>
                   {(() => {
                     const amounts = calculateExpenseAmounts();
+                    const allParticipants = [...new Set([paidByEmail, ...participants])]; // Include payer
 
                     if (expenseSplitType === 'equal') {
-                      const totalPeople = participants.length + 1; // +1 for the payer
+                      const totalPeople = allParticipants.length;
                       const amountPerPerson = Number(form.amount) / totalPeople;
                       return `Splitting ₹${form.amount || 0} equally among ${totalPeople} ${totalPeople === 1 ? 'person' : 'people'} (₹${amountPerPerson.toFixed(2)} each)`;
                     }
 
                     if (expenseSplitType === 'exact') {
-                      return `Split by exact amounts: ${participants.map(email => `₹${(Number(expenseSplitDetails[email]) || 0).toFixed(2)}`).join(', ')}`;
+                      const payerAmount = Number(expenseSplitDetails[paidByEmail]) || 0;
+                      const othersAmount = participants.map(email => `₹${(Number(expenseSplitDetails[email]) || 0).toFixed(2)}`).join(', ');
+                      return `Split by exact amounts: ${paidByEmail}: ₹${payerAmount.toFixed(2)}, ${othersAmount}`;
                     }
 
                     if (expenseSplitType === 'percentage') {
-                      return `Split by percentage: ${participants.map(email => `${expenseSplitDetails[email] || 0}% (₹${(amounts[email] || 0).toFixed(2)})`).join(', ')}`;
+                      const payerPercentage = expenseSplitDetails[paidByEmail] || 0;
+                      const payerAmount = (Number(form.amount) * payerPercentage) / 100;
+                      const othersPercentage = participants.map(email => `${expenseSplitDetails[email] || 0}% (₹${(amounts[email] || 0).toFixed(2)})`).join(', ');
+                      return `Split by percentage: ${paidByEmail}: ${payerPercentage}% (₹${payerAmount.toFixed(2)}), ${othersPercentage}`;
                     }
 
                     if (expenseSplitType === 'ratio') {
-                      return `Split by ratio: ${participants.map(email => `${expenseSplitDetails[email] || 0}:₹${(amounts[email] || 0).toFixed(2)}`).join(', ')}`;
+                      const payerRatio = expenseSplitDetails[paidByEmail] || 0;
+                      const payerAmount = amounts[paidByEmail] || 0;
+                      const othersRatio = participants.map(email => `${expenseSplitDetails[email] || 0}:₹${(amounts[email] || 0).toFixed(2)}`).join(', ');
+                      return `Split by ratio: ${paidByEmail}: ${payerRatio}:₹${payerAmount.toFixed(2)}, ${othersRatio}`;
                     }
 
                     if (expenseSplitType === 'itemized') {
@@ -1485,10 +1496,12 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                     }
 
                     if (expenseSplitType === 'adjustment') {
-                      return `Split by adjustments: ${participants.map(email => `₹${(Number(adjustments[email]) || 0).toFixed(2)}`).join(', ')}`;
+                      const payerAdjustment = Number(adjustments[paidByEmail]) || 0;
+                      const othersAdjustment = participants.map(email => `₹${(Number(adjustments[email]) || 0).toFixed(2)}`).join(', ');
+                      return `Split by adjustments: ${paidByEmail}: ₹${payerAdjustment.toFixed(2)}, ${othersAdjustment}`;
                     }
 
-                    return `Split among ${participants.length} ${participants.length === 1 ? 'person' : 'people'}`;
+                    return `Split among ${allParticipants.length} ${allParticipants.length === 1 ? 'person' : 'people'}`;
                   })()}
                 </p>
               )}
