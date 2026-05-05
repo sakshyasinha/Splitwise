@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Splitwise Clone</title>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const redirect = params.get('redirect');
+      if (redirect) {
+        history.replaceState(null, '', redirect);
+      }
+    </script>
     <script type="module" crossorigin src="/Splitwise/assets/index.js"></script>
     <link rel="stylesheet" crossorigin href="/Splitwise/assets/index.css">
   </head>
