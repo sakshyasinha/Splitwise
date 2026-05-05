@@ -1,12 +1,34 @@
 import Expense from '../models/expense.model.js';
 import User from '../models/user.model.js';
+import Group from '../models/group.model.js';
 import mongoose from 'mongoose';
 import { splitEqual, splitPercentage, splitShares, splitItemized, splitCustom, splitPayment } from './split.service.js';
 import * as emailService from './email.service.js';
 
-const resolveParticipantUsers = async (participants) => {
+const getParticipantIdentifier = (item) => {
+    if (typeof item === 'string' || typeof item === 'number') {
+        return String(item).trim();
+    }
+
+    if (!item || typeof item !== 'object') {
+        return '';
+    }
+
+    if (item.email) return String(item.email).trim();
+    if (item.userId && typeof item.userId === 'object') {
+        return String(item.userId.email || item.userId._id || item.userId.id || '').trim();
+    }
+    if (item.userId) return String(item.userId).trim();
+    if (item._id) return String(item._id).trim();
+    if (item.id) return String(item.id).trim();
+
+    return '';
+};
+
+const resolveParticipantUsers = async (participants, options = {}) => {
+    const { allowCreateMissing = true } = options;
     console.log('resolveParticipantUsers called with:', participants);
-    const cleaned = [...new Set(participants.map((item) => String(item).trim()).filter(Boolean))];
+    const cleaned = [...new Set((participants || []).map(getParticipantIdentifier).filter(Boolean))];
     console.log('Cleaned participants:', cleaned);
     const users = [];
 
@@ -24,6 +46,12 @@ const resolveParticipantUsers = async (participants) => {
         }
 
         if (!user) {
+            if (!allowCreateMissing) {
+                const error = new Error(`Participant not found: ${identifier}`);
+                error.statusCode = 400;
+                throw error;
+            }
+
             // For quick expenses, create a new user if they don't exist
             // This allows expenses with users who haven't signed up yet
             console.log('User not found, creating new user for:', identifier);
@@ -59,7 +87,7 @@ const resolveParticipantUsers = async (participants) => {
 export const addExpense = async (data) => {
     try {
         console.log('addExpense called with data:', data);
-        const { userId, groupId, amount, description, participants, splitType = 'equal', splitDetails = {}, currency = 'INR' } = data;
+        const { userId, groupId, amount, description, participants, paidBy, splitType = 'equal', splitDetails = {}, currency = 'INR' } = data;
 
         console.log('Extracted values:', { userId, groupId, amount, description, participants, splitType, currency });
 
@@ -70,13 +98,59 @@ export const addExpense = async (data) => {
             throw error;
         }
 
-        const participantUsers = await resolveParticipantUsers(participants);
+        const isGroupExpense = Boolean(groupId);
+        const payerIdentifier = paidBy || userId;
+        const [payerUser] = await resolveParticipantUsers([payerIdentifier], { allowCreateMissing: !isGroupExpense });
+        if (!payerUser) {
+            const error = new Error('Payer not found');
+            error.statusCode = 400;
+            throw error;
+        }
+        const payerId = String(payerUser._id);
+
+        const participantUsers = await resolveParticipantUsers(participants, { allowCreateMissing: !isGroupExpense });
         const participantIds = participantUsers
             .map((user) => user._id.toString())
-            .filter((id) => id !== String(userId));
+            .filter((id) => id !== payerId);
+
+        if (isGroupExpense) {
+            const group = await Group.findById(groupId).select('members createdBy');
+            if (!group) {
+                const error = new Error('Group not found');
+                error.statusCode = 404;
+                throw error;
+            }
+
+            const allowedMemberIds = new Set([
+                ...(group.members || []).map((memberId) => String(memberId)),
+                ...(group.createdBy || []).map((creatorId) => String(creatorId)),
+            ]);
+
+            if (!allowedMemberIds.has(String(userId))) {
+                const error = new Error('Only group members can add expenses to this group');
+                error.statusCode = 403;
+                throw error;
+            }
+
+            if (!allowedMemberIds.has(payerId)) {
+                const error = new Error('Selected payer is not a member of this group');
+                error.statusCode = 400;
+                throw error;
+            }
+
+            const invalidParticipants = participantUsers
+                .filter((user) => !allowedMemberIds.has(String(user._id)))
+                .map((user) => user.email || String(user._id));
+
+            if (invalidParticipants.length > 0) {
+                const error = new Error(`These participants are not in the group: ${invalidParticipants.join(', ')}`);
+                error.statusCode = 400;
+                throw error;
+            }
+        }
 
         // Check if this is a personal expense (only the current user)
-        const isPersonalExpense = participants.length === 1 && String(participants[0]) === String(userId);
+        const isPersonalExpense = participantIds.length === 0;
 
         if (!isPersonalExpense && participantIds.length === 0) {
             const error = new Error('Add at least one participant other than the payer');
@@ -84,7 +158,7 @@ export const addExpense = async (data) => {
             throw error;
         }
 
-        const payerAwareParticipants = isPersonalExpense ? [String(userId)] : [String(userId), ...participantIds];
+        const payerAwareParticipants = isPersonalExpense ? [payerId] : [payerId, ...participantIds];
         const numericAmount = Number(amount);
 
         // Calculate splits based on splitType
@@ -115,7 +189,7 @@ export const addExpense = async (data) => {
         // Create participant entries for ALL participants (including the payer)
         // This ensures proper balance calculation
         const participantSplits = splits.map((split) => {
-            const isPayer = String(split.userId) === String(userId);
+            const isPayer = String(split.userId) === payerId;
 
             return {
                 userId: split.userId,
@@ -129,7 +203,7 @@ export const addExpense = async (data) => {
 
         // Create multi-payer entry (single payer for now, but structure supports multiple)
         const payers = [{
-            userId: userId,
+            userId: payerId,
             amount: numericAmount,
             paidAt: new Date(),
             paymentMethod: 'cash'
@@ -139,7 +213,7 @@ export const addExpense = async (data) => {
             group: groupId || null, // Allow null for quick expenses without groups
             amount: numericAmount,
             description,
-            paidBy: userId, // Legacy field
+            paidBy: payerId, // Legacy field
             createdBy: userId, // New production field
             participants: participantSplits,
             currency,
@@ -228,10 +302,34 @@ export const updateExpense = async (userId, expenseId, updates) => {
         .filter((id) => id !== String(userId)); // Exclude payer from existing participants
 
     if (Array.isArray(updates.participants) && updates.participants.length > 0) {
-        const participantUsers = await resolveParticipantUsers(updates.participants);
+        const participantUsers = await resolveParticipantUsers(updates.participants, { allowCreateMissing: !expense.group });
         nextParticipants = participantUsers
             .map((user) => user._id.toString())
             .filter((id) => id !== String(userId));
+
+        if (expense.group) {
+            const group = await Group.findById(expense.group).select('members createdBy');
+            if (!group) {
+                const error = new Error('Group not found');
+                error.statusCode = 404;
+                throw error;
+            }
+
+            const allowedMemberIds = new Set([
+                ...(group.members || []).map((memberId) => String(memberId)),
+                ...(group.createdBy || []).map((creatorId) => String(creatorId)),
+            ]);
+
+            const invalidParticipants = participantUsers
+                .filter((user) => !allowedMemberIds.has(String(user._id)))
+                .map((user) => user.email || String(user._id));
+
+            if (invalidParticipants.length > 0) {
+                const error = new Error(`These participants are not in the group: ${invalidParticipants.join(', ')}`);
+                error.statusCode = 400;
+                throw error;
+            }
+        }
     }
 
     if (nextParticipants.length === 0) {

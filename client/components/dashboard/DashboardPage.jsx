@@ -17,6 +17,7 @@ import GroupList from './GroupList.jsx';
 import DuesList from './DuesList.jsx';
 import GroupDetails from './GroupDetails.jsx';
 import ActivityFeed from './ActivityFeed.jsx';
+import AnalyticsDashboard from '../analytics/AnalyticsDashboard.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { getPersonLabel } from '../../utils/personUtils.js';
 import { normalizeGroupName, dedupeValues, prettifyGroupType } from '../../utils/stringUtils.js';
@@ -393,6 +394,10 @@ const DashboardPage = () => {
 
             <AIChatPanel />
           </div>
+        </section>
+
+        <section className="analytics-section">
+          <AnalyticsDashboard />
         </section>
       </main>
 

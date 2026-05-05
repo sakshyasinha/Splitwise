@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import Card from '../ui/Card.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
+import API from '../../services/api.js';
+import '../../styles/analytics.css';
 
 const AnalyticsDashboard = () => {
   const [analytics, setAnalytics] = useState(null);
@@ -15,21 +17,14 @@ const AnalyticsDashboard = () => {
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/analytics/user?days=${timeRange}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      setError(null);
+      const response = await API.get('/analytics/user', {
+        params: { days: timeRange },
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch analytics');
-      }
-
-      const data = await response.json();
+      const data = response.data;
       setAnalytics(data);
     } catch (err) {
-      setError(err.message);
+      setError(err?.response?.data?.message || err.message || 'Failed to fetch analytics');
     } finally {
       setLoading(false);
     }
@@ -72,7 +67,7 @@ const AnalyticsDashboard = () => {
       </div>
 
       <OverviewStats overview={analytics.overview} />
-      <SpendingTrends spending={analytics.spending} />
+      <SpendingTrends spending={analytics.spending} trends={analytics.trends} />
       <CategoryBreakdown categories={analytics.categories} />
       <GroupAnalytics groups={analytics.groups} />
       <RelationshipAnalytics relationships={analytics.relationships} />
@@ -121,45 +116,112 @@ const OverviewStats = ({ overview }) => (
   </Card>
 );
 
-const SpendingTrends = ({ spending }) => (
-  <Card className="spending-trends">
-    <h3>Spending Trends</h3>
-    <div className="trend-info">
-      <div className="trend-indicator">
-        <span className={`trend-icon ${spending.trend}`}>
-          {spending.trend === 'increasing' ? '📈' : spending.trend === 'decreasing' ? '📉' : '➡️'}
-        </span>
-        <span className="trend-text">
-          {spending.trend === 'increasing' ? 'Increasing' : spending.trend === 'decreasing' ? 'Decreasing' : 'Stable'}
-        </span>
-        <span className="trend-change">
-          ({spending.changePercent >= 0 ? '+' : ''}{spending.changePercent.toFixed(1)}%)
-        </span>
-      </div>
-      <div className="average-spending">
-        <span className="average-label">Monthly Average:</span>
-        <span className="average-value">{formatCurrency(spending.average?.monthly || 0)}</span>
-      </div>
-    </div>
+const SpendingTrends = ({ spending = {}, trends = {} }) => {
+  const trend = trends.trend || 'stable';
+  const changePercent = Number(trends.changePercent ?? 0);
+  const byMonth = spending.byMonth || {};
+  const sortedMonths = Object.keys(byMonth).sort();
+  const maxMonthlyAmount = Math.max(...Object.values(byMonth).map((amount) => Number(amount) || 0), 0);
 
-    <div className="monthly-chart">
-      {Object.entries(spending.byMonth || {}).map(([month, amount]) => (
-        <div key={month} className="month-bar">
-          <div className="bar-container">
-            <div
-              className="bar"
-              style={{
-                height: `${Math.min((amount / Math.max(...Object.values(spending.byMonth))) * 100, 100)}%`
-              }}
-            />
-          </div>
-          <div className="month-label">{month}</div>
-          <div className="amount-label">{formatCurrency(amount)}</div>
+  return (
+    <Card className="spending-trends">
+      <h3>Spending Trends</h3>
+      <div className="trend-info">
+        <div className="trend-indicator">
+          <span className={`trend-icon ${trend}`}>
+            {trend === 'increasing' ? '📈' : trend === 'decreasing' ? '📉' : '➡️'}
+          </span>
+          <span className="trend-text">
+            {trend === 'increasing' ? 'Increasing' : trend === 'decreasing' ? 'Decreasing' : 'Stable'}
+          </span>
+          <span className="trend-change">
+            ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(1)}%)
+          </span>
         </div>
-      ))}
-    </div>
-  </Card>
-);
+        <div className="average-spending">
+          <span className="average-label">Monthly Average:</span>
+          <span className="average-value">{formatCurrency(spending.average?.monthly || 0)}</span>
+        </div>
+      </div>
+
+      <div className="monthly-chart">
+        <svg className="line-chart" viewBox="0 0 100 60" preserveAspectRatio="none">
+          {/* Grid lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
+            <line
+              key={ratio}
+              x1="0"
+              y1={60 - ratio * 60}
+              x2="100"
+              y2={60 - ratio * 60}
+              stroke="#e0e0e0"
+              strokeWidth="0.5"
+              strokeDasharray="2,2"
+            />
+          ))}
+
+          {/* Line path */}
+          {sortedMonths.length > 1 && (
+            <path
+              d={sortedMonths.map((month, index) => {
+                const amount = byMonth[month];
+                const x = (index / (sortedMonths.length - 1)) * 100;
+                const y = 60 - (amount / maxMonthlyAmount) * 55 - 2;
+                return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+              }).join(' ')}
+              fill="none"
+              stroke="#4CAF50"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+
+          {/* Data points */}
+          {sortedMonths.map((month, index) => {
+            const amount = byMonth[month];
+            const x = sortedMonths.length > 1
+              ? (index / (sortedMonths.length - 1)) * 100
+              : 50;
+            const y = 60 - (amount / maxMonthlyAmount) * 55 - 2;
+
+            return (
+              <g key={month}>
+                <circle
+                  cx={x}
+                  cy={y}
+                  r="3"
+                  fill="#4CAF50"
+                  stroke="#fff"
+                  strokeWidth="1"
+                />
+                <title>{month}: {formatCurrency(amount)}</title>
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* X-axis labels */}
+        <div className="chart-labels">
+          {sortedMonths.map((month, index) => {
+            const x = sortedMonths.length > 1
+              ? (index / (sortedMonths.length - 1)) * 100
+              : 50;
+            return (
+              <div
+                key={month}
+                className="chart-label"
+                style={{ left: `${x}%` }}
+              >
+                {month}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Card>
+  );
+};
 
 const CategoryBreakdown = ({ categories }) => (
   <Card className="category-breakdown">
@@ -256,57 +318,82 @@ const RelationshipAnalytics = ({ relationships }) => (
   </Card>
 );
 
-const TimeDistribution = ({ timeDistribution }) => (
-  <Card className="time-distribution">
-    <h3>Time Distribution</h3>
-    <div className="time-sections">
-      <div className="time-section">
-        <h4>By Hour of Day</h4>
-        <div className="hour-chart">
-          {Object.entries(timeDistribution.byHour || {}).map(([hour, amount]) => (
-            <div key={hour} className="hour-bar">
-              <div
-                className="hour-bar-fill"
-                style={{
-                  height: `${Math.min((amount / Math.max(...Object.values(timeDistribution.byHour))) * 100, 100)}%`
-                }}
-              />
-              <div className="hour-label">{hour}:00</div>
-            </div>
-          ))}
-        </div>
-        {timeDistribution.peakHour && (
-          <div className="peak-info">
-            Peak: {timeDistribution.peakHour.hour}:00 ({formatCurrency(timeDistribution.peakHour.amount)})
-          </div>
-        )}
-      </div>
+const TimeDistribution = ({ timeDistribution }) => {
+  const byHour = timeDistribution.byHour || {};
+  const byDayOfWeek = timeDistribution.byDayOfWeek || {};
+  const maxHourAmount = Math.max(...Object.values(byHour).map(Number), 0);
+  const maxDayAmount = Math.max(...Object.values(byDayOfWeek).map(Number), 0);
 
-      <div className="time-section">
-        <h4>By Day of Week</h4>
-        <div className="day-chart">
-          {Object.entries(timeDistribution.byDayOfWeek || {}).map(([day, amount]) => (
-            <div key={day} className="day-bar">
-              <div
-                className="day-bar-fill"
-                style={{
-                  height: `${Math.min((amount / Math.max(...Object.values(timeDistribution.byDayOfWeek))) * 100, 100)}%`
-                }}
-              />
-              <div className="day-label">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]}
-              </div>
+  if (Object.keys(byHour).length === 0 && Object.keys(byDayOfWeek).length === 0) {
+    return null;
+  }
+
+  return (
+    <Card className="time-distribution">
+      <h3>Time Distribution</h3>
+      <div className="time-sections">
+        {Object.keys(byHour).length > 0 && (
+          <div className="time-section">
+            <h4>By Hour of Day</h4>
+            <div className="hour-chart">
+              {Object.entries(byHour).map(([hour, amount]) => {
+                const numericAmount = Number(amount) || 0;
+                const barHeight = maxHourAmount > 0 ? (numericAmount / maxHourAmount) * 100 : 0;
+
+                return (
+                  <div key={hour} className="hour-bar">
+                    <div
+                      className="hour-bar-fill"
+                      style={{
+                        height: `${Math.min(barHeight, 100)}%`
+                      }}
+                    />
+                    <div className="hour-label">{hour}:00</div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
-        {timeDistribution.peakDay && (
-          <div className="peak-info">
-            Peak: {timeDistribution.peakDay.day} ({formatCurrency(timeDistribution.peakDay.amount)})
+            {timeDistribution.peakHour && (
+              <div className="peak-info">
+                Peak: {timeDistribution.peakHour.hour}:00 ({formatCurrency(timeDistribution.peakHour.amount)})
+              </div>
+            )}
+          </div>
+        )}
+
+        {Object.keys(byDayOfWeek).length > 0 && (
+          <div className="time-section">
+            <h4>By Day of Week</h4>
+            <div className="day-chart">
+              {Object.entries(byDayOfWeek).map(([day, amount]) => {
+                const numericAmount = Number(amount) || 0;
+                const barHeight = maxDayAmount > 0 ? (numericAmount / maxDayAmount) * 100 : 0;
+
+                return (
+                  <div key={day} className="day-bar">
+                    <div
+                      className="day-bar-fill"
+                      style={{
+                        height: `${Math.min(barHeight, 100)}%`
+                      }}
+                    />
+                    <div className="day-label">
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {timeDistribution.peakDay && (
+              <div className="peak-info">
+                Peak: {timeDistribution.peakDay.day} ({formatCurrency(timeDistribution.peakDay.amount)})
+              </div>
+            )}
           </div>
         )}
       </div>
-    </div>
-  </Card>
-);
+    </Card>
+  );
+};
 
 export default AnalyticsDashboard;

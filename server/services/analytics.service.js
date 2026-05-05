@@ -83,7 +83,15 @@ const calculateOverview = (expenses, userId) => {
     const isPersonal = participants.length === 1 &&
       String(participants[0].userId?._id || participants[0].userId) === String(userId);
 
-    const amount = Number(exp.amount || 0);
+    // Get user's share of this expense
+    const participant = participants?.find(
+      p => String(p.userId?._id || p.userId) === String(userId)
+    );
+
+    // Use user's share amount for shared expenses, full amount for personal expenses
+    const userShare = participant?.shareAmount || participant?.amount || 0;
+    const amount = Number(userShare || exp.amount || 0);
+
     if (isPersonal) {
       personalTotal += amount;
       personalCount++;
@@ -134,7 +142,14 @@ const calculateSpendingAnalytics = (expenses, userId) => {
   const averageSpending = {};
 
   expenses.forEach(exp => {
-    const amount = Number(exp.amount || 0);
+    // Get user's share of this expense
+    const participant = exp.participants?.find(
+      p => String(p.userId?._id || p.userId) === String(userId)
+    );
+
+    // Use user's share amount if available, otherwise use full amount for personal expenses
+    const userShare = participant?.shareAmount || participant?.amount || 0;
+    const amount = Number(userShare || exp.amount || 0);
     const date = new Date(exp.date);
 
     // By month
@@ -183,8 +198,15 @@ const calculateCategoryAnalytics = (expenses, userId) => {
   const categoryCounts = {};
 
   expenses.forEach(exp => {
+    // Get user's share of this expense
+    const participant = exp.participants?.find(
+      p => String(p.userId?._id || p.userId) === String(userId)
+    );
+
+    // Use user's share amount if available, otherwise use full amount for personal expenses
+    const userShare = participant?.shareAmount || participant?.amount || 0;
+    const amount = Number(userShare || exp.amount || 0);
     const category = exp.category || 'Other';
-    const amount = Number(exp.amount || 0);
 
     categoryTotals[category] = (categoryTotals[category] || 0) + amount;
     categoryCounts[category] = (categoryCounts[category] || 0) + 1;
@@ -224,7 +246,14 @@ const calculateGroupAnalytics = (expenses, userId) => {
     const groupName = group?.name || 'Quick Expenses';
     const groupType = group?.type || 'other';
 
-    const amount = Number(exp.amount || 0);
+    // Get user's share of this expense
+    const participant = exp.participants?.find(
+      p => String(p.userId?._id || p.userId) === String(userId)
+    );
+
+    // Use user's share amount if available, otherwise use full amount for personal expenses
+    const userShare = participant?.shareAmount || participant?.amount || 0;
+    const amount = Number(userShare || exp.amount || 0);
 
     if (!groupTotals[groupId]) {
       groupTotals[groupId] = {
@@ -263,51 +292,53 @@ const calculateTrendAnalytics = (expenses, userId) => {
     };
   }
 
-  // Sort by date
-  const sortedExpenses = [...expenses].sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Calculate spending by month (same as in calculateSpendingAnalytics)
+  const spendingByMonth = {};
+  expenses.forEach(exp => {
+    const amount = Number(exp.amount || 0);
+    const date = new Date(exp.date);
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    spendingByMonth[monthKey] = (spendingByMonth[monthKey] || 0) + amount;
+  });
 
-  // Calculate moving average (7-day)
-  const movingAverage = [];
-  const windowSize = 7;
-
-  for (let i = 0; i < sortedExpenses.length; i++) {
-    const start = Math.max(0, i - windowSize + 1);
-    const window = sortedExpenses.slice(start, i + 1);
-    const avg = window.reduce((sum, exp) => sum + Number(exp.amount || 0), 0) / window.length;
-    movingAverage.push({
-      date: sortedExpenses[i].date,
-      amount: Number(sortedExpenses[i].amount || 0),
-      average: avg
-    });
-  }
-
-  // Calculate trend direction
-  const recentExpenses = movingAverage.slice(-7); // Last 7 data points
-  const olderExpenses = movingAverage.slice(0, -7); // Earlier data points
+  // Sort months chronologically
+  const sortedMonths = Object.keys(spendingByMonth).sort();
 
   let trend = 'stable';
   let change = 0;
   let changePercent = 0;
 
-  if (recentExpenses.length > 0 && olderExpenses.length > 0) {
-    const recentAvg = recentExpenses.reduce((sum, item) => sum + item.average, 0) / recentExpenses.length;
-    const olderAvg = olderExpenses.reduce((sum, item) => sum + item.average, 0) / olderExpenses.length;
+  // Calculate trend by comparing most recent month with previous month
+  if (sortedMonths.length >= 2) {
+    const recentMonth = sortedMonths[sortedMonths.length - 1];
+    const previousMonth = sortedMonths[sortedMonths.length - 2];
+    const recentTotal = spendingByMonth[recentMonth];
+    const previousTotal = spendingByMonth[previousMonth];
 
-    change = recentAvg - olderAvg;
-    changePercent = olderAvg > 0 ? (change / olderAvg) * 100 : 0;
+    change = recentTotal - previousTotal;
+    changePercent = previousTotal > 0 ? (change / previousTotal) * 100 : 0;
 
-    if (change > 0.01) {
+    // Determine trend based on percentage change
+    if (changePercent > 1) {
       trend = 'increasing';
-    } else if (change < -0.01) {
+    } else if (changePercent < -1) {
       trend = 'decreasing';
+    } else {
+      trend = 'stable';
     }
   }
+
+  // Build recent trend array (last 6 months)
+  const recentTrend = sortedMonths.slice(-6).map(month => ({
+    month,
+    amount: spendingByMonth[month]
+  }));
 
   return {
     trend,
     change,
     changePercent,
-    movingAverage: movingAverage.slice(-30) // Last 30 points
+    recentTrend
   };
 };
 
@@ -341,10 +372,10 @@ const calculateRelationshipAnalytics = (expenses, userId) => {
       const rel = relationships.get(participantId);
       rel.expenseCount += 1;
 
-      if (balance > 0) {
-        rel.totalOwed += balance; // They owe me
-      } else if (balance < 0) {
-        rel.totalOwe += Math.abs(balance); // I owe them
+      if (balance < 0) {
+        rel.totalOwed += Math.abs(balance); // They owe me (their negative balance means they owe money)
+      } else if (balance > 0) {
+        rel.totalOwe += balance; // I owe them (their positive balance means they are owed money)
       }
 
       // Track last expense
@@ -384,8 +415,15 @@ const calculateTimeDistribution = (expenses, userId) => {
   const byMonth = {};
 
   expenses.forEach(exp => {
+    // Get user's share of this expense
+    const participant = exp.participants?.find(
+      p => String(p.userId?._id || p.userId) === String(userId)
+    );
+
+    // Use user's share amount if available, otherwise use full amount for personal expenses
+    const userShare = participant?.shareAmount || participant?.amount || 0;
+    const amount = Number(userShare || exp.amount || 0);
     const date = new Date(exp.date);
-    const amount = Number(exp.amount || 0);
 
     // By hour
     const hour = date.getHours();
