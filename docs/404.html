@@ -4,10 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Splitwise Clone</title>
-    <script type="module" crossorigin src="/splitwise/assets/index-Dt6sMDws.js"></script>
-    <link rel="stylesheet" crossorigin href="/splitwise/assets/index-B6pAiiu3.css">
+    <script>
+      // SPA Redirect for GitHub Pages
+      // Capture the redirect URL and redirect to the SPA with the proper route
+      const redirect = sessionStorage.redirect;
+      delete sessionStorage.redirect;
+      if (redirect && redirect !== location.href) {
+        history.replace(redirect);
+      }
+    </script>
+    <script type="module" crossorigin src="/Splitwise/assets/index.js"></script>
+    <link rel="stylesheet" crossorigin href="/Splitwise/assets/index.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
+    <script>
+      // Store the redirect path in sessionStorage for the app to use
+      sessionStorage.redirect = location.href;
+    </script>
   </body>
 </html>
