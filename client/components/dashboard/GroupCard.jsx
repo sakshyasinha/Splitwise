@@ -39,10 +39,10 @@ export default function GroupCard({ group, isSelected, onClick, onEdit }) {
           </div>
         </div>
         <div className="text-sm font-syne">
-          {group.myTotalDue > 0 ? (
-            <span style={{ color: 'var(--danger)' }}>You borrowed {formatCurrency(group.myTotalDue)}</span>
-          ) : group.totalDue > 0 ? (
-            <span style={{ color: 'var(--success)' }}>You lent {formatCurrency(group.totalDue)}</span>
+          {Number(group.netBalance || 0) < 0 ? (
+            <span style={{ color: 'var(--danger)' }}>You borrowed {formatCurrency(Math.abs(Number(group.netBalance || 0)))}</span>
+          ) : Number(group.netBalance || 0) > 0 ? (
+            <span style={{ color: 'var(--success)' }}>You lent {formatCurrency(Number(group.netBalance || 0))}</span>
           ) : (
             <span style={{ color: 'var(--success)' }}>Settled</span>
           )}
@@ -62,20 +62,6 @@ export default function GroupCard({ group, isSelected, onClick, onEdit }) {
           Edit
         </Button>
       </div>
-      {group.memberDues.length > 0 && (
-        <div className="mt-2 stack">
-          {group.memberDues.map((person, index) => (
-            <div
-              key={`${person.name}-${index}`}
-              className="text-sm"
-              style={{ display: 'flex', alignItems: 'center', gap: 10, width: 'fit-content' }}
-            >
-              <span>{person.name}</span>
-              <span style={{ color: 'var(--danger)' }}>{formatCurrency(person.amount)}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

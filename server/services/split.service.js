@@ -172,10 +172,10 @@ export const splitItemized = (totalAmount, participantIds, items) => {
  * Custom Split - Use exact amounts specified for each participant
  * @param {number} totalAmount - Total amount to split
  * @param {string[]} participantIds - Array of participant user IDs
- * @param {Map<string, number>} customAmounts - Map of userId -> exact amount
+ * @param {Map<string, number>} customAmounts - Map of userId/email -> exact amount
  * @returns {Array} Array of {userId, amount} objects
  */
-export const splitCustom = (totalAmount, participantIds, customAmounts) => {
+export const splitCustom = (totalAmount, participantIds, customAmounts, userEmailMap = {}) => {
     if (getEntries(customAmounts).length === 0) {
         throw new Error('Custom amounts map is required for custom split');
     }
@@ -189,7 +189,15 @@ export const splitCustom = (totalAmount, participantIds, customAmounts) => {
     }
 
     return participantIds.map(userId => {
-        const amount = getByKey(customAmounts, userId) || 0;
+        // Try to find amount by userId first, then by email (frontend sends emails)
+        let amount = getByKey(customAmounts, userId);
+
+        // If not found by userId, try by email from the mapping
+        if (amount === undefined && userEmailMap[userId]) {
+            amount = getByKey(customAmounts, userEmailMap[userId]);
+        }
+
+        amount = amount || 0;
         return {
             userId,
             amount: Math.round(amount * 100) / 100

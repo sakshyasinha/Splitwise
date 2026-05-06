@@ -87,9 +87,9 @@ const resolveParticipantUsers = async (participants, options = {}) => {
 export const addExpense = async (data) => {
     try {
         console.log('addExpense called with data:', data);
-        const { userId, groupId, amount, description, participants, paidBy, splitType = 'equal', splitDetails = {}, currency = 'INR' } = data;
+        const { userId, groupId, amount, description, participants, paidBy, splitType = 'equal', splitDetails = {}, currency = 'INR', category = 'General' } = data;
 
-        console.log('Extracted values:', { userId, groupId, amount, description, participants, splitType, currency });
+        console.log('Extracted values:', { userId, groupId, amount, description, participants, splitType, currency, category });
 
         if (!userId || !amount || !description || !Array.isArray(participants) || participants.length === 0) {
             console.error('Validation failed:', { userId, amount, description, participants });
@@ -161,6 +161,13 @@ export const addExpense = async (data) => {
         const payerAwareParticipants = isPersonalExpense ? [payerId] : [payerId, ...participantIds];
         const numericAmount = Number(amount);
 
+        // Create email-to-userId mapping for custom split lookup
+        const userEmailMap = {};
+        participantUsers.forEach(user => {
+            userEmailMap[user._id.toString()] = user.email;
+        });
+        userEmailMap[payerId] = payerUser.email;
+
         // Calculate splits based on splitType
         let splits;
         switch (splitType) {
@@ -177,7 +184,7 @@ export const addExpense = async (data) => {
                 splits = splitItemized(numericAmount, payerAwareParticipants, splitDetails.items);
                 break;
             case 'custom':
-                splits = splitCustom(numericAmount, payerAwareParticipants, splitDetails.customAmounts);
+                splits = splitCustom(numericAmount, payerAwareParticipants, splitDetails.customAmounts, userEmailMap);
                 break;
             case 'payment':
                 splits = splitPayment(numericAmount, payerAwareParticipants);
@@ -213,6 +220,7 @@ export const addExpense = async (data) => {
             group: groupId || null, // Allow null for quick expenses without groups
             amount: numericAmount,
             description,
+            category,
             paidBy: payerId, // Legacy field
             createdBy: userId, // New production field
             participants: participantSplits,
@@ -225,7 +233,7 @@ export const addExpense = async (data) => {
                 action: 'created',
                 changedBy: userId,
                 changedAt: new Date(),
-                changes: { amount, description, splitType, participants: participantIds },
+                changes: { amount, description, category, splitType, participants: participantIds },
                 previousValues: {},
                 reason: 'Initial expense creation'
             }]
@@ -290,6 +298,7 @@ export const updateExpense = async (userId, expenseId, updates) => {
     const nextAmount = updates.amount != null ? Number(updates.amount) : Number(expense.amount);
     const nextSplitType = updates.splitType ?? expense.splitType;
     const nextSplitDetails = updates.splitDetails ?? expense.splitDetails;
+    const nextCategory = updates.category ?? expense.category;
 
     if (!nextDescription || !Number.isFinite(nextAmount) || nextAmount <= 0) {
         const error = new Error('Valid description and amount are required');
@@ -349,11 +358,22 @@ export const updateExpense = async (userId, expenseId, updates) => {
     // Update basic fields
     expense.description = nextDescription;
     expense.amount = nextAmount;
+    expense.category = nextCategory;
     expense.splitType = nextSplitType;
     expense.splitDetails = nextSplitDetails;
 
     // Recalculate splits
     const payerAwareParticipants = [String(userId), ...nextParticipants];
+
+    // Create email-to-userId mapping for custom split lookup
+    const userEmailMap = {};
+    for (const id of nextParticipants) {
+        const user = await User.findById(id);
+        if (user) userEmailMap[id] = user.email;
+    }
+    const payerUser = await User.findById(userId);
+    if (payerUser) userEmailMap[userId] = payerUser.email;
+
     let splits;
     switch (nextSplitType) {
         case 'equal':
@@ -369,7 +389,7 @@ export const updateExpense = async (userId, expenseId, updates) => {
             splits = splitItemized(nextAmount, payerAwareParticipants, nextSplitDetails.items);
             break;
         case 'custom':
-            splits = splitCustom(nextAmount, payerAwareParticipants, nextSplitDetails.customAmounts);
+            splits = splitCustom(nextAmount, payerAwareParticipants, nextSplitDetails.customAmounts, userEmailMap);
             break;
         default:
             splits = splitEqual(nextAmount, payerAwareParticipants);
@@ -518,6 +538,7 @@ export const getMyDues = async (userId) => {
         .populate('paidBy', 'name email')
         .populate('createdBy', 'name email')
         .populate('group', 'name')
+        .populate('participants.userId', 'name email')
         .sort({ createdAt: -1 });
 
     const dues = expenses
@@ -581,6 +602,7 @@ export const getMyLents = async (userId) => {
             .populate('createdBy', 'name email')
             .populate('group', 'name')
             .populate('participants.userId', 'name email')
+            .populate('payers.userId', 'name email avatar')
             .sort({ createdAt: -1 });
 
         const lents = expenses

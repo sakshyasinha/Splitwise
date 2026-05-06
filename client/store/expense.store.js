@@ -14,6 +14,7 @@ import {
 import {
   createGroup as createGroupService,
   getGroups as getGroupsService,
+  getGroupBalance as getGroupBalanceService,
 } from "../services/group.service.js";
 
 const getGroupKey = (group) => {
@@ -139,10 +140,20 @@ const useExpenseStore = create((set, get) => ({
 
       const expense = await addExpenseService(payload);
 
-      set((state) => ({
-        expenses: [expense, ...state.expenses],
+      const [expensesData, duesData, lentsData] = await Promise.all([
+        getExpensesService(),
+        getMyDuesService(),
+        getMyLentsService(),
+      ]);
+
+      set({
+        expenses: expensesData || [expense],
+        myDues: duesData.dues || [],
+        totalOwed: Number(duesData.totalOwed || 0),
+        myLents: lentsData.lents || [],
+        totalLent: Number(lentsData.totalLent || 0),
         loading: false,
-      }));
+      });
 
       return expense;
     } catch (error) {

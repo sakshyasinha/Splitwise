@@ -515,14 +515,7 @@ export default function ExpenseList({ onEdit }) {
                             </div>
                           ) : (
                             <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                              <button
-                                type="button"
-                                className="btn btn-ghost"
-                                style={{ fontSize: 11, padding: '4px 10px' }}
-                                onClick={() => startEdit(expense)}
-                              >
-                                Edit
-                              </button>
+                             
                               <button
                                 type="button"
                                 className="btn btn-ghost"

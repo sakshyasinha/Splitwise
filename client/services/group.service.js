@@ -29,3 +29,8 @@ export async function removeGroupMember(groupId, memberId) {
   const response = await API.patch(`/groups/${groupId}/members/remove`, { memberId });
   return response.data;
 }
+
+export async function getGroupBalance(groupId) {
+  const response = await API.get(`/groups/${groupId}/balance`);
+  return response.data;
+}

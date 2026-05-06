@@ -84,7 +84,6 @@ export default function GroupDetails({ group, memberNames, expenses, position })
               {position.amount > 0 ? formatCurrency(position.amount) : 'Settled'}
             </div>
           </div>
-
           <div>
             <div className="metric-label" style={{ marginBottom: 8 }}>Recent expenses</div>
             {expenses.length === 0 ? (

@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from 'react';
 import useAuth from '../../hooks/useAuth.js';
 import useExpenses from '../../hooks/useExpenses.js';
@@ -90,10 +89,33 @@ const DashboardPage = () => {
     totalSpend: expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
   };
 
+  const userId = String(user?._id || user?.id || '');
+  const userEmail = String(user?.email || '').toLowerCase();
+  const userName = String(user?.name || '').toLowerCase();
+
   const getDueGroupId = (due) => due.group?._id || due.group?.id || null;
   const getDueGroupName = (due) => due.group?.name || '';
   const getExpenseGroupId = (expense) => (typeof expense.group === 'object' ? expense.group?._id : expense.group);
   const getExpenseGroupName = (expense) => (typeof expense.group === 'object' ? expense.group?.name : '');
+
+  const getUserBalanceForExpense = (expense, targetUserId) => {
+    if (!expense?.participants) return 0;
+    
+    const targetIdStr = String(targetUserId);
+    const participant = (expense.participants || []).find((entry) => {
+      if (!entry?.userId) return false;
+      const entryUserId = typeof entry.userId === 'object' ? entry.userId._id : entry.userId;
+      return String(entryUserId) === targetIdStr;
+    });
+
+    if (!participant) return 0;
+    
+    // Return balance field if available, else calculate from share and paid amounts
+    const balance = Number(participant.balance ?? 
+      (Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0)));
+    
+    return balance;
+  };
 
   const getExpensePeople = (expense) => {
     const people = [];
@@ -126,6 +148,9 @@ const DashboardPage = () => {
             ? exactMatchedDues
             : myDues.filter((due) => normalizeGroupName(getDueGroupName(due)) === normalizeGroupName(group.name));
         const myTotalDue = dues.reduce((sum, due) => sum + Number(due.amount || 0), 0);
+        const netBalance = userId
+          ? groupExpenses.reduce((sum, expense) => sum + getUserBalanceForExpense(expense, userId), 0)
+          : 0;
         const totalDue = groupExpenses.reduce(
           (sum, expense) =>
             sum +
@@ -152,6 +177,7 @@ const DashboardPage = () => {
           totalSpend,
           totalDue,
           myTotalDue,
+          netBalance,
           memberDues,
           memberNames,
           memberCount,
@@ -198,6 +224,9 @@ const DashboardPage = () => {
 
     return Array.from(byName.values()).map((group) => {
       const totalSpend = (group.groupExpenses || []).reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+      const netBalance = userId
+        ? (group.groupExpenses || []).reduce((sum, expense) => sum + getUserBalanceForExpense(expense, userId), 0)
+        : 0;
       const totalDue = (group.groupExpenses || []).reduce(
         (sum, expense) =>
           sum +
@@ -224,6 +253,7 @@ const DashboardPage = () => {
         totalSpend,
         totalDue,
         myTotalDue,
+        netBalance,
         memberDues,
         memberNames,
         memberCount: Math.max(memberNames.length, 1),
@@ -234,8 +264,8 @@ const DashboardPage = () => {
   const prioritizedGroups = useMemo(
     () =>
       [...mergedGroupSummaries].sort((a, b) => {
-        const aScore = Number(a.myTotalDue || 0) + Number(a.totalDue || 0);
-        const bScore = Number(b.myTotalDue || 0) + Number(b.totalDue || 0);
+        const aScore = Math.abs(Number(a.netBalance || 0));
+        const bScore = Math.abs(Number(b.netBalance || 0));
         if (bScore !== aScore) return bScore - aScore;
         return Number(b.totalSpend || 0) - Number(a.totalSpend || 0);
       }),
@@ -272,19 +302,19 @@ const DashboardPage = () => {
     : [];
 
   const selectedGroupPosition = selectedGroup
-    ? selectedGroup.myTotalDue > 0
+    ? Number(selectedGroup.netBalance || 0) < 0
       ? {
           tone: 'danger',
           badgeClass: 'badge-red',
           badgeText: 'Borrowed',
-          amount: selectedGroup.myTotalDue,
+          amount: Math.abs(Number(selectedGroup.netBalance || 0)),
         }
-      : selectedGroup.totalDue > 0
+      : Number(selectedGroup.netBalance || 0) > 0
         ? {
             tone: 'success',
             badgeClass: 'badge-green',
             badgeText: 'Lent',
-            amount: selectedGroup.totalDue,
+            amount: Number(selectedGroup.netBalance || 0),
           }
         : {
             tone: 'success',
@@ -293,10 +323,6 @@ const DashboardPage = () => {
             amount: 0,
           }
     : null;
-
-  const userId = String(user?._id || user?.id || '');
-  const userEmail = String(user?.email || '').toLowerCase();
-  const userName = String(user?.name || '').toLowerCase();
 
   const closeModal = () => {
     setActiveModal(null);
