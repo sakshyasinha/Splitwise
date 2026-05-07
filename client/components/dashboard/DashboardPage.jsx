@@ -14,6 +14,7 @@ import StatsGrid from './StatsGrid.jsx';
 import QuickActions from './QuickActions.jsx';
 import GroupList from './GroupList.jsx';
 import DuesList from './DuesList.jsx';
+import LentsList from './LentsList.jsx';
 import GroupDetails from './GroupDetails.jsx';
 import ActivityFeed from './ActivityFeed.jsx';
 import EmailActions from './EmailActions.jsx';
@@ -322,7 +323,10 @@ const DashboardPage = () => {
   );
 
   const selectedGroup = useMemo(
-    () => prioritizedGroups.find((group) => String(group.groupKey) === String(selectedGroupId)) || prioritizedGroups[0] || null,
+    () => prioritizedGroups.find((group) => {
+      const sourceGroupIds = Array.isArray(group._sourceGroupIds) ? group._sourceGroupIds.map(String) : [];
+      return String(group.groupKey) === String(selectedGroupId) || sourceGroupIds.includes(String(selectedGroupId));
+    }) || prioritizedGroups[0] || null,
     [prioritizedGroups, selectedGroupId]
   );
 
@@ -379,6 +383,13 @@ const DashboardPage = () => {
     setEditingGroup(null);
   };
 
+  const openAddExpense = (groupId = null) => {
+    setEditingExpense(null);
+    setEditingGroup(null);
+    setSelectedGroupId(groupId);
+    setActiveModal('expense');
+  };
+
   const openEditExpense = (expense) => {
     setEditingExpense(expense);
     setActiveModal('expense');
@@ -387,6 +398,10 @@ const DashboardPage = () => {
   const openEditGroup = (group) => {
     setEditingGroup(group);
     setActiveModal('editGroup');
+  };
+
+  const openAddExpenseForGroup = (groupId) => {
+    openAddExpense(groupId);
   };
 
   const openGroupDetailsFor = (groupKey) => {
@@ -452,8 +467,10 @@ const DashboardPage = () => {
             <GroupList
               groups={prioritizedGroups}
               selectedGroupId={selectedGroupId}
+              currentUserId={userId}
               onGroupClick={openGroupDetailsFor}
               onGroupEdit={openEditGroup}
+              onGroupAddExpense={openAddExpenseForGroup}
             />
 
             <ExpenseList onEdit={openEditExpense} />
@@ -465,6 +482,8 @@ const DashboardPage = () => {
               settlingExpenseId={settlingExpenseId}
               onSettleDue={handleSettleDue}
             />
+
+            <LentsList lents={myLents} />
 
             
 
@@ -503,7 +522,7 @@ const DashboardPage = () => {
         subtitle={editingExpense ? "Update expense details" : "Add a splitting expense to a group"}
         onClose={closeModal}
       >
-        <ExpenseForm onSuccess={closeModal} editingExpense={editingExpense} />
+        <ExpenseForm onSuccess={closeModal} editingExpense={editingExpense} initialGroupId={selectedGroupId} />
       </Modal>
 
       <Modal
