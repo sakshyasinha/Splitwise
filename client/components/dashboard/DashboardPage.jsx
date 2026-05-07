@@ -16,7 +16,9 @@ import GroupList from './GroupList.jsx';
 import DuesList from './DuesList.jsx';
 import GroupDetails from './GroupDetails.jsx';
 import ActivityFeed from './ActivityFeed.jsx';
+import EmailActions from './EmailActions.jsx';
 import AnalyticsDashboard from '../analytics/AnalyticsDashboard.jsx';
+import RecurringExpensesManager from '../recurring/RecurringExpensesManager.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { getPersonLabel } from '../../utils/personUtils.js';
 import { normalizeGroupName, dedupeValues, prettifyGroupType } from '../../utils/stringUtils.js';
@@ -98,6 +100,53 @@ const DashboardPage = () => {
   const getExpenseGroupId = (expense) => (typeof expense.group === 'object' ? expense.group?._id : expense.group);
   const getExpenseGroupName = (expense) => (typeof expense.group === 'object' ? expense.group?.name : '');
 
+  const visibleDues = useMemo(() => {
+    const fromExpenses = expenses.flatMap((expense) => {
+      const participant = (expense.participants || []).find((entry) => {
+        if (!entry?.userId) return false;
+        const entryUserId = typeof entry.userId === 'object' ? entry.userId._id : entry.userId;
+        return String(entryUserId) === String(userId);
+      });
+
+      if (!participant) {
+        return [];
+      }
+
+      const balance = Number(
+        participant.balance ??
+        (Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0))
+      );
+
+      if (balance >= 0) {
+        return [];
+      }
+
+      return [{
+        expenseId: expense._id,
+        description: expense.description || 'Unknown expense',
+        amount: Math.abs(balance),
+        status: participant.status || 'pending',
+        group: {
+          id: expense.group?._id,
+          name: expense.group?.name || '',
+        },
+        paidTo: {
+          id: expense.paidBy?._id || expense.createdBy?._id,
+          name: expense.paidBy?.name || expense.createdBy?.name || 'Unknown User',
+          email: expense.paidBy?.email || expense.createdBy?.email || '',
+        },
+        createdAt: expense.createdAt,
+      }];
+    });
+
+    return fromExpenses.length > 0 ? fromExpenses : myDues;
+  }, [expenses, myDues, userId]);
+
+  const visibleTotalOwed = useMemo(
+    () => visibleDues.reduce((sum, due) => sum + Number(due.amount || 0), 0),
+    [visibleDues]
+  );
+
   const getUserBalanceForExpense = (expense, targetUserId) => {
     if (!expense?.participants) return 0;
     
@@ -142,11 +191,11 @@ const DashboardPage = () => {
             : expenses.filter((expense) => normalizeGroupName(getExpenseGroupName(expense)) === normalizeGroupName(group.name));
 
         const totalSpend = groupExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-        const exactMatchedDues = myDues.filter((due) => String(getDueGroupId(due)) === String(group._id));
+        const exactMatchedDues = visibleDues.filter((due) => String(getDueGroupId(due)) === String(group._id));
         const dues =
           exactMatchedDues.length > 0
             ? exactMatchedDues
-            : myDues.filter((due) => normalizeGroupName(getDueGroupName(due)) === normalizeGroupName(group.name));
+            : visibleDues.filter((due) => normalizeGroupName(getDueGroupName(due)) === normalizeGroupName(group.name));
         const myTotalDue = dues.reduce((sum, due) => sum + Number(due.amount || 0), 0);
         const netBalance = userId
           ? groupExpenses.reduce((sum, expense) => sum + getUserBalanceForExpense(expense, userId), 0)
@@ -382,12 +431,12 @@ const DashboardPage = () => {
       <main className="dashboard-layout">
         <DashboardHeader onLogout={logout} />
 
-        <HeroStrip pendingDuesCount={myDues.length} />
+        <HeroStrip pendingDuesCount={visibleDues.length} />
 
         <StatsGrid
           groupCount={prioritizedGroups.length}
           totalLent={totalLent}
-          totalOwed={totalOwed}
+          totalOwed={visibleTotalOwed}
           expenseCount={totals.expenseCount}
           totalSpend={totals.totalSpend}
         />
@@ -397,6 +446,7 @@ const DashboardPage = () => {
             <QuickActions
               onCreateGroup={() => setActiveModal('group')}
               onAddExpense={() => setActiveModal('expense')}
+              onManageRecurring={() => setActiveModal('recurring')}
             />
 
             <GroupList
@@ -411,12 +461,14 @@ const DashboardPage = () => {
 
           <div className="right-column stack-lg">
             <DuesList
-              dues={myDues}
+              dues={visibleDues}
               settlingExpenseId={settlingExpenseId}
               onSettleDue={handleSettleDue}
             />
 
             
+
+            <ActivityFeed limit={15} />
 
             <AIChatPanel />
           </div>
@@ -466,6 +518,15 @@ const DashboardPage = () => {
           expenses={selectedGroupExpenses}
           position={selectedGroupPosition}
         />
+      </Modal>
+
+      <Modal
+        isOpen={activeModal === 'recurring'}
+        title="Recurring Bills"
+        subtitle="Manage repeating bills like rent, subscriptions, and utilities"
+        onClose={closeModal}
+      >
+        <RecurringExpensesManager />
       </Modal>
     </>
   );

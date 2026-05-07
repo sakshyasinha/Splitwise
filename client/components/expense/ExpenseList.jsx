@@ -461,6 +461,20 @@ export default function ExpenseList({ onEdit }) {
                           <strong style={{ fontWeight: 700 }}>Involved:</strong>
                           <span>{involvedPeople.join(' · ')}</span>
                         </div>
+                        {(expense.tags?.length > 0 || expense.notes || expense.receiptUrl || expense.images?.length > 0) && (
+                          <div className="expense-meta" style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {expense.tags?.slice(0, 4).map((tag) => (
+                              <span key={`${expense._id}-${tag}`} className="badge">#{tag}</span>
+                            ))}
+                            {expense.notes && <span title={expense.notes}>Notes added</span>}
+                            {expense.receiptUrl && (
+                              <a href={expense.receiptUrl} target="_blank" rel="noreferrer">
+                                Receipt
+                              </a>
+                            )}
+                            {expense.images?.length > 0 && <span>{expense.images.length} image(s)</span>}
+                          </div>
+                        )}
                         {/* Show pending vs settled status */}
                         {expense.participants?.length > 0 && (
                           <div className="expense-meta" style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>

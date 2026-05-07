@@ -22,19 +22,39 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
   const { user } = useAuth();
   const toast = useToast();
 
+  const parseTextList = (value) =>
+    String(value || '')
+      .split(/[,\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+
   const [activeTab, setActiveTab] = useState("expense"); // 'expense' or 'payment'
 
   const [form, setForm] = useState({
     description: "",
     amount: "",
+    currency: "INR",
     groupId: "",
     friendEmail: "",
+    notes: "",
+    receiptUrl: "",
+    imageUrls: "",
+    tags: "",
   });
 
   const [selectedCategory, setSelectedCategory] = useState("");
   const [paidByEmail, setPaidByEmail] = useState("");
   const [participantInput, setParticipantInput] = useState("");
   const [participants, setParticipants] = useState([]);
+  const [receiptPreview, setReceiptPreview] = useState("");
+  const [imagePreviews, setImagePreviews] = useState([]);
   const [paymentFriends, setPaymentFriends] = useState([]); // For multiple friends in payment
   const [paymentPaidByEmail, setPaymentPaidByEmail] = useState("");
   const [paymentFriendInput, setPaymentFriendInput] = useState("");
@@ -102,10 +122,17 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       setForm({
         description: editingExpense.description || "",
         amount: String(editingExpense.amount || ""),
+        currency: editingExpense.currency || "INR",
         groupId: editingExpense.group?._id || editingExpense.group || "",
         friendEmail: "",
+        notes: editingExpense.notes || "",
+        receiptUrl: editingExpense.receiptUrl || "",
+        imageUrls: Array.isArray(editingExpense.images) ? editingExpense.images.join('\n') : "",
+        tags: Array.isArray(editingExpense.tags) ? editingExpense.tags.join(', ') : "",
       });
       setSelectedCategory(editingExpense.category || "");
+      setReceiptPreview(editingExpense.receiptUrl || "");
+      setImagePreviews(Array.isArray(editingExpense.images) ? editingExpense.images : []);
       setParticipants(
         (editingExpense.participants || []).map((p) => p.userId?.email || p.userId || p)
       );
@@ -135,7 +162,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
     }
 
     if (paymentSplitType === 'equal') {
-      return true; // Equal split is always valid
+      return true;
     }
 
     if (paymentSplitType === 'exact') {
@@ -437,6 +464,46 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
     setTouched((prev) => ({ ...prev, [name]: true }));
   };
 
+  const handleReceiptChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setLocalError('Receipt must be an image file');
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setForm((prev) => ({ ...prev, receiptUrl: dataUrl }));
+      setReceiptPreview(dataUrl);
+      setLocalError('');
+    } catch (error) {
+      setLocalError(error.message || 'Failed to load receipt image');
+    }
+  };
+
+  const handleImagesChange = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    if (files.some((file) => !file.type.startsWith('image/'))) {
+      setLocalError('Only image files are allowed');
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      const dataUrls = await Promise.all(files.map((file) => readFileAsDataUrl(file)));
+      setForm((prev) => ({ ...prev, imageUrls: dataUrls.join('\n') }));
+      setImagePreviews(dataUrls);
+      setLocalError('');
+    } catch (error) {
+      setLocalError(error.message || 'Failed to load images');
+    }
+  };
+
   const handleAddParticipant = () => {
     const email = participantInput.trim().toLowerCase();
 
@@ -583,12 +650,14 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       await Promise.all(paymentPromises);
       toast.success(`Payment recorded successfully to ${paymentRecipients.length} participant(s)`);
 
-      setForm({ description: "", amount: "", groupId: "", friendEmail: "" });
+      setForm({ description: "", amount: "", currency: "INR", groupId: "", friendEmail: "", notes: "", receiptUrl: "", imageUrls: "", tags: "" });
       setPaymentFriends([]);
       setPaymentPaidByEmail(currentUserEmail || "");
       setPaymentSplitDetails({});
       setPaymentSplitType("equal");
       setSelectedCategory("");
+      setReceiptPreview("");
+      setImagePreviews([]);
 
       // Refresh expenses list to show the new payments
       await fetchExpenses();
@@ -621,6 +690,11 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
           groupId: form.groupId,
           participants,
           category: selectedCategory,
+          currency: form.currency || 'INR',
+          notes: form.notes?.trim() || '',
+          receiptUrl: form.receiptUrl?.trim() || '',
+          images: parseTextList(form.imageUrls),
+          tags: parseTextList(form.tags),
         });
         toast.success("Expense updated successfully");
       } else {
@@ -656,16 +730,23 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
           paidBy: paidByEmail,
           participants: [...new Set([paidByEmail, ...participants])], // Include payer in participants
           category: selectedCategory,
+          currency: form.currency || 'INR',
           splitType: backendSplitType,
           splitDetails: splitDetails,
+          notes: form.notes?.trim() || '',
+          receiptUrl: form.receiptUrl?.trim() || '',
+          images: parseTextList(form.imageUrls),
+          tags: parseTextList(form.tags),
         });
         toast.success("Expense added successfully");
-        setForm({ description: "", amount: "", groupId: "", friendEmail: "" });
+        setForm({ description: "", amount: "", currency: "INR", groupId: "", friendEmail: "", notes: "", receiptUrl: "", imageUrls: "", tags: "" });
         setPaidByEmail(currentUserEmail || "");
         setParticipants([]);
         setExpenseSplitDetails({});
         setExpenseSplitType("equal");
         setSelectedCategory("");
+        setReceiptPreview("");
+        setImagePreviews([]);
         setItems([]);
         setAdjustments({});
       }
@@ -773,6 +854,23 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
             </div>
           </div>
 
+          {!isPayment && (
+            <div className="input-block">
+              <span className="input-label">Currency</span>
+              <select
+                className="input"
+                name="currency"
+                value={form.currency || 'INR'}
+                onChange={onChange}
+              >
+                <option value="INR">INR</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+              </select>
+            </div>
+          )}
+
           {/* ── CATEGORY CHIPS (Only for Expense) ── */}
           {!isPayment && (
             <div className="input-block">
@@ -796,10 +894,92 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
             </div>
           )}
 
+          {!isPayment && (
+            <div className="input-block">
+              <span className="input-label">Notes</span>
+              <textarea
+                className="input"
+                name="notes"
+                value={form.notes}
+                onChange={onChange}
+                placeholder="Optional notes about this expense"
+                rows={2}
+                maxLength={1000}
+              />
+            </div>
+          )}
+
+          {!isPayment && (
+            <div className="form-row-grid">
+              <div>
+                <Input
+                  name="receiptUrl"
+                  label="Receipt URL"
+                  value={form.receiptUrl}
+                  onChange={onChange}
+                  placeholder="https://..."
+                />
+              </div>
+              <div>
+                <Input
+                  name="tags"
+                  label="Tags"
+                  value={form.tags}
+                  onChange={onChange}
+                  placeholder="food, office, reimbursable"
+                />
+              </div>
+            </div>
+          )}
+
+          {!isPayment && (
+            <div className="input-block">
+              <span className="input-label">Receipt image</span>
+              <input
+                type="file"
+                className="input"
+                accept="image/*"
+                onChange={handleReceiptChange}
+              />
+              {receiptPreview && (
+                <div style={{ marginTop: 8 }}>
+                  <img
+                    src={receiptPreview}
+                    alt="Receipt preview"
+                    style={{ maxWidth: '100%', maxHeight: 180, borderRadius: 12, border: '1px solid var(--border)' }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {!isPayment && (
+            <div className="form-row-grid">
+              
+              
+            </div>
+          )}
+
+          {!isPayment && imagePreviews.length > 0 && (
+            <div className="input-block">
+              <span className="input-label">Image previews</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: 8, marginTop: 8 }}>
+                {imagePreviews.map((src, index) => (
+                  <img
+                    key={`${src}-${index}`}
+                    src={src}
+                    alt={`Expense attachment ${index + 1}`}
+                    style={{ width: '100%', height: 96, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)' }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ── GROUP SELECT (Only for Expense) ── */}
           {!isPayment && (
             <div className="input-block">
-              <span className="input-label">Group</span>
+              <span className="input-label">Group <span style={{ color: 'var(--danger)' }}>*</span></span>
               <select
                 className="input"
                 name="groupId"
@@ -834,7 +1014,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
 
           {!isPayment && (
             <div className="input-block">
-              <span className="input-label">Paid by</span>
+              <span className="input-label">Paid by <span style={{ color: 'var(--danger)' }}>*</span></span>
               <select
                 className="input"
                 value={paidByEmail}
@@ -1037,9 +1217,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                         }, 0);
                         const remaining = totalAmount - totalExact;
                         return (
-                          <span style={{
-                            color: Math.abs(remaining) < 0.01 ? 'var(--success)' : 'var(--danger)'
-                          }}>
+                          <span style={{ color: Math.abs(remaining) < 0.01 ? 'var(--success)' : 'var(--danger)' }}>
                             Total: ₹{totalExact.toFixed(2)} {Math.abs(remaining) < 0.01 ? '✓' : `(Remaining: ₹${remaining.toFixed(2)})`}
                           </span>
                         );
@@ -1050,9 +1228,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                           return sum + (Number(paymentSplitDetails[email]) || 0);
                         }, 0);
                         return (
-                          <span style={{
-                            color: Math.abs(totalPercentage - 100) < 0.01 ? 'var(--success)' : 'var(--danger)'
-                          }}>
+                          <span style={{ color: Math.abs(totalPercentage - 100) < 0.01 ? 'var(--success)' : 'var(--danger)' }}>
                             Total: {totalPercentage}% {Math.abs(totalPercentage - 100) < 0.01 ? '✓' : `(Need: ${100 - totalPercentage}%)`}
                           </span>
                         );
@@ -1062,7 +1238,6 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                         const totalRatio = paymentRecipients.reduce((sum, email) => {
                           return sum + (Number(paymentSplitDetails[email]) || 0);
                         }, 0);
-                        const amounts = calculatePaymentAmounts();
                         return (
                           <span style={{ color: 'var(--text-muted)' }}>
                             Total ratio: {totalRatio} {totalRatio > 0 && '(Amounts calculated)'}

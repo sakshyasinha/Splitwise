@@ -320,6 +320,32 @@ export const cleanupOldActivities = async (daysToKeep = 90) => {
  * @returns {Promise<Object>} Created activity
  */
 export const createExpenseActivity = async (type, expense, userId, mentionedUsers = []) => {
+    const participantBalances = {};
+    const participantShares = {};
+
+    (expense?.participants || []).forEach((participant) => {
+        const participantId = String(
+            participant?.userId?._id ||
+            participant?.userId?.id ||
+            participant?.userId ||
+            ''
+        );
+
+        if (!participantId) {
+            return;
+        }
+
+        const balanceValue = Number(participant?.balance);
+        if (Number.isFinite(balanceValue)) {
+            participantBalances[participantId] = balanceValue;
+        }
+
+        const shareValue = Number(participant?.shareAmount ?? participant?.amount);
+        if (Number.isFinite(shareValue)) {
+            participantShares[participantId] = shareValue;
+        }
+    });
+
     const activityData = {
         userId,
         groupId: expense.group,
@@ -327,16 +353,18 @@ export const createExpenseActivity = async (type, expense, userId, mentionedUser
         type,
         mentionedUsers,
         metadata: {
-            expenseAmount: expense.amount,
+            expenseAmount: Number(expense.amount) || 0,
             expenseDescription: expense.description,
-            splitType: expense.splitType
+            splitType: expense.splitType,
+            participantBalances,
+            participantShares
         }
     };
 
     switch (type) {
         case 'expense_created':
             activityData.title = 'New Expense Added';
-            activityData.description = `Added expense: ${expense.description} (₹${expense.amount})`;
+            activityData.description = `Added expense: ${expense.description} (₹${Number(expense.amount) || 0})`;
             activityData.priority = 'normal';
             break;
 
@@ -388,7 +416,7 @@ export const createSettlementActivity = async (type, settlement, userId, mention
         type,
         mentionedUsers,
         metadata: {
-            settlementAmount: settlement.amount,
+            settlementAmount: Number(settlement.amount) || 0,
             fromUser: settlement.from,
             toUser: settlement.to
         }
@@ -397,19 +425,19 @@ export const createSettlementActivity = async (type, settlement, userId, mention
     switch (type) {
         case 'settlement_created':
             activityData.title = 'Payment Initiated';
-            activityData.description = `Payment of ₹${settlement.amount} initiated`;
+            activityData.description = `Payment of ₹${Number(settlement.amount) || 0} initiated`;
             activityData.priority = 'high';
             break;
 
         case 'settlement_completed':
             activityData.title = 'Payment Completed';
-            activityData.description = `Payment of ₹${settlement.amount} completed`;
+            activityData.description = `Payment of ₹${Number(settlement.amount) || 0} completed`;
             activityData.priority = 'normal';
             break;
 
         default:
             activityData.title = 'Settlement Activity';
-            activityData.description = `Settlement activity: ₹${settlement.amount}`;
+            activityData.description = `Settlement activity: ₹${Number(settlement.amount) || 0}`;
     }
 
     return createActivity(activityData);

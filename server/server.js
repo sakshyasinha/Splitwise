@@ -78,6 +78,7 @@ app.use("/api/email", emailRoutes);
 
 app.use("/api/smart-settlements", smartSettlementRoutes);
 
+app.use("/api/recurring-bills", recurringExpenseRoutes);
 app.use("/api/recurring-expenses", recurringExpenseRoutes);
 
 app.use("/api/receipts", receiptRoutes);
