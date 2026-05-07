@@ -39,7 +39,6 @@ export default function AIChatPanel() {
     <Card
       title="AI Assistant"
       subtitle="Splitwise-style spending and settlement guidance"
-      className="sticky"
     >
       <div className="quick-actions">
         {QUICK_PROMPTS.map((item) => (

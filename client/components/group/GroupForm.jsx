@@ -337,7 +337,7 @@ export default function GroupForm({ onSuccess }) {
               </div>
 
               <div style={{ marginBottom: '12px' }}>
-                <span className="input-label">Paid by</span>
+                <span className="input-label">Paid by <span style={{ color: 'var(--danger)' }}>*</span></span>
                 <select
                   className="input"
                   value={expensePaidBy}

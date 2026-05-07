@@ -32,7 +32,7 @@ const RecurringExpensesManager = () => {
   const fetchRecurringExpenses = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/recurring-expenses', {
+      const response = await fetch('/api/recurring-bills', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -47,7 +47,7 @@ const RecurringExpensesManager = () => {
   const fetchStats = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/recurring-expenses/stats', {
+      const response = await fetch('/api/recurring-bills/stats', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -62,8 +62,8 @@ const RecurringExpensesManager = () => {
     try {
       const token = localStorage.getItem('token');
       const url = editingExpense
-        ? `/api/recurring-expenses/${editingExpense._id}`
-        : '/api/recurring-expenses';
+        ? `/api/recurring-bills/${editingExpense._id}`
+        : '/api/recurring-bills';
       const method = editingExpense ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -90,7 +90,7 @@ const RecurringExpensesManager = () => {
   const handlePause = async (id) => {
     try {
       const token = localStorage.getItem('token');
-      await fetch(`/api/recurring-expenses/${id}/pause`, {
+      await fetch(`/api/recurring-bills/${id}/pause`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -108,7 +108,7 @@ const RecurringExpensesManager = () => {
   const handleResume = async (id) => {
     try {
       const token = localStorage.getItem('token');
-      await fetch(`/api/recurring-expenses/${id}/resume`, {
+      await fetch(`/api/recurring-bills/${id}/resume`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -128,7 +128,7 @@ const RecurringExpensesManager = () => {
 
     try {
       const token = localStorage.getItem('token');
-      await fetch(`/api/recurring-expenses/${id}`, {
+      await fetch(`/api/recurring-bills/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -161,7 +161,7 @@ const RecurringExpensesManager = () => {
 
     try {
       const token = localStorage.getItem('token');
-      await fetch(`/api/recurring-expenses/${id}/generate`, {
+      await fetch(`/api/recurring-bills/${id}/generate`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -212,15 +212,15 @@ const RecurringExpensesManager = () => {
   };
 
   if (loading) {
-    return <div className="loading">Loading recurring expenses...</div>;
+    return <div className="loading">Loading recurring bills...</div>;
   }
 
   return (
     <div className="recurring-expenses-manager">
       <div className="recurring-header">
-        <h2>Recurring Expenses</h2>
+        <h2>Recurring Bills</h2>
         <Button onClick={() => { resetForm(); setEditingExpense(null); setShowModal(true); }}>
-          + Add Recurring Expense
+          + Add Recurring Bill
         </Button>
       </div>
 
@@ -250,7 +250,7 @@ const RecurringExpensesManager = () => {
       <div className="recurring-list">
         {recurringExpenses.length === 0 ? (
           <Card className="empty-state">
-            <p>No recurring expenses yet. Create one to automate your regular expenses!</p>
+            <p>No recurring bills yet. Create one to automate your regular payments!</p>
           </Card>
         ) : (
           recurringExpenses.map((expense) => (
@@ -317,7 +317,7 @@ const RecurringExpensesManager = () => {
 
       <Modal
         isOpen={showModal}
-        title={editingExpense ? 'Edit Recurring Expense' : 'Add Recurring Expense'}
+        title={editingExpense ? 'Edit Recurring Bill' : 'Add Recurring Bill'}
         onClose={() => { setShowModal(false); setEditingExpense(null); resetForm(); }}
       >
         <form onSubmit={handleSubmit} className="recurring-form">
@@ -430,7 +430,7 @@ const RecurringExpensesManager = () => {
 
           <div className="form-actions">
             <Button type="submit">
-              {editingExpense ? 'Update' : 'Create'} Recurring Expense
+              {editingExpense ? 'Update' : 'Create'} Recurring Bill
             </Button>
             <Button variant="secondary" type="button" onClick={() => setShowModal(false)}>
               Cancel

@@ -4,6 +4,14 @@ import Group from '../models/group.model.js';
 import mongoose from 'mongoose';
 import { splitEqual, splitPercentage, splitShares, splitItemized, splitCustom, splitPayment } from './split.service.js';
 import * as emailService from './email.service.js';
+import { createExpenseActivity } from './activity.service.js';
+
+const toStringArray = (value) => {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map((item) => String(item || '').trim())
+        .filter(Boolean);
+};
 
 const getParticipantIdentifier = (item) => {
     if (typeof item === 'string' || typeof item === 'number') {
@@ -87,7 +95,22 @@ const resolveParticipantUsers = async (participants, options = {}) => {
 export const addExpense = async (data) => {
     try {
         console.log('addExpense called with data:', data);
-        const { userId, groupId, amount, description, participants, paidBy, splitType = 'equal', splitDetails = {}, currency = 'INR', category = 'General' } = data;
+        const {
+            userId,
+            groupId,
+            amount,
+            description,
+            participants,
+            paidBy,
+            splitType = 'equal',
+            splitDetails = {},
+            currency = 'INR',
+            category = 'General',
+            notes = '',
+            receiptUrl = '',
+            images = [],
+            tags = []
+        } = data;
 
         console.log('Extracted values:', { userId, groupId, amount, description, participants, splitType, currency, category });
 
@@ -221,6 +244,10 @@ export const addExpense = async (data) => {
             amount: numericAmount,
             description,
             category,
+            notes: String(notes || '').trim() || undefined,
+            receiptUrl: String(receiptUrl || '').trim() || undefined,
+            images: toStringArray(images),
+            tags: toStringArray(tags),
             paidBy: payerId, // Legacy field
             createdBy: userId, // New production field
             participants: participantSplits,
@@ -237,6 +264,14 @@ export const addExpense = async (data) => {
                 previousValues: {},
                 reason: 'Initial expense creation'
             }]
+        });
+
+        setImmediate(async () => {
+            try {
+                await createExpenseActivity('expense_created', createdExpense, userId, participantIds);
+            } catch (error) {
+                console.error('Failed to create expense activity:', error);
+            }
         });
 
         // Send expense alert emails to participants asynchronously
@@ -299,6 +334,11 @@ export const updateExpense = async (userId, expenseId, updates) => {
     const nextSplitType = updates.splitType ?? expense.splitType;
     const nextSplitDetails = updates.splitDetails ?? expense.splitDetails;
     const nextCategory = updates.category ?? expense.category;
+    const nextCurrency = updates.currency ?? expense.currency;
+    const nextNotes = updates.notes != null ? String(updates.notes).trim() : expense.notes;
+    const nextReceiptUrl = updates.receiptUrl != null ? String(updates.receiptUrl).trim() : expense.receiptUrl;
+    const nextImages = updates.images != null ? toStringArray(updates.images) : expense.images;
+    const nextTags = updates.tags != null ? toStringArray(updates.tags) : expense.tags;
 
     if (!nextDescription || !Number.isFinite(nextAmount) || nextAmount <= 0) {
         const error = new Error('Valid description and amount are required');
@@ -352,15 +392,25 @@ export const updateExpense = async (userId, expenseId, updates) => {
         description: expense.description,
         amount: expense.amount,
         splitType: expense.splitType,
-        participants: expense.participants.map(p => String(p.userId))
+        participants: expense.participants.map(p => String(p.userId)),
+        currency: expense.currency,
+        notes: expense.notes,
+        receiptUrl: expense.receiptUrl,
+        images: expense.images,
+        tags: expense.tags
     };
 
     // Update basic fields
     expense.description = nextDescription;
     expense.amount = nextAmount;
     expense.category = nextCategory;
+    expense.currency = nextCurrency;
     expense.splitType = nextSplitType;
     expense.splitDetails = nextSplitDetails;
+    expense.notes = nextNotes || undefined;
+    expense.receiptUrl = nextReceiptUrl || undefined;
+    expense.images = nextImages;
+    expense.tags = nextTags;
 
     // Recalculate splits
     const payerAwareParticipants = [String(userId), ...nextParticipants];
@@ -413,11 +463,24 @@ export const updateExpense = async (userId, expenseId, updates) => {
         await expense.addAuditLog('updated', userId, {
             description: nextDescription,
             amount: nextAmount,
-            splitType: nextSplitType
+            currency: nextCurrency,
+            splitType: nextSplitType,
+            notes: nextNotes,
+            receiptUrl: nextReceiptUrl,
+            images: nextImages,
+            tags: nextTags
         }, previousValues, 'Expense updated');
     }
 
     await expense.save();
+
+    setImmediate(async () => {
+        try {
+            await createExpenseActivity('expense_updated', expense, userId, nextParticipants);
+        } catch (error) {
+            console.error('Failed to create expense update activity:', error);
+        }
+    });
 
     return Expense.findById(expense._id)
         .populate('group', 'name')
@@ -448,6 +511,14 @@ export const deleteExpense = async (userId, expenseId) => {
     } else {
         await Expense.deleteOne({ _id: expenseId });
     }
+
+    setImmediate(async () => {
+        try {
+            await createExpenseActivity('expense_deleted', expense, userId);
+        } catch (error) {
+            console.error('Failed to create expense delete activity:', error);
+        }
+    });
 
     return { deleted: true };
 };
@@ -505,6 +576,36 @@ export const settleDue = async (userId, expenseId) => {
     }
 
     await expense.save();
+
+    // If all participants are marked settled/paid, mark the expense as settled
+    try {
+        const allSettled = (expense.participants || []).every(p => {
+            return p.status === 'settled' || p.status === 'paid';
+        });
+
+        if (allSettled && !expense.isSettled) {
+            const previousValues = { isSettled: expense.isSettled };
+            expense.isSettled = true;
+            expense.settledAt = new Date();
+
+            if (expense.addAuditLog) {
+                await expense.addAuditLog('settled', userId, { settledBy: userId }, previousValues, 'All participants settled');
+            } else {
+                await expense.save();
+            }
+        }
+    } catch (err) {
+        // Don't block the settle flow if this additional step fails; log and continue
+        console.error('Error while marking expense as fully settled:', err);
+    }
+
+    setImmediate(async () => {
+        try {
+            await createExpenseActivity('expense_settled', expense, userId, [userId]);
+        } catch (error) {
+            console.error('Failed to create expense settled activity:', error);
+        }
+    });
 
     return { settled: true };
 };

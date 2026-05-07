@@ -1,5 +1,4 @@
 import * as expenseService from '../services/expense.service.js';
-import Settlement from '../models/settlement.model.js';
 import Expense from '../models/expense.model.js';
 import mongoose from 'mongoose';
 
@@ -90,38 +89,6 @@ export const deleteExpense = async (req, res) => {
 export const settleDue = async (req, res) => {
     try {
         const data = await expenseService.settleDue(req.user?.id, req.params.id);
-
-        // Record the settlement
-        if (data.settled && !data.alreadyPaid) {
-            const expense = await Expense.findById(req.params.id)
-                .populate('paidBy')
-                .populate('createdBy');
-
-            // Support both legacy paidBy and new createdBy fields
-            const payer = expense?.paidBy || expense?.createdBy;
-
-            if (expense) {
-                // Find participant amount - support both old and new schema
-                const participant = expense.participants?.find(
-                    p => String(p.userId) === String(req.user?.id)
-                );
-
-                const amount = participant?.amount || participant?.shareAmount || 0;
-
-                const settlement = await Settlement.create({
-                    expenseId: req.params.id,
-                    from: req.user?.id,
-                    to: payer,
-                    amount: amount,
-                    description: `Settlement for: ${expense.description}`,
-                });
-
-                await settlement.populate('from', 'name email');
-                await settlement.populate('to', 'name email');
-
-                data.settlement = settlement;
-            }
-        }
 
         res.json(data);
     } catch (error) {

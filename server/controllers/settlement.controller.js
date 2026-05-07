@@ -4,6 +4,7 @@ import Settlement from "../models/settlement.model.js";
 import User from "../models/user.model.js";
 import Expense from "../models/expense.model.js";
 import * as emailService from '../services/email.service.js';
+import { createSettlementActivity } from '../services/activity.service.js';
 
 // Helper function to normalize expense (same as in expense.controller)
 const normalizeExpense = (expense) => {
@@ -66,6 +67,14 @@ export const recordSettlement = async (req, res) => {
       to,
       amount,
       description,
+    });
+
+    setImmediate(async () => {
+      try {
+        await createSettlementActivity('settlement_created', settlement, from, [to]);
+      } catch (activityError) {
+        console.error('Failed to create settlement activity:', activityError);
+      }
     });
 
     await settlement.populate('from', 'name email');
@@ -227,6 +236,14 @@ export const createPayment = async (req, res) => {
       amount: Number(amount),
       description: description || `Payment of ₹${amount}`,
       settledAt: new Date(),
+    });
+
+    setImmediate(async () => {
+      try {
+        await createSettlementActivity('settlement_completed', settlement, from, [toUser._id]);
+      } catch (activityError) {
+        console.error('Failed to create settlement activity:', activityError);
+      }
     });
 
     console.log('Settlement created:', settlement._id);

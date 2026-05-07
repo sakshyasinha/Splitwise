@@ -6,8 +6,9 @@ import Card from '../ui/Card.jsx';
  * @param {object} props - Component props
  * @param {function} props.onCreateGroup - Create group handler
  * @param {function} props.onAddExpense - Add expense handler
+ * @param {function} props.onManageRecurring - Manage recurring bills handler
  */
-export default function QuickActions({ onCreateGroup, onAddExpense }) {
+export default function QuickActions({ onCreateGroup, onAddExpense, onManageRecurring }) {
   return (
     <Card>
       <div className="card-header">
@@ -20,6 +21,9 @@ export default function QuickActions({ onCreateGroup, onAddExpense }) {
         </Button>
         <Button type="button" variant="ghost" onClick={onAddExpense}>
           + Add Expense
+        </Button>
+        <Button type="button" variant="ghost" onClick={onManageRecurring}>
+          + Recurring Bills
         </Button>
         <div className="quick-actions-hints">
           <span className="badge badge-green">Lent is Green</span>

@@ -1,126 +1,121 @@
-import { useMemo } from 'react';
-import useExpenses from '../../hooks/useExpenses.js';
+import { useEffect, useMemo, useState } from 'react';
+import { getActivityFeed, markAllActivitiesAsRead } from '../../services/activity.service.js';
+import useToast from '../../hooks/useToast.js';
 import useAuth from '../../hooks/useAuth.js';
 import Card from '../ui/Card.jsx';
+import Button from '../ui/Button.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
-import { getPersonName } from '../../utils/personUtils.js';
 
-const ACTION_ICONS = {
-  created: '➕',
-  updated: '✏️',
-  deleted: '🗑️',
-  settled: '✅',
-  split_changed: '🔄',
-  payer_added: '💰',
-  payer_removed: '💸'
-};
-
-const ACTION_COLORS = {
-  created: 'var(--success)',
-  updated: 'var(--primary)',
-  deleted: 'var(--danger)',
-  settled: 'var(--success)',
-  split_changed: 'var(--warning)',
-  payer_added: 'var(--success)',
-  payer_removed: 'var(--danger)'
-};
-
-const ACTION_LABELS = {
-  created: 'Created',
-  updated: 'Updated',
-  deleted: 'Deleted',
-  settled: 'Settled',
-  split_changed: 'Split Changed',
-  payer_added: 'Payer Added',
-  payer_removed: 'Payer Removed'
+const ACTIVITY_META = {
+  expense_created: { icon: '➕', label: 'Created', color: 'var(--success)' },
+  expense_updated: { icon: '✏️', label: 'Updated', color: 'var(--primary)' },
+  expense_deleted: { icon: '🗑️', label: 'Deleted', color: 'var(--danger)' },
+  expense_settled: { icon: '✅', label: 'Settled', color: 'var(--success)' },
+  split_changed: { icon: '🔄', label: 'Split Changed', color: 'var(--warning)' },
+  payer_added: { icon: '💰', label: 'Payer Added', color: 'var(--success)' },
+  payer_removed: { icon: '💸', label: 'Payer Removed', color: 'var(--danger)' },
+  settlement_created: { icon: '🧾', label: 'Settlement Created', color: 'var(--primary)' },
+  settlement_completed: { icon: '🏁', label: 'Settlement Completed', color: 'var(--success)' },
 };
 
 export default function ActivityFeed({ groupId = null, limit = 20 }) {
   const { user } = useAuth();
-  const { expenses = [], loading } = useExpenses();
+  const toast = useToast();
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const inlineValueStyle = { marginLeft: 6 };
 
-  // Extract and sort all audit logs from expenses
-  const activities = useMemo(() => {
-    const allActivities = [];
+  function toIdString(value) {
+    if (!value) return '';
+    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (typeof value === 'object') {
+      return String(value._id || value.id || value.userId || '');
+    }
+    return '';
+  }
 
-    expenses.forEach(expense => {
-      // Filter by group if specified
-      if (groupId && expense.group?._id !== groupId && expense.group !== groupId) {
-        return;
+  const currentUserId = toIdString(user?._id || user?.id || user);
+
+  function parseAmount(value) {
+    if (value == null || value === '') return null;
+
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+
+    const normalizedValue = String(value).replace(/[^\d.-]/g, '').trim();
+    if (!normalizedValue || normalizedValue === '-' || normalizedValue === '.' || normalizedValue === '-.') {
+      return null;
+    }
+
+    const numericValue = Number(normalizedValue);
+    return Number.isFinite(numericValue) ? numericValue : null;
+  }
+
+  function extractAmountFromDescription(description) {
+    if (!description) return null;
+
+    const rupeeMatch = String(description).match(/₹\s*([\d,]+(?:\.\d+)?)/);
+    if (rupeeMatch?.[1]) {
+      const parsed = parseAmount(rupeeMatch[1]);
+      if (parsed != null) {
+        return parsed;
       }
+    }
 
-      // Add expense creation activity
-      if (expense.createdAt) {
-        allActivities.push({
-          id: `expense-created-${expense._id}`,
-          type: 'expense_created',
-          action: 'created',
-          expenseId: expense._id,
-          expense: expense,
-          changedBy: expense.createdBy || expense.paidBy,
-          changedAt: new Date(expense.createdAt),
-          description: `Created expense: ${expense.description}`,
-          amount: expense.amount,
-          icon: '➕',
-          color: 'var(--success)'
-        });
-      }
+    return null;
+  }
 
-      // Add audit log activities
-      if (expense.auditLog && Array.isArray(expense.auditLog)) {
-        expense.auditLog.forEach((log, index) => {
-          allActivities.push({
-            id: `audit-${expense._id}-${index}`,
-            type: 'audit_log',
-            action: log.action,
-            expenseId: expense._id,
-            expense: expense,
-            changedBy: log.changedBy,
-            changedAt: new Date(log.changedAt),
-            changes: log.changes,
-            previousValues: log.previousValues,
-            reason: log.reason,
-            description: getActivityDescription(log, expense),
-            icon: ACTION_ICONS[log.action] || '📝',
-            color: ACTION_COLORS[log.action] || 'var(--text-muted)'
-          });
-        });
-      }
+  const loadActivities = async ({ silent = false } = {}) => {
+    try {
+      silent ? setRefreshing(true) : setLoading(true);
+      setError('');
 
-      // Add settlement activities from participants
-      if (expense.participants && Array.isArray(expense.participants)) {
-        expense.participants.forEach((participant, index) => {
-          if (participant.settledAt && participant.status === 'settled') {
-            allActivities.push({
-              id: `settlement-${expense._id}-${index}`,
-              type: 'settlement',
-              action: 'settled',
-              expenseId: expense._id,
-              expense: expense,
-              changedBy: participant.userId,
-              changedAt: new Date(participant.settledAt),
-              description: `Settled payment for: ${expense.description}`,
-              amount: participant.amount,
-              icon: '✅',
-              color: 'var(--success)'
-            });
-          }
-        });
-      }
-    });
+      const data = await getActivityFeed({
+        limit,
+        ...(groupId ? { groupId } : {}),
+      });
 
-    // Sort by date (most recent first)
-    return allActivities
-      .sort((a, b) => b.changedAt - a.changedAt)
-      .slice(0, limit);
-  }, [expenses, groupId, limit]);
+      setActivities(Array.isArray(data?.activities) ? data.activities : []);
+    } catch (activityError) {
+      const message = activityError?.response?.data?.message || activityError.message || 'Failed to load activity feed';
+      setError(message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadActivities();
+  }, [groupId, limit]);
+
+  const unreadActivities = useMemo(() => activities.filter((activity) => !activity.isRead), [activities]);
+  const visibleActivities = unreadActivities;
+
+  const handleMarkAllRead = async () => {
+    if (unreadActivities.length === 0) {
+      return;
+    }
+
+    try {
+      await markAllActivitiesAsRead();
+      toast.success('Marked activity feed as read');
+      await loadActivities({ silent: true });
+    } catch (activityError) {
+      const message = activityError?.response?.data?.message || activityError.message || 'Failed to mark activities as read';
+      toast.error(message);
+    }
+  };
 
   // Group activities by date
   const groupedActivities = useMemo(() => {
     const groups = {};
 
-    activities.forEach(activity => {
-      const dateKey = formatDateKey(activity.changedAt);
+    visibleActivities.forEach((activity) => {
+      const dateKey = formatDateKey(getActivityDate(activity));
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
@@ -128,7 +123,7 @@ export default function ActivityFeed({ groupId = null, limit = 20 }) {
     });
 
     return groups;
-  }, [activities]);
+  }, [visibleActivities]);
 
   function formatDateKey(date) {
     const today = new Date();
@@ -155,60 +150,111 @@ export default function ActivityFeed({ groupId = null, limit = 20 }) {
       hour12: true
     });
   }
-
-  function getActivityDescription(log, expense) {
-    const action = log.action;
-    const changedByName = getPersonName(log.changedBy, 'Someone');
-
-    switch (action) {
-      case 'created':
-        return `${changedByName} created this expense`;
-      case 'updated':
-        const updateDetails = Object.keys(log.changes || {}).join(', ');
-        return `${changedByName} updated ${updateDetails || 'details'}`;
-      case 'deleted':
-        return `${changedByName} deleted this expense${log.reason ? `: ${log.reason}` : ''}`;
-      case 'settled':
-        return `${changedByName} settled this expense`;
-      case 'split_changed':
-        return `${changedByName} changed the split type`;
-      case 'payer_added':
-        return `${changedByName} added a payer`;
-      case 'payer_removed':
-        return `${changedByName} removed a payer`;
-      default:
-        return `${changedByName} performed ${action}`;
-    }
+  function getActivityDate(activity) {
+    return new Date(activity.changedAt || activity.createdAt || activity.updatedAt || Date.now());
   }
 
-  function getChangeDetails(activity) {
-    if (!activity.changes || Object.keys(activity.changes).length === 0) {
-      return null;
+  function getDisplayName(person, fallback = 'Someone') {
+    if (!person) return fallback;
+    if (typeof person === 'string') return person;
+    return person.name || person.description || person.email || fallback;
+  }
+
+  function getActivityMeta(activity) {
+    return ACTIVITY_META[activity.type] || {
+      icon: '📝',
+      label: activity.type || 'Activity',
+      color: 'var(--text-muted)',
+    };
+  }
+
+  function getActivityHeadline(activity) {
+    return activity?.description || 'Activity updated';
+  }
+
+  function getActivitySummary(activity) {
+    const parts = [];
+
+    if (activity?.metadata?.expenseDescription) {
+      parts.push(activity.metadata.expenseDescription);
     }
 
+    if (activity?.groupId) {
+      parts.push(getDisplayName(activity.groupId, 'Personal'));
+    }
+
+    return parts.length > 0 ? parts.join(' · ') : null;
+  }
+
+  function getActivityDetails(activity) {
     const details = [];
-    for (const [field, value] of Object.entries(activity.changes)) {
-      const previousValue = activity.previousValues?.[field];
-      if (previousValue !== undefined && previousValue !== value) {
-        if (field === 'amount') {
-          details.push(`Amount: ${formatCurrency(previousValue)} → ${formatCurrency(value)}`);
-        } else if (field === 'description') {
-          details.push(`Description: "${previousValue}" → "${value}"`);
-        } else {
-          details.push(`${field}: ${previousValue} → ${value}`);
-        }
+    const expenseAmount =
+      parseAmount(activity?.metadata?.expenseAmount) ??
+      parseAmount(activity?.metadata?.amount) ??
+      extractAmountFromDescription(activity?.description);
+
+    const participantBalances = activity?.metadata?.participantBalances || {};
+    const participantShares = activity?.metadata?.participantShares || {};
+
+    const getMappedAmount = (mapObject, id) => {
+      if (!id || !mapObject || typeof mapObject !== 'object') {
+        return null;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(mapObject, id)) {
+        return parseAmount(mapObject[id]);
+      }
+
+      const matchedKey = Object.keys(mapObject).find((key) => String(key) === String(id));
+      return matchedKey ? parseAmount(mapObject[matchedKey]) : null;
+    };
+
+    const viewerBalance = getMappedAmount(participantBalances, currentUserId);
+    let viewerShareAmount = getMappedAmount(participantShares, currentUserId);
+    const settlementAmount = parseAmount(activity?.metadata?.settlementAmount);
+    const actorId = toIdString(activity?.userId);
+    const isViewerActor = currentUserId && actorId && currentUserId === actorId;
+
+    if (viewerShareAmount == null && !isViewerActor && activity?.metadata?.splitType === 'equal' && expenseAmount != null) {
+      const participantCount = (Array.isArray(activity?.mentionedUsers) ? activity.mentionedUsers.length : 0) + 1;
+      if (participantCount > 1) {
+        viewerShareAmount = expenseAmount / participantCount;
       }
     }
 
-    return details.length > 0 ? details : null;
+    if (viewerBalance != null && viewerBalance < 0) {
+      details.push({ label: 'You owe', value: formatCurrency(Math.abs(viewerBalance)) });
+    } else if (viewerBalance != null && viewerBalance > 0) {
+      details.push({ label: 'You are owed', value: formatCurrency(viewerBalance) });
+    } else if (viewerShareAmount != null && viewerShareAmount > 0) {
+      details.push({ label: 'Your share', value: formatCurrency(viewerShareAmount) });
+    } else if (expenseAmount != null) {
+      details.push({ label: 'Amount', value: formatCurrency(expenseAmount) });
+    }
+
+    if (settlementAmount != null) {
+      details.push({ label: 'Settlement', value: formatCurrency(settlementAmount) });
+    }
+
+    if (activity?.expenseId) {
+      details.push({ label: 'Expense', value: getDisplayName(activity.expenseId, 'Untitled') });
+    }
+
+    if (activity?.reason) {
+      details.push({ label: 'Reason', value: activity.reason });
+    }
+
+    return details;
   }
 
   if (loading) {
     return (
       <Card>
         <div className="card-header">
-          <h2>Activity Feed</h2>
-          <p>Recent actions and changes</p>
+          <div className="activity-feed-titleblock">
+            <h2>Activity Feed</h2>
+            <p>Recent actions and changes</p>
+          </div>
         </div>
         <div className="card-content">
           <div className="empty-state">
@@ -220,17 +266,69 @@ export default function ActivityFeed({ groupId = null, limit = 20 }) {
     );
   }
 
+  if (error) {
+    return (
+      <Card>
+        <div className="card-header">
+          <div className="activity-feed-header">
+            <div className="activity-feed-titleblock">
+              <h2>Activity Feed</h2>
+              <p>Recent actions and changes</p>
+            </div>
+            <Button variant="secondary" onClick={() => loadActivities({ silent: false })} disabled={refreshing}>
+              Retry
+            </Button>
+          </div>
+        </div>
+        <div className="card-content">
+          <div className="empty-state">{error}</div>
+        </div>
+      </Card>
+    );
+  }
+
   if (activities.length === 0) {
     return (
       <Card>
         <div className="card-header">
-          <h2>Activity Feed</h2>
-          <p>Recent actions and changes</p>
+          <div className="activity-feed-header">
+            <div className="activity-feed-titleblock">
+              <h2>Activity Feed</h2>
+              <p>Recent actions and changes</p>
+            </div>
+            <Button variant="secondary" onClick={() => loadActivities({ silent: false })} disabled={refreshing}>
+              Refresh
+            </Button>
+          </div>
         </div>
         <div className="card-content">
           <div className="empty-state">
             <div className="empty-icon">📊</div>
-            No activity yet — start adding expenses!
+            No activity yet — start adding expenses or settlements!
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  if (visibleActivities.length === 0) {
+    return (
+      <Card>
+        <div className="card-header">
+          <div className="activity-feed-header">
+            <div className="activity-feed-titleblock">
+              <h2>Activity Feed</h2>
+              <p>Recent actions and changes</p>
+            </div>
+            <Button variant="secondary" onClick={() => loadActivities({ silent: false })} disabled={refreshing}>
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
+        </div>
+        <div className="card-content">
+          <div className="empty-state">
+            <div className="empty-icon">✅</div>
+            All caught up. No unread activity right now.
           </div>
         </div>
       </Card>
@@ -240,12 +338,20 @@ export default function ActivityFeed({ groupId = null, limit = 20 }) {
   return (
     <Card>
       <div className="card-header">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="activity-feed-header">
+          <div className="activity-feed-titleblock">
             <h2>Activity Feed</h2>
             <p>Recent actions and changes</p>
           </div>
-          <span className="badge badge-violet">{activities.length} activities</span>
+          <div className="activity-feed-actions">
+            <span className="badge badge-violet">{visibleActivities.length} {visibleActivities.length === 1 ? 'activity' : 'activities'}</span>
+            <Button variant="secondary" onClick={() => loadActivities({ silent: false })} disabled={refreshing}>
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </Button>
+            <Button variant="primary" onClick={handleMarkAllRead} disabled={unreadActivities.length === 0}>
+              Mark all read
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -255,73 +361,52 @@ export default function ActivityFeed({ groupId = null, limit = 20 }) {
             <div key={dateKey} className="activity-day">
               <div className="activity-date-header">
                 <span className="activity-date">{dateKey}</span>
-                <span className="activity-count">{dayActivities.length} actions</span>
+                <span className="activity-count">{dayActivities.length} {dayActivities.length === 1 ? 'action' : 'actions'}</span>
               </div>
 
               <div className="activity-list">
                 {dayActivities.map((activity) => {
-                  const changedByName = getPersonName(activity.changedBy, 'Someone');
-                  const changeDetails = getChangeDetails(activity);
+                  const changedByName = getDisplayName(activity.userId, 'Someone');
+                  const meta = getActivityMeta(activity);
+                  const activityDate = getActivityDate(activity);
+                  const activitySummary = getActivitySummary(activity);
+                  const activityDetails = getActivityDetails(activity);
+                  const unread = !activity.isRead;
 
                   return (
-                    <div key={activity.id} className="activity-item">
-                      <div
-                        className="activity-icon"
-                        style={{ backgroundColor: activity.color }}
-                      >
-                        {activity.icon}
+                    <div key={activity._id} className={`activity-item ${unread ? 'activity-item-unread' : ''}`.trim()}>
+                      <div className="activity-icon" style={{ backgroundColor: meta.color }}>
+                        <span>{meta.icon}</span>
                       </div>
 
                       <div className="activity-content">
                         <div className="activity-header">
-                          <span className="activity-action">
-                            {ACTION_LABELS[activity.action] || activity.action}
-                          </span>
-                          <span className="activity-time">{formatTime(activity.changedAt)}</span>
+                          <span className="activity-action">{meta.label}</span>
+                          <span className="activity-time">{formatTime(activityDate)}</span>
                         </div>
 
-                        <p className="activity-description">{activity.description}</p>
+                        <p className="activity-description">{getActivityHeadline(activity)}</p>
 
-                        {activity.amount && (
-                          <div className="activity-amount">
-                            {formatCurrency(activity.amount)}
-                          </div>
-                        )}
+                        {activitySummary && <div className="activity-summary">{activitySummary}</div>}
 
-                        {activity.expense && (
-                          <div className="activity-expense">
-                            <span className="activity-expense-label">Expense:</span>
-                            <span className="activity-expense-name">
-                              {activity.expense.description || 'Untitled'}
-                            </span>
-                            {activity.expense.group?.name && (
-                              <span className="activity-expense-group">
-                                in {activity.expense.group.name}
-                              </span>
-                            )}
-                          </div>
-                        )}
-
-                        {changeDetails && (
-                          <div className="activity-changes">
-                            {changeDetails.map((detail, index) => (
-                              <div key={index} className="activity-change">
-                                {detail}
+                        {activityDetails.length > 0 && (
+                          <div className="activity-meta-grid">
+                            {activityDetails.map((detail) => (
+                              <div key={`${activity._id}-${detail.label}`} className="activity-meta-chip">
+                                <span className="activity-meta-label">{detail.label}</span>
+                                <span className="activity-meta-value">{detail.value}</span>
                               </div>
                             ))}
                           </div>
                         )}
 
-                        {activity.reason && (
-                          <div className="activity-reason">
-                            <span className="activity-reason-label">Reason:</span>
-                            <span className="activity-reason-text">{activity.reason}</span>
+                        <div className="activity-footer">
+                          <div className="activity-user">
+                            <span className="activity-user-label">By</span>
+                            <span className="activity-user-name" style={inlineValueStyle}>{changedByName}</span>
                           </div>
-                        )}
 
-                        <div className="activity-user">
-                          <span className="activity-user-label">By:</span>
-                          <span className="activity-user-name">{changedByName}</span>
+                          {unread && <span className="badge badge-green">Unread</span>}
                         </div>
                       </div>
                     </div>
