@@ -7,10 +7,17 @@ import { prettifyGroupType } from '../../utils/stringUtils.js';
  * @param {object} props - Component props
  * @param {object} props.group - Group data
  * @param {boolean} props.isSelected - Whether group is selected
+ * @param {string|null} props.currentUserId - Current user ID
  * @param {function} props.onClick - Click handler
  * @param {function} props.onEdit - Edit handler
+ * @param {function} props.onAddExpense - Add expense handler
  */
-export default function GroupCard({ group, isSelected, onClick, onEdit }) {
+export default function GroupCard({ group, isSelected, currentUserId, onClick, onEdit, onAddExpense }) {
+  const creatorId = Array.isArray(group.createdBy)
+    ? group.createdBy[0]?._id || group.createdBy[0]?.id || group.createdBy[0]
+    : group.createdBy?._id || group.createdBy?.id || group.createdBy;
+  const canEdit = Boolean(currentUserId) && String(creatorId || '') === String(currentUserId);
+
   return (
     <div
       className="group-card"
@@ -49,18 +56,25 @@ export default function GroupCard({ group, isSelected, onClick, onEdit }) {
         </div>
       </div>
       <div className="mt-2 text-sm muted">Total Spend: {formatCurrency(group.totalSpend)}</div>
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         <Button
           type="button"
-          variant="ghost"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit(group);
-          }}
+          variant="secondary"
+          onClick={() => onAddExpense(group._sourceGroupIds?.[0] || group._id || group.groupKey)}
           style={{ padding: '4px 8px', fontSize: '12px' }}
         >
-          Edit
+          Add Expense
         </Button>
+        {canEdit && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onEdit(group)}
+            style={{ padding: '4px 8px', fontSize: '12px' }}
+          >
+            Edit
+          </Button>
+        )}
       </div>
     </div>
   );

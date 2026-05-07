@@ -499,6 +499,7 @@ textarea:focus-visible {
 .card.stat-red,
 .card.stat-amber {
   border-top-width: 3px;
+  min-height: 120px;
 }
 
 .card.stat-violet { border-top-color: var(--primary); }
@@ -1595,6 +1596,7 @@ select.input option {
 
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: row;
   }
 
   .content-grid {

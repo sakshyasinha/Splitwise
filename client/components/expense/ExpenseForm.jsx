@@ -17,7 +17,10 @@ const CATEGORIES = [
   { label: "Shopping" },
 ];
 
-export default function ExpenseForm({ onSuccess, editingExpense = null }) {
+const MAX_RECEIPT_FILE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_RECEIPT_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']);
+
+export default function ExpenseForm({ onSuccess, editingExpense = null, initialGroupId = '' }) {
   const { addExpense, groups, expenses, loading, error, clearError, updateExpense, fetchExpenses } = useExpenses();
   const { user } = useAuth();
   const toast = useToast();
@@ -34,6 +37,18 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
     reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsDataURL(file);
   });
+
+  const validateReceiptFile = (file) => {
+    if (!ALLOWED_RECEIPT_TYPES.has(file.type)) {
+      return 'Receipt must be a JPG, PNG, WebP, or GIF image';
+    }
+
+    if (file.size > MAX_RECEIPT_FILE_SIZE) {
+      return 'Receipt image must be 5MB or smaller';
+    }
+
+    return '';
+  };
 
   const [activeTab, setActiveTab] = useState("expense"); // 'expense' or 'payment'
 
@@ -141,6 +156,16 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       setActiveTab("expense");
     }
   }, [editingExpense, currentUserEmail]);
+
+  useEffect(() => {
+    if (editingExpense || !initialGroupId) return;
+
+    setForm((prev) => (
+      String(prev.groupId || '') === String(initialGroupId)
+        ? prev
+        : { ...prev, groupId: initialGroupId }
+    ));
+  }, [editingExpense, initialGroupId]);
 
   const paymentRecipients = useMemo(
     () => paymentFriends.filter((email) => String(email).toLowerCase() !== String(paymentPaidByEmail).toLowerCase()),
@@ -468,8 +493,9 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      setLocalError('Receipt must be an image file');
+    const fileError = validateReceiptFile(file);
+    if (fileError) {
+      setLocalError(fileError);
       event.target.value = '';
       return;
     }
@@ -488,8 +514,9 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-    if (files.some((file) => !file.type.startsWith('image/'))) {
-      setLocalError('Only image files are allowed');
+    const fileError = files.map((file) => validateReceiptFile(file)).find(Boolean);
+    if (fileError) {
+      setLocalError(fileError);
       event.target.value = '';
       return;
     }
@@ -938,7 +965,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
               <input
                 type="file"
                 className="input"
-                accept="image/*"
+                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
                 onChange={handleReceiptChange}
               />
               {receiptPreview && (

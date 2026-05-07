@@ -6,10 +6,17 @@ import GroupCard from './GroupCard.jsx';
  * @param {object} props - Component props
  * @param {Array} props.groups - Array of groups
  * @param {string|null} props.selectedGroupId - Selected group ID
+ * @param {string|null} props.currentUserId - Current user ID
  * @param {function} props.onGroupClick - Group click handler
  * @param {function} props.onGroupEdit - Group edit handler
+ * @param {function} props.onGroupAddExpense - Add expense handler
  */
-export default function GroupList({ groups, selectedGroupId, onGroupClick, onGroupEdit }) {
+export default function GroupList({ groups, selectedGroupId, currentUserId, onGroupClick, onGroupEdit, onGroupAddExpense }) {
+  const isSelectedGroup = (group) => {
+    const sourceGroupIds = Array.isArray(group._sourceGroupIds) ? group._sourceGroupIds.map(String) : [];
+    return String(selectedGroupId) === String(group.groupKey) || sourceGroupIds.includes(String(selectedGroupId));
+  };
+
   return (
     <Card>
       <div className="card-header">
@@ -28,9 +35,11 @@ export default function GroupList({ groups, selectedGroupId, onGroupClick, onGro
               <GroupCard
                 key={group.groupKey}
                 group={group}
-                isSelected={String(selectedGroupId) === String(group.groupKey)}
+                isSelected={isSelectedGroup(group)}
+                currentUserId={currentUserId}
                 onClick={() => onGroupClick(group.groupKey)}
                 onEdit={onGroupEdit}
+                onAddExpense={onGroupAddExpense}
               />
             ))}
           </div>

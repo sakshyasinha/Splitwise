@@ -122,6 +122,29 @@ const SpendingTrends = ({ spending = {}, trends = {} }) => {
   const byMonth = spending.byMonth || {};
   const sortedMonths = Object.keys(byMonth).sort();
   const maxMonthlyAmount = Math.max(...Object.values(byMonth).map((amount) => Number(amount) || 0), 0);
+  const normalizedMonthlyPoints = sortedMonths.map((month, index) => {
+    const amount = Number(byMonth[month]) || 0;
+    const x = sortedMonths.length > 1
+      ? (index / (sortedMonths.length - 1)) * 100
+      : 50;
+    const y = maxMonthlyAmount > 0 ? 60 - (amount / maxMonthlyAmount) * 46 - 8 : 48;
+
+    return { month, amount, x, y };
+  });
+
+  const linePath = normalizedMonthlyPoints.length > 1
+    ? normalizedMonthlyPoints.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
+    : '';
+
+  const areaPath = normalizedMonthlyPoints.length > 0
+    ? [
+        `M ${normalizedMonthlyPoints[0].x} 60`,
+        `L ${normalizedMonthlyPoints[0].x} ${normalizedMonthlyPoints[0].y}`,
+        ...normalizedMonthlyPoints.slice(1).map((point) => `L ${point.x} ${point.y}`),
+        `L ${normalizedMonthlyPoints[normalizedMonthlyPoints.length - 1].x} 60`,
+        'Z'
+      ].join(' ')
+    : '';
 
   return (
     <Card className="spending-trends">
@@ -145,6 +168,7 @@ const SpendingTrends = ({ spending = {}, trends = {} }) => {
       </div>
 
       <div className="monthly-chart">
+        <div className="chart-glow" aria-hidden="true" />
         <svg className="line-chart" viewBox="0 0 100 60" preserveAspectRatio="none">
           {/* Grid lines */}
           {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
@@ -160,63 +184,60 @@ const SpendingTrends = ({ spending = {}, trends = {} }) => {
             />
           ))}
 
-          {/* Line path */}
-          {sortedMonths.length > 1 && (
+          {areaPath && (
             <path
-              d={sortedMonths.map((month, index) => {
-                const amount = byMonth[month];
-                const x = (index / (sortedMonths.length - 1)) * 100;
-                const y = 60 - (amount / maxMonthlyAmount) * 55 - 2;
-                return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-              }).join(' ')}
+              d={areaPath}
+              fill="url(#trendAreaFill)"
+              stroke="none"
+            />
+          )}
+
+          {/* Line path */}
+          {linePath && (
+            <path
+              d={linePath}
               fill="none"
-              stroke="#4CAF50"
-              strokeWidth="2"
+              stroke="var(--primary)"
+              strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           )}
 
           {/* Data points */}
-          {sortedMonths.map((month, index) => {
-            const amount = byMonth[month];
-            const x = sortedMonths.length > 1
-              ? (index / (sortedMonths.length - 1)) * 100
-              : 50;
-            const y = 60 - (amount / maxMonthlyAmount) * 55 - 2;
-
-            return (
-              <g key={month}>
+          {normalizedMonthlyPoints.map((point) => (
+            <g key={point.month}>
                 <circle
-                  cx={x}
-                  cy={y}
-                  r="3"
-                  fill="#4CAF50"
-                  stroke="#fff"
-                  strokeWidth="1"
+                  cx={point.x}
+                  cy={point.y}
+                  r="3.3"
+                  fill="var(--card)"
+                  stroke="var(--primary)"
+                  strokeWidth="1.6"
                 />
-                <title>{month}: {formatCurrency(amount)}</title>
+                <title>{point.month}: {formatCurrency(point.amount)}</title>
               </g>
-            );
-          })}
+          ))}
+
+          <defs>
+            <linearGradient id="trendAreaFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
         </svg>
 
         {/* X-axis labels */}
         <div className="chart-labels">
-          {sortedMonths.map((month, index) => {
-            const x = sortedMonths.length > 1
-              ? (index / (sortedMonths.length - 1)) * 100
-              : 50;
-            return (
-              <div
-                key={month}
-                className="chart-label"
-                style={{ left: `${x}%` }}
-              >
-                {month}
-              </div>
-            );
-          })}
+          {normalizedMonthlyPoints.map((point) => (
+            <div
+              key={point.month}
+              className="chart-label"
+              style={{ left: `${point.x}%` }}
+            >
+              {point.month}
+            </div>
+          ))}
         </div>
       </div>
     </Card>
@@ -323,6 +344,8 @@ const TimeDistribution = ({ timeDistribution }) => {
   const byDayOfWeek = timeDistribution.byDayOfWeek || {};
   const maxHourAmount = Math.max(...Object.values(byHour).map(Number), 0);
   const maxDayAmount = Math.max(...Object.values(byDayOfWeek).map(Number), 0);
+  const peakHourAmount = Number(timeDistribution.peakHour?.amount ?? 0) || 0;
+  const peakDayAmount = Number(timeDistribution.peakDay?.amount ?? 0) || 0;
 
   if (Object.keys(byHour).length === 0 && Object.keys(byDayOfWeek).length === 0) {
     return null;
@@ -331,10 +354,21 @@ const TimeDistribution = ({ timeDistribution }) => {
   return (
     <Card className="time-distribution">
       <h3>Time Distribution</h3>
+      <div className="distribution-lede">
+        When spend happens, at a glance.
+      </div>
       <div className="time-sections">
         {Object.keys(byHour).length > 0 && (
           <div className="time-section">
             <h4>By Hour of Day</h4>
+            <div className="distribution-summary">
+              <div className="distribution-pill">
+                <span className="distribution-pill-label">Peak hour</span>
+                <span className="distribution-pill-value">
+                  {timeDistribution.peakHour?.hour}:00 · {formatCurrency(peakHourAmount)}
+                </span>
+              </div>
+            </div>
             <div className="hour-chart">
               {Object.entries(byHour).map(([hour, amount]) => {
                 const numericAmount = Number(amount) || 0;
@@ -364,6 +398,14 @@ const TimeDistribution = ({ timeDistribution }) => {
         {Object.keys(byDayOfWeek).length > 0 && (
           <div className="time-section">
             <h4>By Day of Week</h4>
+            <div className="distribution-summary">
+              <div className="distribution-pill">
+                <span className="distribution-pill-label">Peak day</span>
+                <span className="distribution-pill-value">
+                  {timeDistribution.peakDay?.day} · {formatCurrency(peakDayAmount)}
+                </span>
+              </div>
+            </div>
             <div className="day-chart">
               {Object.entries(byDayOfWeek).map(([day, amount]) => {
                 const numericAmount = Number(amount) || 0;
