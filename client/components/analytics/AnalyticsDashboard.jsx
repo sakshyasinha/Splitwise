@@ -76,6 +76,7 @@ const AnalyticsDashboard = () => {
   );
 };
 
+
 const OverviewStats = ({ overview }) => (
   <Card className="overview-stats">
     <h3>Overview</h3>
@@ -132,6 +133,44 @@ const SpendingTrends = ({ spending = {}, trends = {} }) => {
     return { month, amount, x, y };
   });
 
+
+const AnalyticsIntro = ({ overview, trends }) => {
+  const netBalance = Number(overview?.netBalance || 0);
+  const trendLabel = trends?.trend === 'increasing' ? 'Increasing' : trends?.trend === 'decreasing' ? 'Decreasing' : 'Stable';
+
+  return (
+    <section className="analytics-intro">
+      <div className="analytics-intro-copy">
+        <div className="analytics-intro-kicker">Insight snapshot</div>
+        <h3>What changed in this window</h3>
+        <p>
+          This view condenses the last few days into the few signals that matter most: total spend, shared spend, and whether you are net positive or negative.
+        </p>
+      </div>
+
+      <div className="analytics-intro-metrics" aria-label="Analytics summary">
+        <div className="intro-pill">
+          <span className="intro-pill-label">Spend</span>
+          <span className="intro-pill-value">{formatCurrency(overview.totalAmount)}</span>
+        </div>
+        <div className="intro-pill">
+          <span className="intro-pill-label">Shared</span>
+          <span className="intro-pill-value">{formatCurrency(overview.sharedTotal)}</span>
+        </div>
+        <div className="intro-pill">
+          <span className="intro-pill-label">Net</span>
+          <span className={`intro-pill-value ${netBalance >= 0 ? 'positive' : 'negative'}`}>
+            {formatCurrency(netBalance)}
+          </span>
+        </div>
+        <div className="intro-pill intro-pill-quiet">
+          <span className="intro-pill-label">Trend</span>
+          <span className="intro-pill-value">{trendLabel}</span>
+        </div>
+      </div>
+    </section>
+  );
+};
   const linePath = normalizedMonthlyPoints.length > 1
     ? normalizedMonthlyPoints.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
     : '';

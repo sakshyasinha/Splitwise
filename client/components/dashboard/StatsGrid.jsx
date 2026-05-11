@@ -13,7 +13,7 @@ import { formatCurrency } from '../../utils/formatCurrency.js';
 export default function StatsGrid({ groupCount, totalLent, totalOwed, expenseCount, totalSpend }) {
   return (
     <section className="stats-grid">
-      <Card className="stat-violet">
+      <Card className="stat-violet stat-tall">
         <div className="card-content">
           <div className="metric-icon">👥</div>
           <div className="metric-label">Groups</div>
@@ -21,7 +21,7 @@ export default function StatsGrid({ groupCount, totalLent, totalOwed, expenseCou
           <div className="metric-sub">Active shared circles</div>
         </div>
       </Card>
-      <Card className="stat-green">
+      <Card className="stat-green stat-lift">
         <div className="card-content">
           <div className="metric-icon">🟢</div>
           <div className="metric-label">You Lent</div>
@@ -29,7 +29,7 @@ export default function StatsGrid({ groupCount, totalLent, totalOwed, expenseCou
           <div className="metric-sub">Others owe you</div>
         </div>
       </Card>
-      <Card className="stat-red">
+      <Card className="stat-red stat-lift-soft">
         <div className="card-content">
           <div className="metric-icon">🟠</div>
           <div className="metric-label">You Borrowed</div>
@@ -37,7 +37,7 @@ export default function StatsGrid({ groupCount, totalLent, totalOwed, expenseCou
           <div className="metric-sub">Pending dues</div>
         </div>
       </Card>
-      <Card className="stat-amber">
+      <Card className="stat-amber stat-tall">
         <div className="card-content">
           <div className="metric-icon">🧾</div>
           <div className="metric-label">Expenses</div>
