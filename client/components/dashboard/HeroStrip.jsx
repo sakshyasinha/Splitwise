@@ -9,11 +9,6 @@ export default function HeroStrip({ pendingDuesCount }) {
       <div>
         <h1>Your shared finances,&nbsp;at a glance.</h1>
         <p>Shared money is less stressful when everyone sees the same truth.</p>
-        <div className="hero-legend" aria-hidden="true">
-          <span>Live ledger</span>
-          <span>Shared circles</span>
-          <span>Settle fast</span>
-        </div>
       </div>
       <span className="due-pill">
         {pendingDuesCount === 0
