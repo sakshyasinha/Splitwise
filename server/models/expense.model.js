@@ -315,8 +315,9 @@ expenseSchema.virtual('totalOwed').get(function() {
 // Pre-save middleware to validate and compute derived fields
 expenseSchema.pre('save', function(next) {
   try {
-    // Validate total payers amount equals expense amount (only if payers exist)
-    if (this.payers && Array.isArray(this.payers) && this.payers.length > 0) {
+    // Validate total payers amount equals expense amount (only when creating, not updating)
+    // Payers is a historical record that shouldn't change when updating an expense amount
+    if (this.isNew && this.payers && Array.isArray(this.payers) && this.payers.length > 0) {
       const totalPaid = this.payers.reduce((sum, payer) => {
         const payerAmount = payer.amount ? Number(payer.amount) : 0;
         return sum + payerAmount;
