@@ -356,6 +356,13 @@ export default function ExpenseList({ onEdit }) {
                 .map((participant) => getPersonName(participant?.userId, 'Member'))
                 .filter((name, index, arr) => arr.indexOf(name) === index); // Remove duplicates
 
+              // Check if expense is settled
+              const pendingCount = (expense.participants || []).filter(p => p?.status === 'pending').length;
+              const totalParticipants = (expense.participants || []).length;
+              const isPersonalExpense = totalParticipants === 1;
+              const isPayment = expense.splitType === 'payment';
+              const isSettled = !isPersonalExpense && !isPayment && pendingCount === 0;
+
               return (
                 <li key={expense._id} className="expense-item" style={{ alignItems: 'flex-start', paddingTop: 14, paddingBottom: 14 }}>
 
@@ -505,7 +512,7 @@ export default function ExpenseList({ onEdit }) {
                         )}
 
                         {/* ACTION ROW */}
-                        {canManage ? (
+                        {canManage && !isSettled ? (
                           isConfirming ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
                               <span className="text-sm" style={{ color: 'var(--danger)' }}>Delete?</span>
@@ -549,7 +556,9 @@ export default function ExpenseList({ onEdit }) {
                             </div>
                           )
                         ) : (
-                          <div className="text-sm muted" style={{ marginTop: 6 }}>View only</div>
+                          <div className="text-sm muted" style={{ marginTop: 6 }}>
+                            {isSettled ? '' : 'View only'}
+                          </div>
                         )}
                       </>
                     )}
