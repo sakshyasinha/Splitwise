@@ -167,6 +167,23 @@ const DashboardPage = () => {
     return balance;
   };
 
+  const getGroupBalanceBreakdown = (groupExpenses, targetUserId) => {
+    return (groupExpenses || []).reduce(
+      (totals, expense) => {
+        const balance = getUserBalanceForExpense(expense, targetUserId);
+
+        if (balance > 0) {
+          totals.lentAmount += balance;
+        } else if (balance < 0) {
+          totals.borrowedAmount += Math.abs(balance);
+        }
+
+        return totals;
+      },
+      { borrowedAmount: 0, lentAmount: 0 }
+    );
+  };
+
   const getExpensePeople = (expense) => {
     const people = [];
 
@@ -198,9 +215,8 @@ const DashboardPage = () => {
             ? exactMatchedDues
             : visibleDues.filter((due) => normalizeGroupName(getDueGroupName(due)) === normalizeGroupName(group.name));
         const myTotalDue = dues.reduce((sum, due) => sum + Number(due.amount || 0), 0);
-        const netBalance = userId
-          ? groupExpenses.reduce((sum, expense) => sum + getUserBalanceForExpense(expense, userId), 0)
-          : 0;
+        const balanceBreakdown = userId ? getGroupBalanceBreakdown(groupExpenses, userId) : { borrowedAmount: 0, lentAmount: 0 };
+        const netBalance = balanceBreakdown.lentAmount - balanceBreakdown.borrowedAmount;
         const totalDue = groupExpenses.reduce(
           (sum, expense) =>
             sum +
@@ -228,6 +244,8 @@ const DashboardPage = () => {
           totalDue,
           myTotalDue,
           netBalance,
+          borrowedAmount: balanceBreakdown.borrowedAmount,
+          lentAmount: balanceBreakdown.lentAmount,
           memberDues,
           memberNames,
           memberCount,
@@ -274,9 +292,8 @@ const DashboardPage = () => {
 
     return Array.from(byName.values()).map((group) => {
       const totalSpend = (group.groupExpenses || []).reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-      const netBalance = userId
-        ? (group.groupExpenses || []).reduce((sum, expense) => sum + getUserBalanceForExpense(expense, userId), 0)
-        : 0;
+      const balanceBreakdown = userId ? getGroupBalanceBreakdown(group.groupExpenses || [], userId) : { borrowedAmount: 0, lentAmount: 0 };
+      const netBalance = balanceBreakdown.lentAmount - balanceBreakdown.borrowedAmount;
       const totalDue = (group.groupExpenses || []).reduce(
         (sum, expense) =>
           sum +
@@ -304,6 +321,8 @@ const DashboardPage = () => {
         totalDue,
         myTotalDue,
         netBalance,
+        borrowedAmount: balanceBreakdown.borrowedAmount,
+        lentAmount: balanceBreakdown.lentAmount,
         memberDues,
         memberNames,
         memberCount: Math.max(memberNames.length, 1),
@@ -355,25 +374,32 @@ const DashboardPage = () => {
     : [];
 
   const selectedGroupPosition = selectedGroup
-    ? Number(selectedGroup.netBalance || 0) < 0
+    ? Number(selectedGroup.borrowedAmount || 0) > 0
       ? {
           tone: 'danger',
           badgeClass: 'badge-red',
           badgeText: 'Borrowed',
-          amount: Math.abs(Number(selectedGroup.netBalance || 0)),
+          amount: Number(selectedGroup.borrowedAmount || 0),
+          secondaryText: Number(selectedGroup.lentAmount || 0) > 0
+            ? `Others owe you ${formatCurrency(Number(selectedGroup.lentAmount || 0))}`
+            : '',
         }
-      : Number(selectedGroup.netBalance || 0) > 0
+      : Number(selectedGroup.lentAmount || 0) > 0
         ? {
             tone: 'success',
             badgeClass: 'badge-green',
             badgeText: 'Lent',
-            amount: Number(selectedGroup.netBalance || 0),
+          amount: Number(selectedGroup.lentAmount || 0),
+          secondaryText: Number(selectedGroup.borrowedAmount || 0) > 0
+            ? `You owe ${formatCurrency(Number(selectedGroup.borrowedAmount || 0))}`
+            : '',
           }
         : {
             tone: 'success',
             badgeClass: 'badge-green',
             badgeText: 'Settled',
             amount: 0,
+          secondaryText: '',
           }
     : null;
 

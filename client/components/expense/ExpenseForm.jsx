@@ -1285,7 +1285,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                   <input
                     type="email"
                     className="input"
-                    required
+                    required={participants.length === 0}
                     placeholder="participant@email.com"
                     list="participants-datalist"
                     value={participantInput}

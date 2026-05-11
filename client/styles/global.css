@@ -357,9 +357,12 @@ textarea:focus-visible {
   justify-content: space-between;
   align-items: flex-end;
   gap: 18px;
-  padding: 28px;
+  padding: 30px 28px 28px;
   border-radius: 28px;
-  background: linear-gradient(135deg, var(--primary), var(--success));
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.2), transparent 24%),
+    radial-gradient(circle at 84% 22%, rgba(255, 255, 255, 0.16), transparent 20%),
+    linear-gradient(135deg, #0e746d 0%, #1a8a57 56%, #177d69 100%);
   color: var(--text-inverse);
   box-shadow: var(--shadow-md);
 }
@@ -373,21 +376,21 @@ textarea:focus-visible {
 }
 
 .hero-strip::before {
-  width: 220px;
-  height: 220px;
-  top: -100px;
-  right: 12%;
-  background: rgba(255, 255, 255, 0.12);
-  filter: blur(8px);
+  width: 280px;
+  height: 280px;
+  top: -120px;
+  right: 10%;
+  background: rgba(255, 255, 255, 0.09);
+  filter: blur(10px);
 }
 
 .hero-strip::after {
-  width: 300px;
-  height: 300px;
-  bottom: -170px;
-  right: -80px;
-  background: rgba(255, 255, 255, 0.08);
-  filter: blur(14px);
+  width: 340px;
+  height: 340px;
+  bottom: -180px;
+  right: -90px;
+  background: rgba(255, 255, 255, 0.06);
+  filter: blur(16px);
 }
 
 .hero-strip h1 {
@@ -403,6 +406,30 @@ textarea:focus-visible {
   color: rgba(255, 255, 255, 0.9);
   font-size: 1.02rem;
   line-height: 1.65;
+}
+
+.hero-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.hero-legend span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
 
 .due-pill {
@@ -429,6 +456,26 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+}
+
+.stats-grid .card {
+  transform: translateY(0);
+}
+
+.stats-grid .card:nth-child(2) {
+  transform: translateY(8px);
+}
+
+.stats-grid .card:nth-child(3) {
+  transform: translateY(-4px);
+}
+
+.stats-grid .card:nth-child(4) {
+  transform: translateY(10px);
+}
+
+.stats-grid .card:hover {
+  transform: translateY(-2px);
 }
 
 .content-grid {
@@ -519,6 +566,18 @@ textarea:focus-visible {
 .card.stat-amber {
   border-top-width: 3px;
   min-height: 120px;
+}
+
+.card.stat-tall {
+  min-height: 132px;
+}
+
+.card.stat-lift {
+  margin-top: -6px;
+}
+
+.card.stat-lift-soft {
+  margin-top: 4px;
 }
 
 .card.stat-violet { border-top-color: var(--primary); }
@@ -1017,12 +1076,14 @@ select.input option {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 15px 16px 15px 18px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 18px;
   cursor: pointer;
   transition: transform var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast);
+  border-left-width: 4px;
+  border-left-color: var(--primary-dim);
 }
 
 .group-card:hover {
@@ -1030,6 +1091,18 @@ select.input option {
   border-color: var(--primary-dim);
   background: var(--card-strong);
   box-shadow: var(--shadow-sm);
+}
+
+.group-card::after {
+  content: '';
+  position: absolute;
+  inset: auto 14px 14px auto;
+  width: 96px;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary-dim), transparent);
+  opacity: 0.7;
+  pointer-events: none;
 }
 
 .group-card:active {
@@ -1050,7 +1123,7 @@ select.input option {
   width: 40px;
   height: 40px;
   border-radius: 14px;
-  background: var(--primary-dim);
+  background: linear-gradient(145deg, rgba(15, 118, 110, 0.14), rgba(194, 65, 12, 0.1));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1708,6 +1781,17 @@ select.input option {
 
   .hero-strip {
     padding: 22px;
+  }
+
+  .hero-legend {
+    margin-top: 12px;
+  }
+
+  .stats-grid .card:nth-child(2),
+  .stats-grid .card:nth-child(3),
+  .stats-grid .card:nth-child(4) {
+    transform: none;
+    margin-top: 0;
   }
 
   .hero-strip p {
