@@ -116,6 +116,9 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
     );
   }, [form, touched]);
 
+  // Store existing payers data when editing
+  const [existingPayers, setExistingPayers] = useState(null);
+
   // Initialize form when editing
   useEffect(() => {
     if (editingExpense) {
@@ -137,6 +140,11 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
         (editingExpense.participants || []).map((p) => p.userId?.email || p.userId || p)
       );
       setPaidByEmail(String(editingExpense.paidBy?.email || editingExpense.createdBy?.email || currentUserEmail || '').toLowerCase());
+      // Store existing payers data to include in update request
+      setExistingPayers(editingExpense.payers || []);
+      // Clear any previous error messages
+      setLocalError("");
+      clearError();
       // Default to expense tab when editing
       setActiveTab("expense");
     }
@@ -458,6 +466,22 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
   const onChange = (e) => {
     clearError();
     const { name, value } = e.target;
+    
+    // When editing and amount changes, recalculate payers proportionally
+    if (isEditing && name === 'amount' && existingPayers && existingPayers.length > 0) {
+      const oldAmount = Number(form.amount) || 0;
+      const newAmount = Number(value) || 0;
+      
+      if (oldAmount > 0 && newAmount > 0) {
+        const scaleFactor = newAmount / oldAmount;
+        const scaledPayers = existingPayers.map(payer => ({
+          ...payer,
+          amount: (Number(payer.amount) || 0) * scaleFactor
+        }));
+        setExistingPayers(scaledPayers);
+      }
+    }
+    
     setForm((prev) => ({ ...prev, [name]: value }));
     setTouched((prev) => ({ ...prev, [name]: true }));
   };
@@ -687,19 +711,27 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
 
     try {
       if (isEditing) {
-        await updateExpense(editingExpense._id, {
-          description: form.description,
-          amount: Number(form.amount),
-          groupId: form.groupId,
-          participants,
-          category: selectedCategory,
-          currency: form.currency || 'INR',
-          notes: form.notes?.trim() || '',
-          receiptUrl: form.receiptUrl?.trim() || '',
-          images: parseTextList(form.imageUrls),
-          tags: parseTextList(form.tags),
-        });
-        toast.success("Expense updated successfully");
+        try {
+          await updateExpense(editingExpense._id, {
+            description: form.description,
+            amount: Number(form.amount),
+            groupId: form.groupId,
+            participants,
+            category: selectedCategory,
+            currency: form.currency || 'INR',
+            notes: form.notes?.trim() || '',
+            receiptUrl: form.receiptUrl?.trim() || '',
+            images: parseTextList(form.imageUrls),
+            tags: parseTextList(form.tags),
+          });
+          toast.success("Expense updated successfully");
+        } catch (updateErr) {
+          // Show backend validation errors
+          const errorMessage = updateErr?.response?.data?.message || updateErr?.message || 'Failed to update expense';
+          setLocalError(errorMessage);
+          toast.error(errorMessage);
+          throw updateErr;
+        }
       } else {
         // Calculate amounts based on split type
         const expenseAmounts = calculateExpenseAmounts();
@@ -980,7 +1012,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
           )}
 
           {/* ── GROUP SELECT (Only for Expense) ── */}
-          {!isPayment && (
+          {!isPayment && !isEditing && (
             <div className="input-block">
               <span className="input-label">Group <span style={{ color: 'var(--danger)' }}>*</span></span>
               <select
@@ -1015,7 +1047,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
             </div>
           )}
 
-          {!isPayment && (
+          {!isPayment && !isEditing && (
             <div className="input-block">
               <span className="input-label">Paid by <span style={{ color: 'var(--danger)' }}>*</span></span>
               <select
@@ -1035,6 +1067,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                   </option>
                 ))}
               </select>
+              {isEditing && <p className="text-sm muted" style={{ marginTop: 4 }}>Cannot change who paid for existing expense</p>}
             </div>
           )}
 
@@ -1275,8 +1308,8 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
             </div>
           )}
 
-          {/* ── PARTICIPANTS (Only for Expense) ── */}
-          {!isPayment && (
+          {/* ── PARTICIPANTS (Only for Expense, hidden when editing) ── */}
+          {!isPayment && !isEditing && (
             <div className="input-block">
               <span className="input-label">Split with<span style={{ color: 'var(--danger)' }}> *</span></span>
               <div className="input-row" style={{ marginTop: 4 }}>
@@ -1358,7 +1391,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                 </div>
               )}
 
-              {participants.length > 0 && (
+              {participants.length > 0 && !isEditing && (
                 <div className="input-block" style={{ marginTop: 15 }}>
                   <span className="input-label">Split Type</span>
                   <div className="chips" style={{ marginTop: 6 }}>
@@ -1391,7 +1424,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
                 </div>
               )}
 
-              {participants.length > 0 && expenseSplitType !== 'equal' && expenseSplitType !== 'itemized' && expenseSplitType !== 'adjustment' && (
+              {participants.length > 0 && expenseSplitType !== 'equal' && expenseSplitType !== 'itemized' && expenseSplitType !== 'adjustment' && !isEditing && (
                 <div className="input-block" style={{ marginTop: 15 }}>
                   <span className="input-label">
                     {expenseSplitType === 'exact' ? 'Split by exact amounts' :
