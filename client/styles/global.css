@@ -331,6 +331,25 @@ textarea:focus-visible {
   color: var(--muted);
 }
 
+[data-theme='dark'] .topbar {
+  background: rgba(22, 27, 34, 0.9);
+  border-color: rgba(240, 246, 252, 0.08);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+}
+
+[data-theme='dark'] .topbar-logo {
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.32);
+}
+
+[data-theme='dark'] .topbar-sub {
+  color: var(--muted2);
+}
+
+[data-theme='dark'] .topbar .theme-toggle {
+  background: var(--card-strong);
+  border-color: rgba(240, 246, 252, 0.12);
+}
+
 .hero-strip {
   position: relative;
   overflow: hidden;
@@ -619,6 +638,32 @@ textarea:focus-visible {
   box-shadow: 0 18px 34px var(--primary-glow);
 }
 
+.btn-secondary {
+  background: var(--bg2);
+  color: var(--text);
+  border-color: var(--border2);
+  box-shadow: 0 10px 22px rgba(23, 33, 45, 0.06);
+}
+
+.btn-secondary:hover {
+  background: var(--card-strong);
+  border-color: var(--primary-dim);
+  box-shadow: 0 14px 28px rgba(23, 33, 45, 0.08);
+}
+
+[data-theme='dark'] .btn-secondary {
+  background: rgba(22, 27, 34, 0.95);
+  color: var(--text);
+  border-color: rgba(240, 246, 252, 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
+[data-theme='dark'] .btn-secondary:hover {
+  background: rgba(28, 33, 41, 0.98);
+  border-color: var(--primary-dim);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.32);
+}
+
 .btn-ghost {
   background: var(--card);
   color: var(--muted);
@@ -627,6 +672,18 @@ textarea:focus-visible {
 
 .btn-ghost:hover {
   background: var(--card-strong);
+  color: var(--text);
+  border-color: var(--primary-dim);
+}
+
+[data-theme='dark'] .btn-ghost {
+  background: rgba(22, 27, 34, 0.88);
+  color: var(--muted);
+  border-color: rgba(240, 246, 252, 0.1);
+}
+
+[data-theme='dark'] .btn-ghost:hover {
+  background: rgba(28, 33, 41, 0.98);
   color: var(--text);
   border-color: var(--primary-dim);
 }
@@ -1485,6 +1542,26 @@ select.input option {
 
 .activity-item-unread .activity-icon {
   box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.72), 0 14px 28px rgba(23, 33, 45, 0.12);
+}
+
+[data-theme='dark'] .activity-day {
+  background: linear-gradient(180deg, rgba(22, 27, 34, 0.96), rgba(13, 17, 23, 0.98));
+  border-color: rgba(240, 246, 252, 0.08);
+}
+
+[data-theme='dark'] .activity-item {
+  background: var(--card-strong);
+  border-color: rgba(240, 246, 252, 0.08);
+}
+
+[data-theme='dark'] .activity-item-unread {
+  background: linear-gradient(180deg, rgba(63, 185, 80, 0.08), rgba(22, 27, 34, 0.98));
+  border-color: rgba(63, 185, 80, 0.18);
+}
+
+[data-theme='dark'] .activity-meta-chip {
+  background: rgba(13, 17, 23, 0.96);
+  border-color: rgba(240, 246, 252, 0.08);
 }
 
 .muted { color: var(--muted); }

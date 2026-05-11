@@ -280,7 +280,7 @@ export default function ExpenseList({ onEdit }) {
                       onChange={(e) => setAmountRange(prev => ({ ...prev, min: e.target.value }))}
                       style={{ width: '80px' }}
                     />
-                    <span style={{ margin: '0 8px' }}>to</span>
+                    <span style={{ margin: '10px 6px' }}>to</span>
                     <input
                       type="number"
                       className="input"
@@ -294,22 +294,22 @@ export default function ExpenseList({ onEdit }) {
 
                 {/* Date Range Filter */}
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>Date Range</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block' }}>Date Range</label>
                   <div className="input-row">
                     <input
                       type="date"
                       className="input"
                       value={dateRange.start}
                       onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                      style={{ width: '120px' }}
+                      style={{ width: '140px' }}
                     />
-                    <span style={{ margin: '0 8px' }}>to</span>
+                    <span style={{ margin: '10px 6px' }}>to</span>
                     <input
                       type="date"
                       className="input"
                       value={dateRange.end}
                       onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                      style={{ width: '120px' }}
+                      style={{ width: '140px' }}
                     />
                   </div>
                 </div>

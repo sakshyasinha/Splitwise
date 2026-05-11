@@ -17,10 +17,7 @@ const CATEGORIES = [
   { label: "Shopping" },
 ];
 
-const MAX_RECEIPT_FILE_SIZE = 5 * 1024 * 1024;
-const ALLOWED_RECEIPT_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']);
-
-export default function ExpenseForm({ onSuccess, editingExpense = null, initialGroupId = '' }) {
+export default function ExpenseForm({ onSuccess, editingExpense = null }) {
   const { addExpense, groups, expenses, loading, error, clearError, updateExpense, fetchExpenses } = useExpenses();
   const { user } = useAuth();
   const toast = useToast();
@@ -37,18 +34,6 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
     reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsDataURL(file);
   });
-
-  const validateReceiptFile = (file) => {
-    if (!ALLOWED_RECEIPT_TYPES.has(file.type)) {
-      return 'Receipt must be a JPG, PNG, WebP, or GIF image';
-    }
-
-    if (file.size > MAX_RECEIPT_FILE_SIZE) {
-      return 'Receipt image must be 5MB or smaller';
-    }
-
-    return '';
-  };
 
   const [activeTab, setActiveTab] = useState("expense"); // 'expense' or 'payment'
 
@@ -157,16 +142,6 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
     }
   }, [editingExpense, currentUserEmail]);
 
-  useEffect(() => {
-    if (editingExpense || !initialGroupId) return;
-
-    setForm((prev) => (
-      String(prev.groupId || '') === String(initialGroupId)
-        ? prev
-        : { ...prev, groupId: initialGroupId }
-    ));
-  }, [editingExpense, initialGroupId]);
-
   const paymentRecipients = useMemo(
     () => paymentFriends.filter((email) => String(email).toLowerCase() !== String(paymentPaidByEmail).toLowerCase()),
     [paymentFriends, paymentPaidByEmail]
@@ -250,7 +225,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
 
     if (expenseSplitType === 'adjustment') {
       const totalAdjustments = Object.values(adjustments).reduce((sum, val) => sum + (Number(val) || 0), 0);
-      return Math.abs(totalAdjustments - totalAmount) < 0.01;
+      return totalAdjustments > 0 && totalAdjustments <= totalAmount + 0.01;
     }
 
     return false;
@@ -344,9 +319,12 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
         }
       });
     } else if (expenseSplitType === 'adjustment') {
-      // For adjustment split, use the exact adjustments as amounts
+      const totalAdjustments = Object.values(adjustments).reduce((sum, val) => sum + (Number(val) || 0), 0);
+      const baseAmount = Math.max(totalAmount - totalAdjustments, 0);
+      const baseShare = allParticipants.length > 0 ? baseAmount / allParticipants.length : 0;
+
       allParticipants.forEach(email => {
-        amounts[email] = Number(adjustments[email]) || 0;
+        amounts[email] = baseShare + (Number(adjustments[email]) || 0);
       });
     }
 
@@ -493,9 +471,8 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const fileError = validateReceiptFile(file);
-    if (fileError) {
-      setLocalError(fileError);
+    if (!file.type.startsWith('image/')) {
+      setLocalError('Receipt must be an image file');
       event.target.value = '';
       return;
     }
@@ -514,9 +491,8 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-    const fileError = files.map((file) => validateReceiptFile(file)).find(Boolean);
-    if (fileError) {
-      setLocalError(fileError);
+    if (files.some((file) => !file.type.startsWith('image/'))) {
+      setLocalError('Only image files are allowed');
       event.target.value = '';
       return;
     }
@@ -747,7 +723,8 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
             assignedTo: item.assignedTo
           }))};
         } else if (expenseSplitType === 'adjustment') {
-          splitDetails = { adjustments: adjustments };
+          backendSplitType = 'adjustment';
+          splitDetails = { adjustments };
         }
 
         await addExpense({
@@ -864,7 +841,6 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
                 label="Amount (₹)"
                 type="number"
                 min="1"
-                step="0.01"
                 value={form.amount}
                 onChange={onChange}
                 onBlur={onBlur}
@@ -965,7 +941,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
               <input
                 type="file"
                 className="input"
-                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                accept="image/*"
                 onChange={handleReceiptChange}
               />
               {receiptPreview && (
@@ -1065,7 +1041,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
           {/* ── FRIEND EMAILS (Only for Payment) ── */}
           {isPayment && (
             <div className="input-block">
-              <span className="input-label">Pay to</span>
+              <span className="input-label">Pay to <span style={{ color: 'var(--danger)' }}>*</span></span>
               <div className="input-row" style={{ marginTop: 4 }}>
                 <div style={{ position: 'relative', flex: 1 }}>
                   <input
@@ -1145,7 +1121,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
 
               {paymentPayerOptions.length > 0 && (
                 <div className="input-block" style={{ marginTop: 12 }}>
-                  <span className="input-label">Paid by</span>
+                  <span className="input-label">Paid by <span style={{ color: 'var(--danger)' }}>*</span></span>
                   <select
                     className="input"
                     value={paymentPaidByEmail}
@@ -1218,7 +1194,6 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
                             '0'
                           }
                           min="0"
-                          step={paymentSplitType === 'percentage' ? '1' : '0.01'}
                           value={paymentSplitDetails[email] || ''}
                           onChange={(e) => {
                             setPaymentSplitDetails(prev => ({
@@ -1303,12 +1278,14 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
           {/* ── PARTICIPANTS (Only for Expense) ── */}
           {!isPayment && (
             <div className="input-block">
-              <span className="input-label">Split with</span>
+              <span className="input-label">Split with<span style={{ color: 'var(--danger)' }}> *</span></span>
               <div className="input-row" style={{ marginTop: 4 }}>
                 <div style={{ position: 'relative', flex: 1 }}>
+                  <span> </span>
                   <input
                     type="email"
                     className="input"
+                    required
                     placeholder="participant@email.com"
                     list="participants-datalist"
                     value={participantInput}
@@ -1449,7 +1426,6 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
                             '0'
                           }
                           min="0"
-                          step={expenseSplitType === 'percentage' ? '1' : '0.01'}
                           value={expenseSplitDetails[email] || ''}
                           onChange={(e) => {
                             setExpenseSplitDetails(prev => ({
@@ -1606,7 +1582,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
                 <div className="input-block" style={{ marginTop: 15 }}>
                   <span className="input-label">Split by Adjustments</span>
                   <p className="text-sm muted" style={{ marginTop: 4 }}>
-                    Enter exact amounts for each participant (useful for tips, taxes, or custom splits)
+                    Enter add-on amounts for each participant on top of an equal split (useful for tips, taxes, or custom tweaks)
                   </p>
 
                   <div style={{ marginTop: 10 }}>
@@ -1632,7 +1608,6 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
                           className="input"
                           placeholder="0.00"
                           min="0"
-                          step="0.01"
                           value={adjustments[email] || ''}
                           onChange={(e) => updateAdjustment(email, e.target.value)}
                           style={{ width: 120 }}
@@ -1652,7 +1627,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
                         <span style={{
                           color: Math.abs(remaining) < 0.01 ? 'var(--success)' : 'var(--danger)'
                         }}>
-                          Adjustments Total: ₹{totalAdjustments.toFixed(2)} {Math.abs(remaining) < 0.01 ? '✓' : ` (₹${remaining.toFixed(2)} remaining)`}
+                          Extra Total: ₹{totalAdjustments.toFixed(2)} {Math.abs(remaining) < 0.01 ? '✓' : ` (₹${remaining.toFixed(2)} base left)`}
                         </span>
                       );
                     })()}
@@ -1698,9 +1673,12 @@ export default function ExpenseForm({ onSuccess, editingExpense = null, initialG
                     }
 
                     if (expenseSplitType === 'adjustment') {
+                      const totalAdjustments = Object.values(adjustments).reduce((sum, val) => sum + (Number(val) || 0), 0);
+                      const baseAmount = Math.max((Number(form.amount) || 0) - totalAdjustments, 0);
+                      const baseShare = allParticipants.length > 0 ? baseAmount / allParticipants.length : 0;
                       const payerAdjustment = Number(adjustments[paidByEmail]) || 0;
-                      const othersAdjustment = participants.map(email => `₹${(Number(adjustments[email]) || 0).toFixed(2)}`).join(', ');
-                      return `Split by adjustments: ${paidByEmail}: ₹${payerAdjustment.toFixed(2)}, ${othersAdjustment}`;
+                      const othersAdjustment = participants.map(email => `+₹${(Number(adjustments[email]) || 0).toFixed(2)}`).join(', ');
+                      return `Equal split of ₹${baseAmount.toFixed(2)} (${allParticipants.length} people → ₹${baseShare.toFixed(2)} each) with adjustments: ${paidByEmail} +₹${payerAdjustment.toFixed(2)}${othersAdjustment ? `, ${othersAdjustment}` : ''}`;
                     }
 
                     return `Split among ${allParticipants.length} ${allParticipants.length === 1 ? 'person' : 'people'}`;
