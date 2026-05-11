@@ -2,7 +2,7 @@ import Expense from '../models/expense.model.js';
 import User from '../models/user.model.js';
 import Group from '../models/group.model.js';
 import mongoose from 'mongoose';
-import { splitEqual, splitPercentage, splitShares, splitItemized, splitCustom, splitPayment } from './split.service.js';
+import { splitEqual, splitPercentage, splitShares, splitItemized, splitCustom, splitPayment, splitAdjustment } from './split.service.js';
 import * as emailService from './email.service.js';
 import { createExpenseActivity } from './activity.service.js';
 
@@ -208,6 +208,9 @@ export const addExpense = async (data) => {
                 break;
             case 'custom':
                 splits = splitCustom(numericAmount, payerAwareParticipants, splitDetails.customAmounts, userEmailMap);
+                break;
+            case 'adjustment':
+                splits = splitAdjustment(numericAmount, payerAwareParticipants, splitDetails.adjustments);
                 break;
             case 'payment':
                 splits = splitPayment(numericAmount, payerAwareParticipants);
