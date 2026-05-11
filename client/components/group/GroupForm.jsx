@@ -46,6 +46,7 @@ export default function GroupForm({ onSuccess }) {
   const [expenseCategory, setExpenseCategory] = useState("");
   const [expensePaidBy, setExpensePaidBy] = useState("");
   const [expenseSplitType, setExpenseSplitType] = useState("equal");
+  const [expenseSplitValues, setExpenseSplitValues] = useState({});
 
   const allMembers = useMemo(() => {
     const unique = [...new Set(members.map(normalizeEmail))];
@@ -174,6 +175,7 @@ export default function GroupForm({ onSuccess }) {
       setExpenseCategory("");
       setExpensePaidBy("");
       setExpenseSplitType("equal");
+      setExpenseSplitValues({});
 
       if (onSuccess) {
         onSuccess();
@@ -389,6 +391,35 @@ export default function GroupForm({ onSuccess }) {
                   ? `Enter percentage for each person (total: 100%)`
                   : `Custom split for ₹${expenseAmount || 0}`}
               </p>
+
+              {(expenseSplitType === 'exact' || expenseSplitType === 'percentage') && (
+                <div style={{ marginTop: '12px' }}>
+                  <span className="input-label">
+                    {expenseSplitType === 'exact'
+                      ? 'Exact amount for each person'
+                      : 'Percentage for each person'}
+                  </span>
+                  <div className="stack" style={{ gap: '10px', marginTop: 6 }}>
+                    {allMembers.map((email) => (
+                      <Input
+                        key={email}
+                        label={email === currentUserEmail ? `You (${email})` : email}
+                        type="number"
+                        min="0"
+                        step={expenseSplitType === 'exact' ? '0.01' : '1'}
+                        value={expenseSplitValues[email] || ''}
+                        onChange={(e) =>
+                          setExpenseSplitValues((prev) => ({
+                            ...prev,
+                            [email]: e.target.value,
+                          }))
+                        }
+                        placeholder={expenseSplitType === 'exact' ? '0.00' : '0'}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
