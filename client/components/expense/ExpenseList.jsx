@@ -362,6 +362,12 @@ export default function ExpenseList({ onEdit }) {
               const isPersonalExpense = totalParticipants === 1;
               const isPayment = expense.splitType === 'payment';
               const isSettled = !isPersonalExpense && !isPayment && pendingCount === 0;
+              const currentUserId = String(user?.id || user?._id || '');
+              const currentUserParticipant = (expense.participants || []).find((participant) => {
+                const participantUserId = participant?.userId?._id || participant?.userId;
+                return String(participantUserId) === currentUserId;
+              });
+              const currentUserBalance = Number(currentUserParticipant?.balance || 0);
 
               return (
                 <li key={expense._id} className="expense-item" style={{ alignItems: 'flex-start', paddingTop: 14, paddingBottom: 14 }}>
@@ -574,10 +580,18 @@ export default function ExpenseList({ onEdit }) {
                         const isPersonalExpense = totalParticipants === 1;
                         const isPayment = expense.splitType === 'payment';
                         const hasPending = pendingCount > 0;
+                        const paymentAmountColor = currentUserBalance > 0
+                          ? 'var(--success)'
+                          : currentUserBalance < 0
+                            ? 'var(--danger)'
+                            : (String(expense.paidBy?._id || expense.paidBy) === currentUserId ? 'var(--success)' : 'var(--danger)');
+                        const expenseAmountColor = isPersonalExpense
+                          ? 'var(--text)'
+                          : (isPayment ? paymentAmountColor : (hasPending ? 'var(--danger)' : 'var(--success)'));
 
                         return (
                           <>
-                            <div className="expense-amount" style={{ color: isPersonalExpense ? 'var(--text)' : (hasPending ? 'var(--danger)' : 'var(--success)') }}>
+                            <div className="expense-amount" style={{ color: expenseAmountColor }}>
                               {formatCurrency(expense.amount)}
                             </div>
                             {!isPersonalExpense && !isPayment && hasPending && (

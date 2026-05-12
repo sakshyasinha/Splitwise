@@ -262,7 +262,7 @@ export const createPayment = async (req, res) => {
             amount: 0,
             shareAmount: 0,
             paidAmount: Number(amount),
-            balance: Number(amount),
+            balance: -Number(amount),
             status: 'settled'
           },
           {
@@ -270,7 +270,7 @@ export const createPayment = async (req, res) => {
             amount: Number(amount),
             shareAmount: Number(amount),
             paidAmount: 0,
-            balance: -Number(amount),
+            balance: Number(amount),
             status: 'pending'
           }
         ],
