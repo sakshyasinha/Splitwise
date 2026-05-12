@@ -134,20 +134,33 @@ export default function GroupForm({ onSuccess }) {
         members,
       });
 
-      const groupId = result?.group?._id || result?.group?.id;
+      const createdGroup = result?.group || result;
+      const groupId = createdGroup?._id || createdGroup?.id;
 
       // Add initial expense if requested
       if (showExpenseForm && groupId) {
         try {
           const participants = allMembers;
+          let backendSplitType = expenseSplitType;
+          let splitDetails = {};
+
+          if (expenseSplitType === 'exact') {
+            backendSplitType = 'custom';
+            splitDetails = { customAmounts: expenseSplitValues };
+          } else if (expenseSplitType === 'percentage') {
+            splitDetails = { percentages: expenseSplitValues };
+          }
+
           await addExpense({
+            userId: user?.id,
             description: expenseDescription.trim(),
             amount: Number(expenseAmount),
             groupId,
             paidBy: expensePaidBy,
             participants,
             category: expenseCategory,
-            splitType: expenseSplitType,
+            splitType: backendSplitType,
+            splitDetails,
           });
           setSuccess("Group and initial expense created successfully!");
         } catch (expenseError) {
@@ -386,7 +399,15 @@ export default function GroupForm({ onSuccess }) {
                       return `Splitting ₹${expenseAmount || 0} equally among ${splitCount} people (₹${perPerson}/person)`;
                     })()
                   : expenseSplitType === 'exact'
-                  ? `Enter exact amounts for each person (total: ₹${expenseAmount || 0})`
+                  ? (() => {
+                      const totalAmount = Number(expenseAmount) || 0;
+                      const totalExact = allMembers.reduce((sum, email) => {
+                        return sum + (Number(expenseSplitValues[email]) || 0);
+                      }, 0);
+                      const remaining = totalAmount - totalExact;
+
+                      return `Enter exact amounts for each person. Total: ₹${totalExact.toFixed(2)}${Math.abs(remaining) < 0.01 ? '' : ` (₹${remaining.toFixed(2)} left)`}`;
+                    })()
                   : expenseSplitType === 'percentage'
                   ? `Enter percentage for each person (total: 100%)`
                   : `Custom split for ₹${expenseAmount || 0}`}
@@ -418,6 +439,26 @@ export default function GroupForm({ onSuccess }) {
                       />
                     ))}
                   </div>
+
+                  {expenseSplitType === 'exact' && (
+                    <div style={{ marginTop: 8, fontSize: 12 }}>
+                      {(() => {
+                        const totalAmount = Number(expenseAmount) || 0;
+                        const totalExact = allMembers.reduce((sum, email) => {
+                          return sum + (Number(expenseSplitValues[email]) || 0);
+                        }, 0);
+                        const remaining = totalAmount - totalExact;
+
+                        return (
+                          <span style={{
+                            color: Math.abs(remaining) < 0.01 ? 'var(--success)' : 'var(--danger)'
+                          }}>
+                            TOTAL: ₹{totalExact.toFixed(2)} {Math.abs(remaining) < 0.01 ? '✓' : ` (₹${remaining.toFixed(2)} left)`}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

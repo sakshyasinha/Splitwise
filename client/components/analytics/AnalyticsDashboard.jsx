@@ -4,7 +4,7 @@ import { formatCurrency } from '../../utils/formatCurrency.js';
 import API from '../../services/api.js';
 import '../../styles/analytics.css';
 
-const AnalyticsDashboard = () => {
+const AnalyticsDashboard = ({ refreshKey = 0 }) => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -12,7 +12,7 @@ const AnalyticsDashboard = () => {
 
   useEffect(() => {
     fetchAnalytics();
-  }, [timeRange]);
+  }, [timeRange, refreshKey]);
 
   const fetchAnalytics = async () => {
     try {

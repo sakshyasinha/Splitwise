@@ -520,7 +520,7 @@ const DashboardPage = () => {
         </section>
 
         <section className="analytics-section">
-          <AnalyticsDashboard />
+          <AnalyticsDashboard refreshKey={`${expenses.length}:${groups.length}:${myDues.length}:${myLents.length}`} />
         </section>
       </main>
 

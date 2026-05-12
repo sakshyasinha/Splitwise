@@ -198,7 +198,7 @@ const QuickExpenseForm = ({ onSuccess }) => {
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: -8 }}>
             {expenseType === 'split' && "Split equally between you and them"}
             {expenseType === 'personal' && "Personal expense - just for tracking"}
-            {expenseType === 'payment' && "Direct payment - they owe you the full amount"}
+            {expenseType === 'payment' && "Direct payment - you paid them directly"}
           </div>
 
           {error && <div className="error-message">{error}</div>}
