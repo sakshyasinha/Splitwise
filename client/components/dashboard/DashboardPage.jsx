@@ -16,13 +16,14 @@ import GroupList from './GroupList.jsx';
 import DuesList from './DuesList.jsx';
 import LentsList from './LentsList.jsx';
 import GroupDetails from './GroupDetails.jsx';
-import ActivityFeed from './ActivityFeed.jsx';
+import NotificationsDropdown from './NotificationsDropdown.jsx';
 import EmailActions from './EmailActions.jsx';
 import AnalyticsDashboard from '../analytics/AnalyticsDashboard.jsx';
 import RecurringExpensesManager from '../recurring/RecurringExpensesManager.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { getPersonLabel } from '../../utils/personUtils.js';
 import { normalizeGroupName, dedupeValues, prettifyGroupType } from '../../utils/stringUtils.js';
+import { getUnreadNotificationCount } from '../../services/activity.service.js';
 
 const DashboardPage = () => {
   const { logout, user } = useAuth();
@@ -47,6 +48,17 @@ const DashboardPage = () => {
   const [settlingExpenseId, setSettlingExpenseId] = useState(null);
   const [editingExpense, setEditingExpense] = useState(null);
   const [editingGroup, setEditingGroup] = useState(null);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
+  const refreshNotificationCount = async () => {
+    try {
+      const data = await getUnreadNotificationCount();
+      setNotificationCount(Number(data?.count || 0));
+    } catch (error) {
+      console.error('Error loading unread notification count:', error);
+    }
+  };
 
   useEffect(() => {
     console.log('DashboardPage: Initial data load');
@@ -60,6 +72,7 @@ const DashboardPage = () => {
           fetchExpenseBreakdown(),
           fetchFriendsList()
         ]);
+        await refreshNotificationCount();
       } catch (error) {
         console.error('Error loading initial data:', error);
       }
@@ -71,6 +84,33 @@ const DashboardPage = () => {
   useEffect(() => {
     console.log('DashboardPage: Expenses updated, count:', expenses.length);
   }, [expenses]);
+
+  useEffect(() => {
+    refreshNotificationCount();
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => refreshNotificationCount();
+    const intervalId = window.setInterval(refresh, 15000);
+
+    window.addEventListener('splitwise:notifications-updated', refresh);
+    window.addEventListener('focus', refresh);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('splitwise:notifications-updated', refresh);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeModal) {
@@ -467,12 +507,28 @@ const DashboardPage = () => {
     await fetchGroups();
   };
 
+  const openNotifications = () => {
+    setIsNotificationsOpen(true);
+  };
+
+  const closeNotifications = () => {
+    setIsNotificationsOpen(false);
+  };
+
+  const handleNotificationsRead = (nextCount = 0) => {
+    setNotificationCount(nextCount);
+  };
+
   return (
     <>
       <main className="dashboard-layout">
-        <DashboardHeader onLogout={logout} />
+        <DashboardHeader onLogout={logout} onNotificationClick={openNotifications} notificationCount={notificationCount} />
 
-        <HeroStrip pendingDuesCount={visibleDues.length} />
+        <HeroStrip
+          pendingDuesCount={visibleDues.length}
+          notificationCount={notificationCount}
+          onNotificationClick={openNotifications}
+        />
 
         <StatsGrid
           groupCount={prioritizedGroups.length}
@@ -512,8 +568,6 @@ const DashboardPage = () => {
             <LentsList lents={myLents} />
 
             
-
-            <ActivityFeed limit={15} />
 
             <AIChatPanel />
           </div>
@@ -573,6 +627,13 @@ const DashboardPage = () => {
       >
         <RecurringExpensesManager />
       </Modal>
+
+      {isNotificationsOpen && (
+        <NotificationsDropdown
+          onClose={closeNotifications}
+          onUnreadCountChange={handleNotificationsRead}
+        />
+      )}
     </>
   );
 };

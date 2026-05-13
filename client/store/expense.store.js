@@ -155,6 +155,8 @@ const useExpenseStore = create((set, get) => ({
         loading: false,
       });
 
+      window.dispatchEvent(new Event('splitwise:notifications-updated'));
+
       return expense;
     } catch (error) {
       set({
@@ -225,6 +227,8 @@ const useExpenseStore = create((set, get) => ({
         totalLent: Number(lentsData.totalLent || 0),
         loading: false,
       });
+
+      window.dispatchEvent(new Event('splitwise:notifications-updated'));
 
       console.log('Store: State update completed');
 
@@ -317,6 +321,8 @@ const useExpenseStore = create((set, get) => ({
         totalLent: Number(lentsData.totalLent || 0),
         loading: false,
       });
+
+      window.dispatchEvent(new Event('splitwise:notifications-updated'));
     } catch (error) {
       set({
         loading: false,

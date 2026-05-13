@@ -45,9 +45,9 @@
   padding: 22px;
   border-radius: 34px;
   background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 26%),
-    radial-gradient(circle at top right, rgba(194, 65, 12, 0.06), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.46) 0%, rgba(255, 255, 255, 0.22) 100%);
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.06), transparent 28%),
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.04), transparent 26%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.28) 100%);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
@@ -67,14 +67,14 @@
   inset: -120px auto auto -100px;
   width: 260px;
   height: 260px;
-  background: rgba(15, 118, 110, 0.14);
+  background: rgba(15, 118, 110, 0.08);
 }
 
 .analytics-section::after {
   inset: auto -120px -140px auto;
   width: 320px;
   height: 320px;
-  background: rgba(180, 83, 9, 0.12);
+  background: rgba(15, 118, 110, 0.06);
 }
 
 .analytics-dashboard {
@@ -967,12 +967,13 @@
 [data-theme='dark'] .group-item,
 [data-theme='dark'] .summary-item,
 [data-theme='dark'] .relationship-item {
-  background: rgba(22, 27, 34, 0.88);
+  /* use theme card color for consistent dark cards */
+  background: var(--card);
   border-color: var(--border2);
 }
 
 [data-theme='dark'] .time-range-selector {
-  background: rgba(22, 27, 34, 0.96);
+  background: var(--card);
   border-color: var(--border2);
 }
 
@@ -980,7 +981,40 @@
 [data-theme='dark'] .bar-container,
 [data-theme='dark'] .category-bar,
 [data-theme='dark'] .peak-info {
-  background: rgba(240, 246, 252, 0.08);
+  /* use subtle light tint over dark cards for contrast */
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme='dark'] .analytics-section {
+  background: var(--card);
+  background-image: none;
+  background-color: var(--card) !important;
+  border: 1px solid var(--border2);
+}
+
+body[data-theme='dark'] .analytics-section {
+  /* stronger specificity to override any cascaded rules */
+  background-color: var(--card) !important;
+  background-image: none !important;
+}
+
+[data-theme='dark'] .analytics-section::before {
+  background: rgba(63, 185, 80, 0.06);
+}
+
+[data-theme='dark'] .analytics-section::after {
+  background: rgba(210, 153, 34, 0.04);
+}
+
+[data-theme='dark'] .analytics-dashboard {
+  background: transparent !important;
+}
+
+[data-theme='dark'] .analytics-dashboard > .card {
+  background: linear-gradient(180deg, rgba(22, 27, 34, 0.95) 0%, rgba(13, 17, 23, 0.88) 100%) !important;
+  border-color: var(--border2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
 }
 
 [data-theme='dark'] .stat-item.positive,
