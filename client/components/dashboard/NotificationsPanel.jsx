@@ -14,6 +14,7 @@ const ACTIVITY_META = {
   payer_removed: { icon: '💸', label: 'Payer removed' },
   settlement_created: { icon: '🧾', label: 'Payment sent' },
   settlement_completed: { icon: '🏁', label: 'Payment completed' },
+  payment_reminder: { icon: '🔔', label: 'Payment reminder' },
 };
 
 function formatTime(date) {

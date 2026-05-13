@@ -580,14 +580,16 @@ export default function ExpenseList({ onEdit }) {
                         const isPersonalExpense = totalParticipants === 1;
                         const isPayment = expense.splitType === 'payment';
                         const hasPending = pendingCount > 0;
-                        const paymentAmountColor = currentUserBalance > 0
-                          ? 'var(--success)'
-                          : currentUserBalance < 0
-                            ? 'var(--danger)'
-                            : (String(expense.paidBy?._id || expense.paidBy) === currentUserId ? 'var(--success)' : 'var(--danger)');
+                        const paymentAmountColor = hasPending ? 'var(--danger)' : 'var(--success)';
                         const expenseAmountColor = isPersonalExpense
                           ? 'var(--text)'
-                          : (isPayment ? paymentAmountColor : (hasPending ? 'var(--danger)' : 'var(--success)'));
+                          : (isPayment
+                            ? paymentAmountColor
+                            : (currentUserBalance > 0
+                              ? 'var(--success)'
+                              : currentUserBalance < 0
+                                ? 'var(--danger)'
+                                : (hasPending ? 'var(--danger)' : 'var(--success)')));
 
                         return (
                           <>

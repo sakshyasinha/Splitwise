@@ -29,3 +29,13 @@ export async function getUnreadNotificationCount() {
   const response = await API.get('/activity/unread-count');
   return response.data;
 }
+
+export async function sendPaymentReminder(toUserId, amount, groupId = null, message = '') {
+  const response = await API.post('/settlement/nudge', {
+    toUserId,
+    amount,
+    groupId,
+    message
+  });
+  return response.data;
+}

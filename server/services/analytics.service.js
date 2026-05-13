@@ -83,14 +83,7 @@ const calculateOverview = (expenses, userId) => {
     const isPersonal = participants.length === 1 &&
       String(participants[0].userId?._id || participants[0].userId) === String(userId);
 
-    // Get user's share of this expense
-    const participant = participants?.find(
-      p => String(p.userId?._id || p.userId) === String(userId)
-    );
-
-    // Use user's share amount for shared expenses, full amount for personal expenses
-    const userShare = participant?.shareAmount || participant?.amount || 0;
-    const amount = Number(userShare || exp.amount || 0);
+    const amount = Number(exp.amount || 0);
 
     if (isPersonal) {
       personalTotal += amount;
@@ -111,7 +104,12 @@ const calculateOverview = (expenses, userId) => {
     );
 
     if (participant) {
-      const balance = Number(participant.balance || 0);
+      const isPayment = exp.splitType === 'payment';
+      const payerId = String(exp.paidBy?._id || exp.paidBy || exp.createdBy?._id || exp.createdBy || '');
+      const paymentAmount = Number(exp.amount || 0);
+      const balance = isPayment
+        ? (String(userId) === payerId ? paymentAmount : -paymentAmount)
+        : Number(participant.balance || 0);
       if (balance > 0) {
         totalOwed += balance; // Others owe me
       } else if (balance < 0) {
@@ -192,7 +190,7 @@ const calculateCategoryAnalytics = (expenses, userId) => {
   const categoryCounts = {};
 
   expenses.forEach(exp => {
-    const amount = getAnalyticsAmount(exp, userId);
+    const amount = Number(exp.amount || 0);
     if (amount <= 0) return;
 
     // Get user's share of this expense
@@ -231,15 +229,13 @@ const calculateGroupAnalytics = (expenses, userId) => {
   const groupCounts = {};
 
   expenses.forEach(exp => {
-    const amount = getAnalyticsAmount(exp, userId);
+    const amount = Number(exp.amount || 0);
     if (amount <= 0) return;
 
     const group = exp.group;
     const groupId = group?._id || 'ungrouped';
     const groupName = group?.name || 'Quick Expenses';
     const groupType = group?.type || 'other';
-
-    // Get user's share of this expense
 
     if (!groupTotals[groupId]) {
       groupTotals[groupId] = {
@@ -263,26 +259,6 @@ const calculateGroupAnalytics = (expenses, userId) => {
     totalGroups: groups.length,
     topGroup: groups.length > 0 ? groups[0] : null
   };
-};
-
-const getAnalyticsAmount = (expense, userId) => {
-  const participant = expense.participants?.find(
-    p => String(p.userId?._id || p.userId) === String(userId)
-  );
-
-  if (expense.splitType === 'payment') {
-    return Number(expense.amount || 0);
-  }
-
-  if (participant) {
-    return Number(participant.shareAmount || participant.amount || 0);
-  }
-
-  if (String(expense.paidBy?._id || expense.paidBy) === String(userId)) {
-    return Number(expense.amount || 0);
-  }
-
-  return 0;
 };
 
 /**
@@ -356,6 +332,39 @@ const calculateRelationshipAnalytics = (expenses, userId) => {
 
   expenses.forEach(exp => {
     const participants = exp.participants || [];
+    const payerId = String(exp.paidBy?._id || exp.paidBy || exp.createdBy?._id || exp.createdBy || '');
+    const paymentAmount = Number(exp.amount || 0);
+
+    if (exp.splitType === 'payment') {
+      const otherParticipant = participants.find(p => String(p.userId?._id || p.userId) !== String(userId));
+      const viewerEntry = participants.find(p => String(p.userId?._id || p.userId) === String(userId));
+      if (!viewerEntry || !otherParticipant) return;
+
+      const counterpartyId = String(otherParticipant.userId?._id || otherParticipant.userId);
+      const counterpartyName = otherParticipant.userId?.name || otherParticipant.userId?.email || 'Unknown';
+
+      if (!relationships.has(counterpartyId)) {
+        relationships.set(counterpartyId, {
+          id: counterpartyId,
+          name: counterpartyName,
+          totalOwed: 0,
+          totalOwe: 0,
+          expenseCount: 0,
+          lastExpense: null
+        });
+      }
+
+      const rel = relationships.get(counterpartyId);
+      if (String(userId) === payerId) {
+        rel.totalOwed += paymentAmount;
+      } else {
+        rel.totalOwe += paymentAmount;
+      }
+      rel.expenseCount += 1;
+      rel.lastExpense = exp.date;
+      return;
+    }
+
     // For a viewer-centric relationship, determine amounts between the viewer and each other participant
     const viewerEntry = participants.find(p => String(p.userId?._id || p.userId) === String(userId));
     if (!viewerEntry) return; // viewer not involved in this expense
@@ -369,10 +378,8 @@ const calculateRelationshipAnalytics = (expenses, userId) => {
       const participantId = String(participant.userId?._id || participant.userId);
       if (participantId === String(userId)) return; // Skip self
 
-      // Skip settled/paid participants and zero balances to show only pending flows
-      const status = participant.status || '';
       const pBalance = Number(participant.balance || 0);
-      if (status === 'settled' || status === 'paid' || pBalance === 0) return;
+      if (pBalance === 0) return;
 
       const participantName = participant.userId?.name || participant.userId?.email || 'Unknown';
 
@@ -467,14 +474,7 @@ const calculateTimeDistribution = (expenses, userId) => {
   const byMonth = {};
 
   expenses.forEach(exp => {
-    // Get user's share of this expense
-    const participant = exp.participants?.find(
-      p => String(p.userId?._id || p.userId) === String(userId)
-    );
-
-    // Use user's share amount if available, otherwise use full amount for personal expenses
-    const userShare = participant?.shareAmount || participant?.amount || 0;
-    const amount = Number(userShare || exp.amount || 0);
+    const amount = Number(exp.amount || 0);
     const date = new Date(exp.date);
 
     // By hour

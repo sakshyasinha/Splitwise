@@ -1561,13 +1561,13 @@ select.input option {
 }
 
 /* Notifications Dropdown */
+
 .notifications-dropdown {
   position: fixed;
   top: 100px;
   right: 70px;
   width: 380px;
   max-height: 500px;
-  /* background: var(--card); */
   background: rgba(255, 255, 255, 0.85);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -1614,6 +1614,10 @@ select.input option {
 
 [data-theme='dark'] .notifications-dropdown-content::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
+}
+[data-theme='dark'] .notifications-dropdown {
+  background: rgba(22, 27, 34, 0.95);
+  border-color: rgba(240, 246, 252, 0.12);
 }
 
 .notification-item-dropdown {
