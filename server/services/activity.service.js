@@ -39,7 +39,8 @@ const activitySchema = new mongoose.Schema({
             'user_added',
             'user_removed',
             'settlement_created',
-            'settlement_completed'
+            'settlement_completed',
+            'payment_reminder'
         ],
         required: true,
         index: true
@@ -445,6 +446,39 @@ export const createSettlementActivity = async (type, settlement, userId, mention
             activityData.title = 'Settlement Activity';
             activityData.description = `Settlement activity: ₹${Number(settlement.amount) || 0}`;
     }
+
+    return createActivity(activityData);
+};
+
+/**
+ * Create a payment reminder activity
+ * @param {string} fromUserId - User who is sending the reminder
+ * @param {string} toUserId - User being reminded (borrower)
+ * @param {number} amount - Amount owed
+ * @param {string} description - Optional custom message
+ * @param {string} groupId - Group ID if applicable
+ * @returns {Promise<Object>} Created activity
+ */
+export const createPaymentReminderActivity = async (fromUserId, toUserId, amount, description, groupId = null) => {
+    const [fromUser, toUser] = await Promise.all([
+        User.findById(fromUserId).select('name email avatar'),
+        User.findById(toUserId).select('name email avatar')
+    ]);
+
+    const activityData = {
+        userId: toUserId, // The borrower receives this notification
+        groupId,
+        type: 'payment_reminder',
+        mentionedUsers: [fromUserId], // Mention who sent the reminder
+        title: 'Payment Reminder',
+        description: description || `${fromUser?.name || 'Someone'} is reminding you to pay ₹${amount}`,
+        priority: 'high',
+        metadata: {
+            amount: Number(amount) || 0,
+            fromUser: fromUser,
+            toUser: toUser
+        }
+    };
 
     return createActivity(activityData);
 };

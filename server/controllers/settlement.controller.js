@@ -4,7 +4,7 @@ import Settlement from "../models/settlement.model.js";
 import User from "../models/user.model.js";
 import Expense from "../models/expense.model.js";
 import * as emailService from '../services/email.service.js';
-import { createSettlementActivity } from '../services/activity.service.js';
+import { createSettlementActivity, createPaymentReminderActivity } from '../services/activity.service.js';
 
 // Helper function to normalize expense (same as in expense.controller)
 const normalizeExpense = (expense) => {
@@ -240,7 +240,7 @@ export const createPayment = async (req, res) => {
 
     setImmediate(async () => {
       try {
-        await createSettlementActivity('settlement_completed', settlement, from, [toUser._id]);
+        await createSettlementActivity('settlement_created', settlement, from, [toUser._id]);
       } catch (activityError) {
         console.error('Failed to create settlement activity:', activityError);
       }
@@ -357,5 +357,64 @@ export const getSettlementHistory = async (req, res) => {
     res.status(200).json(settlements);
   } catch (error) {
     res.status(error.statusCode || 500).json({ message: error.message });
+  }
+};
+
+/**
+ * Send a payment reminder to a borrower
+ * @route POST /api/settlement/nudge
+ */
+export const sendPaymentReminder = async (req, res) => {
+  try {
+    const fromUserId = req.user?.id;
+    const { toUserId, amount, groupId, message } = req.body;
+
+    if (!fromUserId || !toUserId || !amount) {
+      return res.status(400).json({ message: 'Missing required fields: toUserId, amount' });
+    }
+
+    if (String(fromUserId) === String(toUserId)) {
+      return res.status(400).json({ message: 'Cannot send reminder to yourself' });
+    }
+
+    // Create reminder activity notification
+    const reminderMessage = message || `Hey, just reminding you that you owe ₹${amount}. Please settle when you can!`;
+    
+    const activity = await createPaymentReminderActivity(
+      fromUserId,
+      toUserId,
+      amount,
+      reminderMessage,
+      groupId
+    );
+
+    // Send email notification to the borrower (optional)
+    setImmediate(async () => {
+      try {
+        const toUser = await User.findById(toUserId).select('email name');
+        const fromUser = await User.findById(fromUserId).select('name');
+        
+        if (toUser?.email && emailService.sendPaymentReminderEmail) {
+          await emailService.sendPaymentReminderEmail({
+            to: toUser.email,
+            toName: toUser.name,
+            fromName: fromUser?.name || 'Someone',
+            amount,
+            message: reminderMessage,
+            groupId
+          });
+        }
+      } catch (emailError) {
+        console.error('Failed to send reminder email:', emailError);
+      }
+    });
+
+    res.status(201).json({
+      message: 'Payment reminder sent successfully',
+      activity
+    });
+  } catch (error) {
+    console.error('Error sending payment reminder:', error);
+    res.status(error.statusCode || 500).json({ message: error.message || 'Failed to send reminder' });
   }
 };

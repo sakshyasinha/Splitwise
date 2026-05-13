@@ -4,7 +4,7 @@ import { formatCurrency } from '../../utils/formatCurrency.js';
 import API from '../../services/api.js';
 import '../../styles/analytics.css';
 
-const AnalyticsDashboard = ({ refreshKey = 0 }) => {
+const AnalyticsDashboard = ({ refreshKey = 0, balanceSnapshot = null }) => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -66,7 +66,7 @@ const AnalyticsDashboard = ({ refreshKey = 0 }) => {
         </select>
       </div>
 
-      <OverviewStats overview={analytics.overview} />
+      <OverviewStats overview={analytics.overview} balanceSnapshot={balanceSnapshot} />
       <SpendingTrends spending={analytics.spending} trends={analytics.trends} />
       <CategoryBreakdown categories={analytics.categories} />
       <GroupAnalytics groups={analytics.groups} />
@@ -77,7 +77,12 @@ const AnalyticsDashboard = ({ refreshKey = 0 }) => {
 };
 
 
-const OverviewStats = ({ overview }) => (
+const OverviewStats = ({ overview, balanceSnapshot }) => {
+  const owedToYou = Number(balanceSnapshot?.totalLent ?? overview.totalOwed ?? 0);
+  const youOwe = Number(balanceSnapshot?.totalOwed ?? overview.totalOwe ?? 0);
+  const netBalance = owedToYou - youOwe;
+
+  return (
   <Card className="overview-stats">
     <h3>Overview</h3>
     <div className="stats-grid">
@@ -101,21 +106,22 @@ const OverviewStats = ({ overview }) => (
       </div>
       <div className="stat-item positive">
         <div className="stat-label">Owed to You</div>
-        <div className="stat-value">{formatCurrency(overview.totalOwed)}</div>
+        <div className="stat-value">{formatCurrency(owedToYou)}</div>
       </div>
       <div className="stat-item negative">
         <div className="stat-label">You Owe</div>
-        <div className="stat-value">{formatCurrency(overview.totalOwe)}</div>
+        <div className="stat-value">{formatCurrency(youOwe)}</div>
       </div>
       <div className="stat-item">
         <div className="stat-label">Net Balance</div>
-        <div className={`stat-value ${overview.netBalance >= 0 ? 'positive' : 'negative'}`}>
-          {formatCurrency(overview.netBalance)}
+        <div className={`stat-value ${netBalance >= 0 ? 'positive' : 'negative'}`}>
+          {formatCurrency(netBalance)}
         </div>
       </div>
     </div>
   </Card>
-);
+  );
+};
 
 const SpendingTrends = ({ spending = {}, trends = {} }) => {
   const trend = trends.trend || 'stable';

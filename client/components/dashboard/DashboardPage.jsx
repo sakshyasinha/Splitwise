@@ -180,7 +180,14 @@ const DashboardPage = () => {
       }];
     });
 
-    return fromExpenses.length > 0 ? fromExpenses : myDues;
+    const mergedDues = new Map();
+    [...fromExpenses, ...myDues].forEach((due) => {
+      if (!due) return;
+      const key = String(due.expenseId || due._id || `${due.description || ''}-${due.amount || 0}`);
+      mergedDues.set(key, due);
+    });
+
+    return Array.from(mergedDues.values());
   }, [expenses, myDues, userId]);
 
   const visibleTotalOwed = useMemo(
@@ -574,7 +581,10 @@ const DashboardPage = () => {
         </section>
 
         <section className="analytics-section">
-          <AnalyticsDashboard refreshKey={`${expenses.length}:${groups.length}:${myDues.length}:${myLents.length}`} />
+          <AnalyticsDashboard
+            refreshKey={`${expenses.length}:${groups.length}:${myDues.length}:${myLents.length}`}
+            balanceSnapshot={{ totalLent, totalOwed }}
+          />
         </section>
       </main>
 

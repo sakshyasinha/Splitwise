@@ -223,13 +223,17 @@ export const addExpense = async (data) => {
         // This ensures proper balance calculation
         const participantSplits = splits.map((split) => {
             const isPayer = String(split.userId) === payerId;
+            const isPayment = splitType === 'payment';
+            const balance = isPayment
+                ? (isPayer ? numericAmount : -numericAmount)
+                : (isPayer ? (numericAmount - split.amount) : -split.amount);
 
             return {
                 userId: split.userId,
                 amount: split.amount, // Legacy field for backward compatibility
                 shareAmount: split.amount, // New production field
                 paidAmount: isPayer ? numericAmount : 0, // Payer paid full amount, others paid 0
-                balance: isPayer ? (numericAmount - split.amount) : -split.amount, // Payer: positive (lent), Others: negative (owe)
+                balance, // Payer: positive (lent), Recipient: negative (owes)
                 status: isPayer ? 'settled' : 'pending' // Payer is already settled, others need to pay
             };
         });
@@ -451,12 +455,15 @@ export const updateExpense = async (userId, expenseId, updates) => {
     expense.participants = splits
         .map((split) => {
             const isPayer = String(split.userId) === String(userId);
+            const isPayment = nextSplitType === 'payment';
             return {
                 userId: split.userId,
                 amount: split.amount,
                 shareAmount: split.amount,
                 paidAmount: isPayer ? nextAmount : 0,
-                balance: isPayer ? (nextAmount - split.amount) : -split.amount,
+                balance: isPayment
+                    ? (isPayer ? nextAmount : -nextAmount)
+                    : (isPayer ? (nextAmount - split.amount) : -split.amount),
                 status: isPayer ? 'settled' : 'pending'
             };
         });
@@ -648,7 +655,7 @@ export const getMyDues = async (userId) => {
     const dues = expenses
         .map((expense) => {
             const participant = expense.participants.find(
-                (entry) => String(entry.userId) === String(userId)
+                (entry) => String(entry.userId?._id || entry.userId) === String(userId)
             );
 
             if (!participant ||
@@ -711,6 +718,40 @@ export const getMyLents = async (userId) => {
 
         const lents = expenses
             .map((expense) => {
+                const expenseAmount = Number(expense.amount || 0);
+                const payerId = String(expense.paidBy?._id || expense.paidBy || expense.createdBy?._id || expense.createdBy || '');
+
+                if (expense.splitType === 'payment') {
+                    if (payerId !== String(userId)) {
+                        return null;
+                    }
+
+                    const recipient = (expense.participants || []).find(
+                        (entry) => String(entry.userId?._id || entry.userId) !== String(userId)
+                    );
+
+                    if (!recipient) {
+                        return null;
+                    }
+
+                    return {
+                        expenseId: expense._id,
+                        description: expense.description || 'Unknown expense',
+                        amount: expenseAmount,
+                        status: 'pending',
+                        group: {
+                            id: expense.group?._id,
+                            name: expense.group?.name || 'Friends'
+                        },
+                        owedBy: [{
+                            id: recipient.userId?._id,
+                            name: recipient.userId?.name || recipient.userId?.email || 'Unknown',
+                            amount: expenseAmount
+                        }],
+                        createdAt: expense.createdAt
+                    };
+                }
+
                 // Find the user's participant entry to get their balance
                 const userParticipant = (expense.participants || []).find(
                     (entry) => String(entry.userId?._id || entry.userId) === String(userId)
@@ -896,6 +937,52 @@ export const getFriendsList = async (userId) => {
 
         expenses.forEach(expense => {
             const participants = expense.participants || [];
+            const payerId = String(expense.paidBy?._id || expense.paidBy || expense.createdBy?._id || expense.createdBy || '');
+            const totalAmount = Number(expense.amount || 0);
+
+            if (expense.splitType === 'payment') {
+                const otherParticipant = participants.find(
+                    (entry) => String(entry.userId?._id || entry.userId) !== String(userId)
+                );
+
+                if (!otherParticipant) return;
+
+                const friend = otherParticipant.userId;
+                if (!friend) return;
+
+                const friendId = friend._id || friend.id;
+                const friendName = friend.name || friend.email || 'Unknown';
+                const friendEmail = friend.email || '';
+
+                if (!friendsMap.has(friendId)) {
+                    friendsMap.set(friendId, {
+                        id: friendId,
+                        name: friendName,
+                        email: friendEmail,
+                        totalOwed: 0,
+                        totalOwe: 0,
+                        expenses: []
+                    });
+                }
+
+                const friendData = friendsMap.get(friendId);
+
+                if (String(userId) === payerId) {
+                    friendData.totalOwed += totalAmount;
+                } else {
+                    friendData.totalOwe += totalAmount;
+                }
+
+                friendData.expenses.push({
+                    expenseId: expense._id,
+                    description: expense.description,
+                    amount: totalAmount,
+                    date: expense.date,
+                    createdAt: expense.createdAt
+                });
+
+                return;
+            }
 
             participants.forEach(participant => {
                 const participantId = String(participant.userId?._id || participant.userId);
