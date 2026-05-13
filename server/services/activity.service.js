@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import User from '../models/user.model.js';
 
 /**
  * Activity Feed & Notification Service
@@ -409,6 +410,11 @@ export const createExpenseActivity = async (type, expense, userId, mentionedUser
  * @returns {Promise<Object>} Created activity
  */
 export const createSettlementActivity = async (type, settlement, userId, mentionedUsers = []) => {
+    const [fromUser, toUser] = await Promise.all([
+        settlement.from ? User.findById(settlement.from).select('name email avatar') : null,
+        settlement.to ? User.findById(settlement.to).select('name email avatar') : null,
+    ]);
+
     const activityData = {
         userId,
         groupId: settlement.groupId,
@@ -417,8 +423,8 @@ export const createSettlementActivity = async (type, settlement, userId, mention
         mentionedUsers,
         metadata: {
             settlementAmount: Number(settlement.amount) || 0,
-            fromUser: settlement.from,
-            toUser: settlement.to
+            fromUser: fromUser || settlement.from,
+            toUser: toUser || settlement.to
         }
     };
 

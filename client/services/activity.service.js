@@ -24,3 +24,8 @@ export async function getActivityStatistics() {
   const response = await API.get('/activity/statistics');
   return response.data;
 }
+
+export async function getUnreadNotificationCount() {
+  const response = await API.get('/activity/unread-count');
+  return response.data;
+}

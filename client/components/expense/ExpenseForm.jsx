@@ -677,6 +677,8 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       await Promise.all(paymentPromises);
       toast.success(`Payment recorded successfully to ${paymentRecipients.length} participant(s)`);
 
+      window.dispatchEvent(new Event('splitwise:notifications-updated'));
+
       setForm({ description: "", amount: "", currency: "INR", groupId: "", friendEmail: "", notes: "", receiptUrl: "", imageUrls: "", tags: "" });
       setPaymentFriends([]);
       setPaymentPaidByEmail(currentUserEmail || "");
