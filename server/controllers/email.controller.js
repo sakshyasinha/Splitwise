@@ -1,6 +1,7 @@
 import * as emailService from '../services/email.service.js';
 import { getUserNetBalance } from '../services/debt.service.js';
 import logger from '../utils/logger.js';
+import rateLimiter from '../utils/rateLimiter.js';
 
 /**
  * Send nudge email to remind someone about a debt
@@ -21,6 +22,15 @@ export const sendNudgeEmail = async (req, res) => {
 
     if (!fromUserId) {
       return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const nudgeLimit = rateLimiter.check(fromUserId, 'nudge');
+    if (!nudgeLimit.allowed) {
+      return res.status(429).json({
+        message: nudgeLimit.message,
+        remaining: nudgeLimit.remaining,
+        resetTime: nudgeLimit.resetTime
+      });
     }
 
     // Validate amount
@@ -81,7 +91,8 @@ export const sendNudgeEmail = async (req, res) => {
           toUserId,
           groupId,
           amount: numericAmount,
-          messageId: result.messageId
+          messageId: result.messageId,
+          remainingNudges: nudgeLimit.remaining
         }
       });
     } else {

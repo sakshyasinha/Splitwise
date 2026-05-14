@@ -469,7 +469,7 @@ export const createPaymentReminderActivity = async (fromUserId, toUserId, amount
         userId: toUserId, // The borrower receives this notification
         groupId,
         type: 'payment_reminder',
-        mentionedUsers: [fromUserId], // Mention who sent the reminder
+        mentionedUsers: [], // Don't mention the sender - they don't need to see this notification
         title: 'Payment Reminder',
         description: description || `${fromUser?.name || 'Someone'} is reminding you to pay ₹${amount}`,
         priority: 'high',

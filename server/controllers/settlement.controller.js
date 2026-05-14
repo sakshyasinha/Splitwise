@@ -5,6 +5,7 @@ import User from "../models/user.model.js";
 import Expense from "../models/expense.model.js";
 import * as emailService from '../services/email.service.js';
 import { createSettlementActivity, createPaymentReminderActivity } from '../services/activity.service.js';
+import rateLimiter from '../utils/rateLimiter.js';
 
 // Helper function to normalize expense (same as in expense.controller)
 const normalizeExpense = (expense) => {
@@ -377,6 +378,15 @@ export const sendPaymentReminder = async (req, res) => {
       return res.status(400).json({ message: 'Cannot send reminder to yourself' });
     }
 
+    const nudgeLimit = rateLimiter.check(fromUserId, 'nudge');
+    if (!nudgeLimit.allowed) {
+      return res.status(429).json({
+        message: nudgeLimit.message,
+        remaining: nudgeLimit.remaining,
+        resetTime: nudgeLimit.resetTime
+      });
+    }
+
     // Create reminder activity notification
     const reminderMessage = message || `Hey, just reminding you that you owe ₹${amount}. Please settle when you can!`;
     
@@ -411,6 +421,7 @@ export const sendPaymentReminder = async (req, res) => {
 
     res.status(201).json({
       message: 'Payment reminder sent successfully',
+      remainingNudges: nudgeLimit.remaining,
       activity
     });
   } catch (error) {

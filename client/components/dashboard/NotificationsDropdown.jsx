@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo, useState } from 'react';
-import { getActivityFeed, markActivitiesAsRead, markAllActivitiesAsRead } from '../../services/activity.service.js';
+import { getActivityFeed, markActivitiesAsRead, markAllActivitiesAsRead, getUnreadNotificationCount } from '../../services/activity.service.js';
 import useToast from '../../hooks/useToast.js';
 import Button from '../ui/Button.jsx';
 
@@ -13,6 +13,7 @@ const ACTIVITY_META = {
   payer_removed: { icon: '💸', label: 'Payer removed' },
   settlement_created: { icon: '🧾', label: 'Payment sent' },
   settlement_completed: { icon: '🏁', label: 'Payment completed' },
+  payment_reminder: { icon: '🔔', label: 'Payment reminder' },
 };
 
 function formatTime(date) {
@@ -86,9 +87,17 @@ export default function NotificationsDropdown({ onClose, onUnreadCountChange }) 
   const loadNotifications = async ({ silent = false } = {}) => {
     try {
       silent ? setRefreshing(true) : setLoading(true);
-      const data = await getActivityFeed({ limit: 12 });
+      const data = await getActivityFeed({ limit: 12, unreadOnly: true });
       const items = Array.isArray(data?.activities) ? data.activities : [];
-      setActivities(items.filter((activity) => !activity.isRead));
+      setActivities(items);
+      // Use the dedicated unread-count endpoint to avoid mismatches
+      try {
+        const unreadData = await getUnreadNotificationCount();
+        onUnreadCountChange?.(Number(unreadData?.count ?? data?.total ?? items.length ?? 0));
+      } catch (countErr) {
+        // Fallback to feed total if unread-count endpoint fails
+        onUnreadCountChange?.(Number(data?.total ?? items.length ?? 0));
+      }
     } catch (notificationError) {
       toast.error(notificationError?.response?.data?.message || 'Failed to load notifications');
     } finally {
