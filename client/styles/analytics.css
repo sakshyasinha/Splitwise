@@ -1178,7 +1178,7 @@ body[data-theme='dark'] .analytics-section {
 .recurring-header h2 {
   margin: 0;
   font-size: 1.5rem;
-  color: #333;
+  /* color: #333; */
 }
 
 .recurring-stats {
@@ -1311,7 +1311,7 @@ body[data-theme='dark'] .analytics-section {
 
 .recurring-form .form-group label {
   font-weight: 600;
-  color: #333;
+  /* color: #333; */
   font-size: 0.9rem;
 }
 
@@ -1321,6 +1321,12 @@ body[data-theme='dark'] .analytics-section {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 0.9rem;
+}
+[data-theme='dark'] .recurring-form .form-group select,
+[data-theme='dark'] .recurring-form .form-group textarea {
+  background: var(--card);
+  border-color: var(--border2);
+  color: var(--text);
 }
 
 .recurring-form .form-actions {
