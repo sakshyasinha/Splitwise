@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import { splitEqual, splitPercentage, splitShares, splitItemized, splitCustom, splitPayment, splitAdjustment } from './split.service.js';
 import * as emailService from './email.service.js';
 import { createExpenseActivity } from './activity.service.js';
+import { getFilePath, deleteFile } from '../middleware/upload.middleware.js';
 
 const toStringArray = (value) => {
     if (!Array.isArray(value)) return [];
@@ -527,6 +528,46 @@ export const deleteExpense = async (userId, expenseId) => {
             await createExpenseActivity('expense_deleted', expense, userId);
         } catch (error) {
             console.error('Failed to create expense delete activity:', error);
+        }
+    });
+
+    // Cleanup related activities and uploaded files asynchronously
+    setImmediate(async () => {
+        try {
+            // Remove activity records tied to this expense
+            try {
+                const ActivityModel = mongoose.model('Activity');
+                await ActivityModel.deleteMany({ expenseId: expenseId });
+            } catch (err) {
+                console.error('Failed to delete related activities for expense:', err);
+            }
+
+            // Remove local receipt file if present
+            try {
+                if (expense.receiptUrl) {
+                    const receiptFilename = expense.receiptUrl.split('/').pop();
+                    const receiptPath = getFilePath(receiptFilename);
+                    await deleteFile(receiptPath);
+                }
+            } catch (err) {
+                console.error('Failed to delete receipt file for expense:', err);
+            }
+
+            // Remove image files if present
+            try {
+                if (Array.isArray(expense.images)) {
+                    for (const img of expense.images) {
+                        if (!img) continue;
+                        const imgFilename = img.split('/').pop();
+                        const imgPath = getFilePath(imgFilename);
+                        await deleteFile(imgPath);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to delete expense image files:', err);
+            }
+        } catch (err) {
+            console.error('Error during expense cleanup:', err);
         }
     });
 

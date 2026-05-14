@@ -217,9 +217,17 @@ export const getGroupActivityFeed = async (groupId, options = {}) => {
  */
 export const markActivitiesAsRead = async (userId, activityIds) => {
     try {
+        // Validate and convert requested activity IDs to ObjectId
+        const objectIds = (activityIds || [])
+            .filter(id => mongoose.Types.ObjectId.isValid(String(id)))
+            .map(id => new mongoose.Types.ObjectId(String(id)));
+
+        if (!objectIds.length) {
+            return { modifiedCount: 0, message: 'No valid activity IDs provided' };
+        }
         const result = await Activity.updateMany(
             {
-                _id: { $in: activityIds },
+                _id: { $in: objectIds },
                 $or: [
                     { userId },
                     { mentionedUsers: userId }
@@ -227,6 +235,26 @@ export const markActivitiesAsRead = async (userId, activityIds) => {
             },
             { isRead: true }
         );
+
+        // Delete activities that are single-recipient (safe to remove entirely)
+        // Criteria: isRead=true AND (userId == userId OR (mentionedUsers contains userId AND mentionedUsers array size == 1))
+        try {
+            const userObjectId = mongoose.Types.ObjectId.isValid(String(userId)) ? new mongoose.Types.ObjectId(String(userId)) : null;
+
+            const deleteQuery = {
+                _id: { $in: objectIds },
+                isRead: true,
+                $or: []
+            };
+
+            if (userObjectId) deleteQuery.$or.push({ userId: userObjectId });
+            deleteQuery.$or.push({ $and: [{ mentionedUsers: userObjectId }, { mentionedUsers: { $size: 1 } }] });
+
+            await Activity.deleteMany(deleteQuery);
+        } catch (err) {
+            // Non-fatal: log and continue
+            console.error('Error deleting single-recipient activities after marking read:', err);
+        }
 
         return {
             modifiedCount: result.modifiedCount,
@@ -255,6 +283,17 @@ export const markAllActivitiesAsRead = async (userId) => {
             },
             { isRead: true }
         );
+
+        // Delete activities that are now read and target only this user
+        try {
+            const userObjectId = mongoose.Types.ObjectId.isValid(String(userId)) ? new mongoose.Types.ObjectId(String(userId)) : null;
+            const deleteQuery = { isRead: true, $or: [] };
+            if (userObjectId) deleteQuery.$or.push({ userId: userObjectId });
+            deleteQuery.$or.push({ $and: [{ mentionedUsers: userObjectId }, { mentionedUsers: { $size: 1 } }] });
+            await Activity.deleteMany(deleteQuery);
+        } catch (err) {
+            console.error('Error deleting single-recipient activities after marking all read:', err);
+        }
 
         return {
             modifiedCount: result.modifiedCount,
@@ -524,8 +563,8 @@ export const getActivityStatistics = async (userId) => {
             {
                 $match: {
                     $or: [
-                        { userId: mongoose.Types.ObjectId(userId) },
-                        { mentionedUsers: mongoose.Types.ObjectId(userId) }
+                        { userId: new mongoose.Types.ObjectId(userId) },
+                        { mentionedUsers: new mongoose.Types.ObjectId(userId) }
                     ]
                 }
             },
