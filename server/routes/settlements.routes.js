@@ -1,5 +1,5 @@
 import express from "express";
-import { getSettlement, createPayment, getSettlementHistory } from "../controllers/settlement.controller.js";
+import { getSettlement, createPayment, getSettlementHistory, sendPaymentReminder } from "../controllers/settlement.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 const router=express.Router();
 
@@ -14,6 +14,9 @@ router.get("/:groupId", getSettlement);
 
 // Create a new payment/settlement
 router.post("/", createPayment);
+
+// Send a payment reminder/nudge to a borrower
+router.post("/nudge", sendPaymentReminder);
 
 export default router;
 

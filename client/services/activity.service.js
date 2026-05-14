@@ -31,7 +31,7 @@ export async function getUnreadNotificationCount() {
 }
 
 export async function sendPaymentReminder(toUserId, amount, groupId = null, message = '') {
-  const response = await API.post('/settlement/nudge', {
+  const response = await API.post('/settlements/nudge', {
     toUserId,
     amount,
     groupId,

@@ -92,10 +92,11 @@ export default function NotificationsPanel({ onClose, onUnreadCountChange }) {
       silent ? setRefreshing(true) : setLoading(true);
       setError('');
 
-      const data = await getActivityFeed({ limit: 12 });
+      const data = await getActivityFeed({ limit: 12, unreadOnly: true });
       const items = Array.isArray(data?.activities) ? data.activities : [];
-      const unread = items.filter((activity) => !activity.isRead);
+      const unread = items;
       setActivities(unread);
+      onUnreadCountChange?.(Number(data?.total || unread.length || 0));
       return unread;
     } catch (notificationError) {
       const message = notificationError?.response?.data?.message || notificationError.message || 'Failed to load notifications';
