@@ -21,6 +21,7 @@ export default function ExpenseList({ onEdit }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [activeExpense, setActiveExpense] = useState(null);
+  const [chatInitialUnreadCount, setChatInitialUnreadCount] = useState(0);
   const [unreadByExpense, setUnreadByExpense] = useState({});
   const socketRef = useRef(null);
   const joinedRoomsRef = useRef(new Set());
@@ -193,12 +194,11 @@ export default function ExpenseList({ onEdit }) {
   }, [expenses]);
 
   const openChat = (expense) => {
+    const expenseId = String(expense?._id || '');
+    const currentUnread = unreadByExpense[expenseId] || 0;
+    setChatInitialUnreadCount(currentUnread);
     setActiveExpense(expense);
     setChatOpen(true);
-
-    const expenseId = String(expense?._id || '');
-    if (!expenseId) return;
-
     setUnreadByExpense((prev) => {
       if (!prev[expenseId]) return prev;
       const next = { ...prev };
@@ -558,10 +558,13 @@ export default function ExpenseList({ onEdit }) {
                             Paid by {expense.paidBy?.name || expense.paidBy?.email || 'n/a'}
                           </span>
                         </div>
-                        <div className="expense-meta" style={{ marginTop: 6 }}>
-                          <strong style={{ fontWeight: 700 }}>Involved:</strong>
-                          <span>{involvedPeople.join(' · ')}</span>
-                             
+                        <div className="expense-meta" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <strong style={{ fontWeight: 700 }}>Involved:</strong>
+                            <span>{involvedPeople.join(' · ')}</span>
+                          </div>
+                          <div style={{ marginLeft: 'auto', position: 'relative' }}>
+                          </div>
                         </div>
                         {(expense.tags?.length > 0 || expense.notes || expense.receiptUrl || expense.images?.length > 0) && (
                           <div className="expense-meta" style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -704,28 +707,10 @@ export default function ExpenseList({ onEdit }) {
                                 onClick={() => openChat(expense)}
                                 aria-label={`Open chat for ${expense.description || 'expense'}`}
                               >
-                                💬 Chat
+                                 Chat
                               </button>
                               {unreadCount > 0 && (
-                                <span
-                                  style={{
-                                    position: 'absolute',
-                                    top: -6,
-                                    right: -6,
-                                    minWidth: 18,
-                                    height: 18,
-                                    borderRadius: 9,
-                                    background: 'var(--danger)',
-                                    color: '#fff',
-                                    fontSize: 10,
-                                    fontWeight: 700,
-                                    lineHeight: '18px',
-                                    textAlign: 'center',
-                                    padding: '0 4px',
-                                    boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
-                                  }}
-                                  title={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}
-                                >
+                                <span className="chat-badge" title={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}>
                                   {unreadCount > 99 ? '99+' : unreadCount}
                                 </span>
                               )}
@@ -742,7 +727,14 @@ export default function ExpenseList({ onEdit }) {
           </ul>
         )}
       </div>
-      <ChatModal open={chatOpen} onClose={() => setChatOpen(false)} expense={activeExpense} currentUser={user} token={token} />
+      <ChatModal
+        open={chatOpen}
+        onClose={() => { setChatOpen(false); setChatInitialUnreadCount(0); }}
+        expense={activeExpense}
+        currentUser={user}
+        token={token}
+        initialUnreadCount={chatInitialUnreadCount}
+      />
     </Card>
   );
 }

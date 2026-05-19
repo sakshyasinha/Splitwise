@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { getPersonName } from '../../utils/personUtils.js';
 import '../../styles/chat.css';
 
-export default function ChatModal({ open, onClose, expense, currentUser, token }) {
+export default function ChatModal({ open, onClose, expense, currentUser, token, initialUnreadCount = 0 }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -174,18 +174,27 @@ export default function ChatModal({ open, onClose, expense, currentUser, token }
 
         {!loading && (
           <div className="chat-body" ref={listRef}>
-            {messages.length === 0 ? (
+                {messages.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 12px', color: '#999' }}>
                 No messages yet. Start the conversation!
               </div>
             ) : (
-              messages.map((m) => (
-                <div key={m.id} className={`chat-message ${m.sender === (currentUser?.name || 'You') ? 'me' : 'them'}`}>
-                  <div className="chat-sender">{m.sender}</div>
-                  <div className="chat-bubble">{m.text}</div>
-                  <div className="chat-time">{m.time}</div>
-                </div>
-              ))
+                  messages.map((m, idx) => (
+                    <div key={m.id}>
+                      {initialUnreadCount > 0 && idx === messages.length - initialUnreadCount && (
+                        <div className="chat-unread-divider">
+                          <div className="line" />
+                          <div className="label">{initialUnreadCount} new message{initialUnreadCount > 1 ? 's' : ''}</div>
+                          <div className="line" />
+                        </div>
+                      )}
+                      <div className={`chat-message ${m.sender === (currentUser?.name || 'You') ? 'me' : 'them'}`}>
+                        <div className="chat-sender">{m.sender}</div>
+                        <div className="chat-bubble">{m.text}</div>
+                        <div className="chat-time">{m.time}</div>
+                      </div>
+                    </div>
+                  ))
             )}
           </div>
         )}
