@@ -23,6 +23,8 @@ import recurringExpenseRoutes from './routes/recurring-expense.routes.js';
 import receiptRoutes from './routes/receipt.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
 import messageRoutes from './routes/message.routes.js';
+import unreadRoutes from './routes/unread.routes.js';
+import { initUnreadQueue } from './queues/unread.queue.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -108,6 +110,13 @@ export const startServer = async () => {
         const { setupMessageSocket } = await import('./sockets/message.socket.js');
         setupMessageSocket(io);
 
+                // Initialize unread queue (in-process worker)
+                try {
+                    initUnreadQueue(io);
+                } catch (err) {
+                    logger.error('Failed to initialize unread queue', err);
+                }
+
         const server = httpServer.listen(PORT, () => {
             logger.info(`Server is running on port ${PORT} (env: ${process.env.NODE_ENV || 'development'})`);
         });
@@ -131,6 +140,8 @@ export const startServer = async () => {
 
         // Store io instance for use in controllers
         app.locals.io = io;
+        // Unread API
+        app.use('/api/unreads', unreadRoutes);
     } catch (error) {
         logger.error('DB connection failed:', error);
         process.exit(1);

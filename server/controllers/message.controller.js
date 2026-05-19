@@ -1,5 +1,6 @@
 import Message from '../models/message.model.js';
 import User from '../models/user.model.js';
+import { unreadQueue } from '../queues/unread.queue.js';
 
 export const getMessagesForExpense = async (req, res) => {
   try {
@@ -50,6 +51,15 @@ export const postMessageForExpense = async (req, res) => {
         text: message.text,
         createdAt: message.createdAt,
       });
+    }
+
+    // Enqueue unread counter updates (worker will increment per-user counters)
+    try {
+      if (unreadQueue) {
+        await unreadQueue.add({ expenseId, messageId: message._id, senderId });
+      }
+    } catch (err) {
+      console.error('Failed to enqueue unread update', err);
     }
 
     res.status(201).json(message);

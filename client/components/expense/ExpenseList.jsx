@@ -157,10 +157,24 @@ export default function ExpenseList({ onEdit }) {
       }));
     };
 
+    const onUnreadUpdated = (payload) => {
+      try {
+        const { expenseId, unreadByUser } = payload || {};
+        const userId = String(user?.id || user?._id || '');
+        if (!expenseId || !userId) return;
+        const count = unreadByUser?.[userId] || 0;
+        setUnreadByExpense((prev) => ({ ...prev, [String(expenseId)]: Number(count) }));
+      } catch (err) {
+        console.error('Failed to handle unread-updated', err);
+      }
+    };
+
     socket.on('message-received', onMessageReceived);
+    socket.on('unread-updated', onUnreadUpdated);
 
     return () => {
       socket.off('message-received', onMessageReceived);
+      socket.off('unread-updated', onUnreadUpdated);
       socket.disconnect();
       socketRef.current = null;
       joinedRoomsRef.current.clear();

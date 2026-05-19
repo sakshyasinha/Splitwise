@@ -69,6 +69,16 @@ export default function ChatModal({ open, onClose, expense, currentUser, token, 
     // Load initial messages
     const load = async () => {
       try {
+        // Clear server-side unread for this user before loading messages
+        try {
+          await fetch(`/api/unreads/clear/${expenseId}`, {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          });
+        } catch (e) {
+          // ignore non-fatal errors clearing unread
+        }
+
         const res = await fetch(`/api/messages/${expenseId}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
