@@ -4,6 +4,7 @@ import useAuth from '../../hooks/useAuth.js';
 import useToast from '../../hooks/useToast.js';
 import Card from '../ui/Card.jsx';
 import CategoryIcon from '../ui/CategoryIcon.jsx';
+import ChatModal from './ChatModal.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { getPersonName } from '../../utils/personUtils.js';
 
@@ -11,12 +12,14 @@ const CATEGORIES = ['Food', 'Travel', 'Events', 'Utilities', 'Shopping', 'Genera
 const SPLIT_TYPES = ['equal', 'percentage', 'shares', 'itemized', 'adjustment', 'custom', 'payment'];
 
 export default function ExpenseList({ onEdit }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { expenses = [], loading, error, updateExpense, deleteExpense } = useExpenses();
   const toast = useToast();
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ description: '', amount: '' });
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [activeExpense, setActiveExpense] = useState(null);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -473,6 +476,7 @@ export default function ExpenseList({ onEdit }) {
                         <div className="expense-meta" style={{ marginTop: 6 }}>
                           <strong style={{ fontWeight: 700 }}>Involved:</strong>
                           <span>{involvedPeople.join(' · ')}</span>
+                             
                         </div>
                         {(expense.tags?.length > 0 || expense.notes || expense.receiptUrl || expense.images?.length > 0) && (
                           <div className="expense-meta" style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -486,6 +490,7 @@ export default function ExpenseList({ onEdit }) {
                               </a>
                             )}
                             {expense.images?.length > 0 && <span>{expense.images.length} image(s)</span>}
+                          
                           </div>
                         )}
                         {/* Show pending vs settled status */}
@@ -606,6 +611,17 @@ export default function ExpenseList({ onEdit }) {
                                 Direct payment
                               </div>
                             )}
+                            {/* small chat button below amount for easier access */}
+                            <div style={{ marginTop: 8 }}>
+                              <button
+                                className="btn btn-ghost"
+                                style={{ fontSize: 12, padding: '4px 8px' }}
+                                onClick={() => { setActiveExpense(expense); setChatOpen(true); }}
+                                aria-label={`Open chat for ${expense.description || 'expense'}`}
+                              >
+                                💬 Chat
+                              </button>
+                            </div>
                           </>
                         );
                       })()}
@@ -618,6 +634,7 @@ export default function ExpenseList({ onEdit }) {
           </ul>
         )}
       </div>
+      <ChatModal open={chatOpen} onClose={() => setChatOpen(false)} expense={activeExpense} currentUser={user} token={token} />
     </Card>
   );
 }

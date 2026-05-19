@@ -3,6 +3,8 @@ import dotenv from "dotenv"
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
+import { createServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 import connectDB from "./config/db.js"
 import logger from './utils/logger.js';
 import expressWinston from 'express-winston';
@@ -20,6 +22,7 @@ import smartSettlementRoutes from './routes/smart-settlement.routes.js';
 import recurringExpenseRoutes from './routes/recurring-expense.routes.js';
 import receiptRoutes from './routes/receipt.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
+import messageRoutes from './routes/message.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,6 +86,7 @@ app.use("/api/recurring-bills", recurringExpenseRoutes);
 app.use("/api/recurring-expenses", recurringExpenseRoutes);
 
 app.use("/api/receipts", receiptRoutes);
+app.use('/api/messages', messageRoutes);
 
 app.use("/api/analytics", analyticsRoutes);
 
@@ -91,7 +95,20 @@ export const startServer = async () => {
     try {
         await connectDB();
 
-        const server = app.listen(PORT, () => {
+        // Create HTTP server for Socket.IO
+        const httpServer = createServer(app);
+        const io = new SocketIOServer(httpServer, {
+            cors: {
+                origin: CORS_ORIGIN,
+                credentials: true,
+            }
+        });
+
+        // Import and setup socket handlers
+        const { setupMessageSocket } = await import('./sockets/message.socket.js');
+        setupMessageSocket(io);
+
+        const server = httpServer.listen(PORT, () => {
             logger.info(`Server is running on port ${PORT} (env: ${process.env.NODE_ENV || 'development'})`);
         });
 
@@ -111,6 +128,9 @@ export const startServer = async () => {
 
         const { errorHandler } = await import('./middleware/error.middleware.js');
         app.use(errorHandler);
+
+        // Store io instance for use in controllers
+        app.locals.io = io;
     } catch (error) {
         logger.error('DB connection failed:', error);
         process.exit(1);
