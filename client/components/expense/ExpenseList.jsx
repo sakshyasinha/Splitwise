@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { io } from 'socket.io-client';
 import useExpenses from '../../hooks/useExpenses.js';
 import useAuth from '../../hooks/useAuth.js';
 import useToast from '../../hooks/useToast.js';
@@ -20,6 +21,10 @@ export default function ExpenseList({ onEdit }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [activeExpense, setActiveExpense] = useState(null);
+  const [unreadByExpense, setUnreadByExpense] = useState({});
+  const socketRef = useRef(null);
+  const joinedRoomsRef = useRef(new Set());
+  const activeChatExpenseIdRef = useRef('');
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -122,6 +127,85 @@ export default function ExpenseList({ onEdit }) {
     return searchQuery || selectedCategory || selectedSplitType || selectedStatus ||
            amountRange.min || amountRange.max || dateRange.start || dateRange.end;
   }, [searchQuery, selectedCategory, selectedSplitType, selectedStatus, amountRange, dateRange]);
+
+  useEffect(() => {
+    activeChatExpenseIdRef.current = chatOpen && activeExpense?._id ? String(activeExpense._id) : '';
+  }, [chatOpen, activeExpense?._id]);
+
+  useEffect(() => {
+    if (!token || socketRef.current) return;
+
+    const socket = io('/messages', {
+      auth: { token },
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
+    });
+
+    socketRef.current = socket;
+
+    const onMessageReceived = (message) => {
+      const expenseId = String(message?.expenseId || '');
+      if (!expenseId) return;
+      if (activeChatExpenseIdRef.current === expenseId) return;
+
+      setUnreadByExpense((prev) => ({
+        ...prev,
+        [expenseId]: (prev[expenseId] || 0) + 1,
+      }));
+    };
+
+    socket.on('message-received', onMessageReceived);
+
+    return () => {
+      socket.off('message-received', onMessageReceived);
+      socket.disconnect();
+      socketRef.current = null;
+      joinedRoomsRef.current.clear();
+    };
+  }, [token]);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    const joined = joinedRoomsRef.current;
+    const currentExpenseIds = new Set(
+      (expenses || [])
+        .map((expense) => String(expense?._id || ''))
+        .filter(Boolean)
+    );
+
+    currentExpenseIds.forEach((expenseId) => {
+      if (!joined.has(expenseId)) {
+        socket.emit('join-expense', expenseId);
+        joined.add(expenseId);
+      }
+    });
+
+    Array.from(joined).forEach((expenseId) => {
+      if (!currentExpenseIds.has(expenseId)) {
+        socket.emit('leave-expense', expenseId);
+        joined.delete(expenseId);
+      }
+    });
+  }, [expenses]);
+
+  const openChat = (expense) => {
+    setActiveExpense(expense);
+    setChatOpen(true);
+
+    const expenseId = String(expense?._id || '');
+    if (!expenseId) return;
+
+    setUnreadByExpense((prev) => {
+      if (!prev[expenseId]) return prev;
+      const next = { ...prev };
+      delete next[expenseId];
+      return next;
+    });
+  };
 
   const startEdit = (expense) => {
     setEditingId(expense._id);
@@ -371,6 +455,7 @@ export default function ExpenseList({ onEdit }) {
                 return String(participantUserId) === currentUserId;
               });
               const currentUserBalance = Number(currentUserParticipant?.balance || 0);
+              const unreadCount = unreadByExpense[String(expense._id)] || 0;
 
               return (
                 <li key={expense._id} className="expense-item" style={{ alignItems: 'flex-start', paddingTop: 14, paddingBottom: 14 }}>
@@ -612,15 +697,38 @@ export default function ExpenseList({ onEdit }) {
                               </div>
                             )}
                             {/* small chat button below amount for easier access */}
-                            <div style={{ marginTop: 8 }}>
+                            <div style={{ marginTop: 8, position: 'relative', display: 'inline-block' }}>
                               <button
                                 className="btn btn-ghost"
                                 style={{ fontSize: 12, padding: '4px 8px' }}
-                                onClick={() => { setActiveExpense(expense); setChatOpen(true); }}
+                                onClick={() => openChat(expense)}
                                 aria-label={`Open chat for ${expense.description || 'expense'}`}
                               >
                                 💬 Chat
                               </button>
+                              {unreadCount > 0 && (
+                                <span
+                                  style={{
+                                    position: 'absolute',
+                                    top: -6,
+                                    right: -6,
+                                    minWidth: 18,
+                                    height: 18,
+                                    borderRadius: 9,
+                                    background: 'var(--danger)',
+                                    color: '#fff',
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    lineHeight: '18px',
+                                    textAlign: 'center',
+                                    padding: '0 4px',
+                                    boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+                                  }}
+                                  title={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}
+                                >
+                                  {unreadCount > 99 ? '99+' : unreadCount}
+                                </span>
+                              )}
                             </div>
                           </>
                         );
