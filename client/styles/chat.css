@@ -136,3 +136,45 @@
   }
 }
 
+/* Unread badge used in expense list */
+.chat-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--danger, #e11d48);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  padding: 0 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  display: inline-block;
+}
+
+.chat-badge.hidden { display: none; }
+
+/* Divider indicating unread messages boundary */
+.chat-unread-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.chat-unread-divider .line {
+  height: 1px;
+  background: rgba(0,0,0,0.08);
+  flex: 1;
+}
+.chat-unread-divider .label {
+  background: rgba(0,0,0,0.03);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  color: rgba(0,0,0,0.6);
+  white-space: nowrap;
+}
+

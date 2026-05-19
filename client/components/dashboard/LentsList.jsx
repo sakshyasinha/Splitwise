@@ -87,7 +87,7 @@ export default function LentsList({ lents }) {
                     disabled={nudgingId === lent.expenseId}
                     style={{ fontSize: 11, padding: '4px 8px', minWidth: 'auto' }}
                   >
-                    {nudgingId === lent.expenseId ? 'Sending…' : '🔔 Nudge'}
+                    {nudgingId === lent.expenseId ? 'Sending…' : ' Nudge'}
                   </button>
                 </div>
               </li>
