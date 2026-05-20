@@ -190,9 +190,103 @@ const DashboardPage = () => {
     return Array.from(mergedDues.values());
   }, [expenses, myDues, userId]);
 
+  const visibleLents = useMemo(() => {
+    const fromExpenses = expenses.flatMap((expense) => {
+      const participant = (expense.participants || []).find((entry) => {
+        if (!entry?.userId) return false;
+        const entryUserId = typeof entry.userId === 'object' ? entry.userId._id : entry.userId;
+        return String(entryUserId) === String(userId);
+      });
+
+      if (!participant) {
+        return [];
+      }
+
+      const balance = Number(
+        participant.balance ??
+        (Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0))
+      );
+
+      if (balance <= 0) {
+        return [];
+      }
+
+      if (expense.splitType === 'payment') {
+        const recipient = (expense.participants || []).find((entry) => {
+          if (!entry?.userId) return false;
+          const entryUserId = typeof entry.userId === 'object' ? entry.userId._id : entry.userId;
+          return String(entryUserId) !== String(userId);
+        });
+
+        if (!recipient?.userId) {
+          return [];
+        }
+
+        return [{
+          expenseId: expense._id,
+          description: expense.description || 'Unknown expense',
+          amount: Number(expense.amount || 0),
+          status: 'pending',
+          group: {
+            id: expense.group?._id,
+            name: expense.group?.name || '',
+          },
+          owedBy: [{
+            id: recipient.userId?._id,
+            name: recipient.userId?.name || recipient.userId?.email || 'Unknown',
+            amount: Number(expense.amount || 0),
+          }],
+          createdAt: expense.createdAt,
+        }];
+      }
+
+      const debtors = (expense.participants || [])
+        .filter((entry) => {
+          const entryUserId = typeof entry.userId === 'object' ? entry.userId._id : entry.userId;
+          return String(entryUserId) !== String(userId) && Number(entry.balance || 0) < 0;
+        })
+        .map((entry) => ({
+          id: entry.userId?._id,
+          name: entry.userId?.name || entry.userId?.email || 'Unknown',
+          amount: Math.abs(Number(entry.balance || 0)),
+        }));
+
+      if (debtors.length === 0) {
+        return [];
+      }
+
+      return [{
+        expenseId: expense._id,
+        description: expense.description || 'Unknown expense',
+        amount: debtors.reduce((sum, debtor) => sum + Number(debtor.amount || 0), 0),
+        status: participant.status || 'pending',
+        group: {
+          id: expense.group?._id,
+          name: expense.group?.name || '',
+        },
+        owedBy: debtors,
+        createdAt: expense.createdAt,
+      }];
+    });
+
+    const mergedLents = new Map();
+    [...myLents, ...fromExpenses].forEach((lent) => {
+      if (!lent) return;
+      const key = String(lent.expenseId || lent._id || `${lent.description || ''}-${lent.amount || 0}`);
+      mergedLents.set(key, lent);
+    });
+
+    return Array.from(mergedLents.values());
+  }, [expenses, myLents, userId]);
+
   const visibleTotalOwed = useMemo(
     () => visibleDues.reduce((sum, due) => sum + Number(due.amount || 0), 0),
     [visibleDues]
+  );
+
+  const visibleTotalLent = useMemo(
+    () => visibleLents.reduce((sum, lent) => sum + Number(lent.amount || 0), 0),
+    [visibleLents]
   );
 
   const getUserBalanceForExpense = (expense, targetUserId) => {
@@ -572,7 +666,7 @@ const DashboardPage = () => {
               onSettleDue={handleSettleDue}
             />
 
-            <LentsList lents={myLents} />
+            <LentsList lents={visibleLents} />
 
             
 
@@ -583,8 +677,8 @@ const DashboardPage = () => {
         <section className="analytics-section">
           <Suspense fallback={<div className="analytics-loading">Loading analytics…</div>}>
             <AnalyticsDashboard
-              refreshKey={`${expenses.length}:${groups.length}:${myDues.length}:${myLents.length}`}
-              balanceSnapshot={{ totalLent, totalOwed }}
+              refreshKey={`${expenses.length}:${groups.length}:${visibleDues.length}:${visibleLents.length}`}
+              balanceSnapshot={{ totalLent: visibleTotalLent, totalOwed: visibleTotalOwed }}
             />
           </Suspense>
         </section>
