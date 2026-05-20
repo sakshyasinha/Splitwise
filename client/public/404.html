@@ -5,15 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SplitSense</title>
     <script>
-      const params = new URLSearchParams(location.search);
-      const redirect = params.get('redirect');
-      if (redirect) {
-        history.replaceState(null, '', redirect);
-      }
+      const target = location.pathname + location.search + location.hash;
+      location.replace(new URL('./index.html', location.href).toString() + '?redirect=' + encodeURIComponent(target));
     </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/app/main.jsx"></script>
   </body>
 </html>
