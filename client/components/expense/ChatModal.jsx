@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { io } from 'socket.io-client';
+import { initSocket, getSocket } from '../../src/services/socket.service.js';
 import { getPersonName } from '../../utils/personUtils.js';
 import '../../styles/chat.css';
 
@@ -26,31 +26,30 @@ export default function ChatModal({ open, onClose, expense, currentUser, token, 
   useEffect(() => {
     if (!token) return;
 
-    // Initialize socket.io connection (reuse existing connection)
+    // Initialize socket.io connection via centralized service. This uses
+    // VITE_API_ORIGIN when provided; otherwise falls back to current origin.
     if (!socketRef.current) {
-      socketRef.current = io('/messages', {
-        auth: { token },
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: 5
-      });
+      socketRef.current = initSocket(token);
 
-      socketRef.current.on('connect', () => {
-        console.log('Socket connected:', socketRef.current.id);
-      });
+      if (socketRef.current) {
+        socketRef.current.on('connect', () => {
+          console.log('Socket connected:', socketRef.current.id);
+        });
 
-      socketRef.current.on('connect_error', (err) => {
-        console.error('Socket connect error:', err);
-      });
+        socketRef.current.on('connect_error', (err) => {
+          console.error('Socket connect error:', err);
+        });
 
-      socketRef.current.on('disconnect', () => {
-        console.log('Socket disconnected');
-      });
+        socketRef.current.on('disconnect', () => {
+          console.log('Socket disconnected');
+        });
 
-      socketRef.current.on('error', (err) => {
-        console.error('Socket error:', err);
-      });
+        socketRef.current.on('error', (err) => {
+          console.error('Socket error:', err);
+        });
+      } else {
+        console.warn('Socket not initialized (no API origin configured)');
+      }
     }
 
     return () => {
