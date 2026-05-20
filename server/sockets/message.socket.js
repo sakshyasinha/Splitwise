@@ -1,61 +1,76 @@
-import jwt from 'jsonwebtoken';
 import logger from '../utils/logger.js';
+import { socketAuthMiddleware, requireSocketAuth } from '../middleware/socket-auth.middleware.js';
 
 export const setupMessageSocket = (io) => {
   const messageNamespace = io.of('/messages');
 
-  messageNamespace.use((socket, next) => {
-    // Simple auth check: verify JWT from query string or auth
-    const token = socket.handshake.auth?.token;
-    console.log('Socket auth attempt, token:', token ? 'present' : 'missing');
-    
-    if (!token) {
-      console.log('Socket auth failed: no token');
-      return next(new Error('Authentication failed - no token'));
-    }
-    
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.user = decoded;
-      console.log('Socket auth successful, user:', decoded.id);
-      next();
-    } catch (err) {
-      console.log('Socket auth failed: invalid token', err.message);
-      next(new Error('Invalid token'));
-    }
-  });
+  messageNamespace.use(socketAuthMiddleware);
 
   messageNamespace.on('connection', (socket) => {
-    console.log('✓ Socket connected:', socket.id, 'user:', socket.user?.id);
+    logger.info('Socket connected', { socketId: socket.id, userId: socket.userId });
 
-    // Join an expense room (e.g., "expense:123")
-    socket.on('join-expense', (expenseId) => {
-      socket.join(`expense:${expenseId}`);
-      console.log('✓ User joined expense room:', `expense:${expenseId}`);
+    socket.on('join-expense', (expenseId, callback) => {
+      try {
+        if (!expenseId) {
+          return callback?.({ error: 'expenseId is required' });
+        }
+        socket.join(`expense:${expenseId}`);
+        logger.info('User joined expense room', { userId: socket.userId, expenseId, socketId: socket.id });
+        callback?.({ success: true });
+      } catch (err) {
+        logger.error('Error joining expense room', { error: err.message });
+        callback?.({ error: err.message });
+      }
     });
 
-    // Leave an expense room
-    socket.on('leave-expense', (expenseId) => {
-      socket.leave(`expense:${expenseId}`);
-      console.log('✓ User left expense room:', `expense:${expenseId}`);
+    socket.on('leave-expense', (expenseId, callback) => {
+      try {
+        if (!expenseId) {
+          return callback?.({ error: 'expenseId is required' });
+        }
+        socket.leave(`expense:${expenseId}`);
+        logger.info('User left expense room', { userId: socket.userId, expenseId, socketId: socket.id });
+        callback?.({ success: true });
+      } catch (err) {
+        logger.error('Error leaving expense room', { error: err.message });
+        callback?.({ error: err.message });
+      }
     });
 
-    // Handle new message from client
-    socket.on('new-message', (data) => {
-      const { expenseId, message } = data;
-      console.log('Broadcasting message for expense:', expenseId);
-      messageNamespace.to(`expense:${expenseId}`).emit('message-received', message);
+    socket.on('new-message', (data, callback) => {
+      try {
+        const { expenseId, message } = data;
+
+        if (!expenseId || !message) {
+          return callback?.({ error: 'expenseId and message are required' });
+        }
+
+        const messageObj = {
+          userId: socket.userId,
+          expenseId,
+          message,
+          timestamp: new Date().toISOString(),
+        };
+
+        messageNamespace.to(`expense:${expenseId}`).emit('message-received', messageObj);
+        logger.info('Message broadcast', { userId: socket.userId, expenseId, socketId: socket.id });
+        callback?.({ success: true });
+      } catch (err) {
+        logger.error('Error broadcasting message', { error: err.message });
+        callback?.({ error: err.message });
+      }
     });
 
-    socket.on('disconnect', () => {
-      console.log('✗ Socket disconnected:', socket.id);
+    socket.on('disconnect', (reason) => {
+      logger.info('Socket disconnected', { socketId: socket.id, userId: socket.userId, reason });
     });
 
-    socket.on('error', (err) => {
-      console.log('Socket error:', err);
+    socket.on('error', (error) => {
+      logger.error('Socket error', { socketId: socket.id, userId: socket.userId, error: error.message });
     });
   });
 
-  console.log('✓ Message socket handler initialized');
+  logger.info('Message socket handler initialized');
 };
+
 
