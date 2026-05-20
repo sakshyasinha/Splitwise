@@ -3,6 +3,7 @@ import { getSettlement, createPayment, getSettlementHistory, sendPaymentReminder
 import { protect } from "../middleware/auth.middleware.js";
 import validate from "../middleware/validation.middleware.js";
 import { createPaymentSchema, sendPaymentReminderSchema } from "../schemas/settlement.schema.js";
+import { settlementsEndpointsLimiter, nudgeEndpointsLimiter } from "../middleware/rate-limit.middleware.js";
 
 const router=express.Router();
 
@@ -10,16 +11,16 @@ const router=express.Router();
 router.use(protect);
 
 // Get settlement history for current user (must be before :groupId)
-router.get("/history", getSettlementHistory);
+router.get("/history", settlementsEndpointsLimiter, getSettlementHistory);
 
 // Get suggested settlements for a group
-router.get("/:groupId", getSettlement);
+router.get("/:groupId", settlementsEndpointsLimiter, getSettlement);
 
 // Create a new payment/settlement
-router.post("/", validate(createPaymentSchema), createPayment);
+router.post("/", settlementsEndpointsLimiter, validate(createPaymentSchema), createPayment);
 
 // Send a payment reminder/nudge to a borrower
-router.post("/nudge", validate(sendPaymentReminderSchema), sendPaymentReminder);
+router.post("/nudge", nudgeEndpointsLimiter, validate(sendPaymentReminderSchema), sendPaymentReminder);
 
 export default router;
 

@@ -17,11 +17,13 @@ import {
 import { protect } from '../middleware/auth.middleware.js';
 import validate from '../middleware/validation.middleware.js';
 import { addExpenseSchema, updateExpenseSchema } from '../schemas/expense.schema.js';
+import { expenseEndpointsLimiter } from '../middleware/rate-limit.middleware.js';
 
 const router = express.Router();
 
 // All expense routes require authentication
 router.use(protect);
+router.use(expenseEndpointsLimiter);
 
 // Basic CRUD operations
 router.post('/add', validate(addExpenseSchema), addExpense);
