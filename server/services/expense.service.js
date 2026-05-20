@@ -708,6 +708,37 @@ export const getMyDues = async (userId) => {
             // Support both legacy and new amount fields - convert to number
             const amount = Number(participant.amount || participant.shareAmount || 0);
 
+            // For payment-type expenses, find the recipient (other participant)
+            // For regular split expenses, the recipient is whoever paid
+            let paidTo;
+            if (expense.splitType === 'payment') {
+                // Payment expense: find the other participant (the recipient)
+                const otherParticipant = expense.participants.find(
+                    (entry) => String(entry.userId?._id || entry.userId) !== String(userId)
+                );
+                if (otherParticipant && otherParticipant.userId) {
+                    paidTo = {
+                        id: otherParticipant.userId?._id,
+                        name: otherParticipant.userId?.name || 'Unknown User',
+                        email: otherParticipant.userId?.email || ''
+                    };
+                } else {
+                    // Fallback if other participant not found
+                    paidTo = {
+                        id: expense.paidBy?._id || expense.createdBy?._id,
+                        name: expense.paidBy?.name || expense.createdBy?.name || 'Unknown User',
+                        email: expense.paidBy?.email || expense.createdBy?.email || ''
+                    };
+                }
+            } else {
+                // Regular split: recipient is whoever paid
+                paidTo = {
+                    id: expense.paidBy?._id || expense.createdBy?._id,
+                    name: expense.paidBy?.name || expense.createdBy?.name || 'Unknown User',
+                    email: expense.paidBy?.email || expense.createdBy?.email || ''
+                };
+            }
+
             return {
                 expenseId: expense._id,
                 description: expense.description,
@@ -717,11 +748,7 @@ export const getMyDues = async (userId) => {
                     id: expense.group?._id,
                     name: expense.group?.name || '' // Default to 'Friends' if no group
                 },
-                paidTo: {
-                    id: expense.paidBy?._id || expense.createdBy?._id,
-                    name: expense.paidBy?.name || expense.createdBy?.name || 'Unknown User',
-                    email: expense.paidBy?.email || expense.createdBy?.email || ''
-                },
+                paidTo,
                 createdAt: expense.createdAt
             };
         })
