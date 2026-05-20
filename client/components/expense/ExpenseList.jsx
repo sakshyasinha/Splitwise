@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { io } from 'socket.io-client';
+import { initSocket, getSocket } from '../../src/services/socket.service.js';
 import useExpenses from '../../hooks/useExpenses.js';
 import useAuth from '../../hooks/useAuth.js';
 import useToast from '../../hooks/useToast.js';
@@ -136,14 +136,9 @@ export default function ExpenseList({ onEdit }) {
   useEffect(() => {
     if (!token || socketRef.current) return;
 
-    const socket = io('/messages', {
-      auth: { token },
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: 5,
-    });
-
+    // Initialize via centralized socket service. In dev Vite proxy maps
+    // /socket.io to the backend; in production set VITE_API_ORIGIN to the API URL.
+    const socket = initSocket(token);
     socketRef.current = socket;
 
     const onMessageReceived = (message) => {
@@ -169,8 +164,12 @@ export default function ExpenseList({ onEdit }) {
       }
     };
 
-    socket.on('message-received', onMessageReceived);
-    socket.on('unread-updated', onUnreadUpdated);
+    if (socket) {
+      socket.on('message-received', onMessageReceived);
+      socket.on('unread-updated', onUnreadUpdated);
+    } else {
+      console.warn('Socket not initialized (no API origin configured)');
+    }
 
     return () => {
       socket.off('message-received', onMessageReceived);
