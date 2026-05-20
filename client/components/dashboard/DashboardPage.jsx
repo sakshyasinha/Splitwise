@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import useAuth from '../../hooks/useAuth.js';
 import useExpenses from '../../hooks/useExpenses.js';
 import Card from '../ui/Card.jsx';
@@ -18,7 +18,7 @@ import LentsList from './LentsList.jsx';
 import GroupDetails from './GroupDetails.jsx';
 import NotificationsDropdown from './NotificationsDropdown.jsx';
 import EmailActions from './EmailActions.jsx';
-import AnalyticsDashboard from '../analytics/AnalyticsDashboard.jsx';
+const AnalyticsDashboard = lazy(() => import('../analytics/AnalyticsDashboard.jsx'));
 import RecurringExpensesManager from '../recurring/RecurringExpensesManager.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { getPersonLabel } from '../../utils/personUtils.js';
@@ -581,10 +581,12 @@ const DashboardPage = () => {
         </section>
 
         <section className="analytics-section">
-          <AnalyticsDashboard
-            refreshKey={`${expenses.length}:${groups.length}:${myDues.length}:${myLents.length}`}
-            balanceSnapshot={{ totalLent, totalOwed }}
-          />
+          <Suspense fallback={<div className="analytics-loading">Loading analytics…</div>}>
+            <AnalyticsDashboard
+              refreshKey={`${expenses.length}:${groups.length}:${myDues.length}:${myLents.length}`}
+              balanceSnapshot={{ totalLent, totalOwed }}
+            />
+          </Suspense>
         </section>
       </main>
 

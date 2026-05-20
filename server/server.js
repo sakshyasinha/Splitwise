@@ -25,6 +25,7 @@ import analyticsRoutes from './routes/analytics.routes.js';
 import messageRoutes from './routes/message.routes.js';
 import unreadRoutes from './routes/unread.routes.js';
 import { initUnreadQueue } from './queues/unread.queue.js';
+import cacheHeadersMiddleware from './middleware/cache-headers.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,6 +60,9 @@ app.use(expressWinston.logger({
 app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Apply HTTP caching headers middleware to all API responses
+app.use('/api', cacheHeadersMiddleware);
 
 // Serve static files for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

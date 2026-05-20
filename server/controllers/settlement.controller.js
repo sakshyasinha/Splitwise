@@ -4,6 +4,8 @@ import Settlement from "../models/settlement.model.js";
 import User from "../models/user.model.js";
 import Expense from "../models/expense.model.js";
 import * as emailService from '../services/email.service.js';
+import cacheService from '../services/cache.service.js';
+import * as cacheHelpers from '../services/cache-helpers.service.js';
 import { createSettlementActivity, createPaymentReminderActivity } from '../services/activity.service.js';
 import rateLimiter from '../utils/rateLimiter.js';
 
@@ -117,7 +119,7 @@ export const createPayment = async (req, res) => {
     }
 
     if (fromEmail) {
-      const fromUser = await User.findOne({ email: String(fromEmail).toLowerCase() });
+      const fromUser = await cacheHelpers.getUserByEmailCached(fromEmail);
       if (!fromUser) {
         return res.status(404).json({ message: 'Payer not found with that email' });
       }
@@ -137,8 +139,8 @@ export const createPayment = async (req, res) => {
     // Find the recipient
     if (toEmail) {
       console.log('Looking up user by email:', toEmail);
-      // Payment to a specific friend
-      toUser = await User.findOne({ email: toEmail.toLowerCase() });
+      // Payment to a specific friend - use cached lookup
+      toUser = await cacheHelpers.getUserByEmailCached(toEmail);
       if (!toUser) {
         console.log('User not found with email:', toEmail);
         return res.status(404).json({ message: 'Recipient not found with that email' });
@@ -325,6 +327,20 @@ export const createPayment = async (req, res) => {
         }
       });
 
+      // Invalidate caches for both users and group
+      setImmediate(async () => {
+        try {
+          await cacheService.invalidateUserCache(String(from));
+          await cacheService.invalidateUserCache(String(toUser._id));
+          if (groupId) {
+            await cacheService.invalidateGroupCache(groupId);
+          }
+          await cacheService.invalidateSettlementCache(String(from), String(toUser._id));
+        } catch (cacheError) {
+          console.warn('Cache invalidation error:', cacheError);
+        }
+      });
+
       res.status(201).json(response);
     } catch (expenseError) {
       console.error('Error creating payment expense:', expenseError);
@@ -347,13 +363,7 @@ export const getSettlementHistory = async (req, res) => {
   try {
     const userId = req.user?.id || req.body.userId;
 
-    const settlements = await Settlement.find({
-      $or: [{ from: userId }, { to: userId }],
-    })
-      .sort({ settledAt: -1 })
-      .populate('from', 'name email')
-      .populate('to', 'name email')
-      .populate('expenseId', 'description amount date');
+    const settlements = await cacheHelpers.getSettlementHistoryCached(userId);
 
     res.status(200).json(settlements);
   } catch (error) {
