@@ -657,7 +657,7 @@ export const settleDue = async (userId, expenseId) => {
         }
     });
 
-    return { settled: true };
+    return { settled: true, expense };
 };
 
 export const getGroupExpenses = async (userId, groupId) => {

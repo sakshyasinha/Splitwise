@@ -120,7 +120,36 @@ export const settleDue = async (req, res) => {
     try {
         const data = await expenseService.settleDue(req.user?.id, req.params.id);
 
-        res.json(data);
+        // Invalidate caches for all affected users and groups after settlement
+        setImmediate(async () => {
+            try {
+                const userId = req.user?.id;
+                const expense = data.expense;
+
+                // Invalidate the settling user's cache
+                await cacheService.invalidateUserCache(String(userId));
+
+                // Invalidate group cache if expense is in a group
+                if (expense?.group) {
+                    await cacheService.invalidateGroupCache(String(expense.group));
+                }
+
+                // Invalidate caches for all participants (their balances have changed)
+                if (expense?.participants) {
+                    for (const participant of expense.participants) {
+                        const pId = String(participant.userId?._id || participant.userId);
+                        if (pId && pId !== String(userId)) {
+                            await cacheService.invalidateUserCache(pId);
+                        }
+                    }
+                }
+            } catch (cacheError) {
+                console.warn('Cache invalidation error in settleDue:', cacheError);
+            }
+        });
+
+        // Return only the settled flag, not the internal expense object
+        res.json({ settled: data.settled });
     } catch (error) {
         res.status(error.statusCode || 500).json({ message: error.message });
     }
