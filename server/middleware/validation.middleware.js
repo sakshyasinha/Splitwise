@@ -1,13 +1,16 @@
 export const validate = (schema) => {
   return async (req, res, next) => {
     try {
-      const { error, value } = await schema.validateAsync(req.body, {
+      const value = await schema.validateAsync(req.body, {
         abortEarly: false,
         stripUnknown: true,
       });
 
-      if (error) {
-        const errors = error.details.map((detail) => ({
+      req.body = value;
+      next();
+    } catch (err) {
+      if (err?.isJoi) {
+        const errors = err.details.map((detail) => ({
           field: detail.path.join('.'),
           message: detail.message,
           value: detail.context.value,
@@ -20,9 +23,6 @@ export const validate = (schema) => {
         });
       }
 
-      req.body = value;
-      next();
-    } catch (err) {
       return res.status(500).json({
         statusCode: 500,
         message: 'Validation error',
