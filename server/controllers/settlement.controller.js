@@ -119,8 +119,13 @@ export const createPayment = async (req, res) => {
       user: req.user
     });
 
-    const { description, amount, groupId, toEmail, fromEmail } = req.body;
+    // Defensive destructure: ensure req.body exists to avoid crash when undefined
+    const { description, amount, groupId, toEmail, fromEmail } = req.body || {};
     let from = req.user?.id || req.user?._id;
+
+    if (!req.body) {
+      console.warn('createPayment called with empty req.body', { user: req.user, headers: req.headers });
+    }
 
     console.log('Parsed values:', { description, amount, groupId, toEmail, from });
 
@@ -365,10 +370,14 @@ export const createPayment = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error creating payment:', error);
+    console.error('Error creating payment:', {
+      message: error?.message,
+      stack: error?.stack,
+      body: req.body,
+      user: req.user
+    });
     res.status(error.statusCode || 500).json({
-      message: error.message || 'Failed to create payment',
-      error: error.toString()
+      message: error.message || 'Failed to create payment'
     });
   }
 };
