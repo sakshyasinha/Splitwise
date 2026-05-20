@@ -47,6 +47,20 @@ const normalizeExpense = (expense) => {
   return normalized;
 };
 
+// Helper function to normalize settlement (convert Decimal128 to Number)
+const normalizeSettlement = (settlement) => {
+  if (!settlement) return settlement;
+
+  const normalized = settlement.toObject ? settlement.toObject() : { ...settlement };
+
+  // Convert Decimal128 amount to number
+  if (normalized.amount) {
+    normalized.amount = Number(normalized.amount);
+  }
+
+  return normalized;
+};
+
 export const getSettlement=async(req,res)=>{
     const{groupId}=req.params;
     const balances=await CalculateBalance(groupId);
@@ -92,7 +106,7 @@ export const recordSettlement = async (req, res) => {
       }
     });
 
-    res.status(201).json(settlement);
+    res.status(201).json(normalizeSettlement(settlement));
   } catch (error) {
     res.status(error.statusCode || 500).json({ message: error.message });
   }
@@ -365,7 +379,10 @@ export const getSettlementHistory = async (req, res) => {
 
     const settlements = await cacheHelpers.getSettlementHistoryCached(userId);
 
-    res.status(200).json(settlements);
+    // Normalize all settlements to convert Decimal128 to Number
+    const normalizedSettlements = settlements.map(settlement => normalizeSettlement(settlement));
+
+    res.status(200).json(normalizedSettlements);
   } catch (error) {
     res.status(error.statusCode || 500).json({ message: error.message });
   }

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import connectDB from "./config/db.js"
+import connectDB, { closeDB } from "./config/db.js"
 import logger from './utils/logger.js';
 import expressWinston from 'express-winston';
 import * as Sentry from '@sentry/node';
@@ -26,6 +26,8 @@ import messageRoutes from './routes/message.routes.js';
 import unreadRoutes from './routes/unread.routes.js';
 import { initUnreadQueue } from './queues/unread.queue.js';
 import cacheHeadersMiddleware from './middleware/cache-headers.middleware.js';
+import requestIdMiddleware from './middleware/request-id.middleware.js';
+import securityHeadersMiddleware from './middleware/security-headers.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,6 +50,10 @@ if (process.env.SENTRY_DSN) {
     Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'development' });
     app.use(Sentry.Handlers.requestHandler());
 }
+
+app.use(requestIdMiddleware);
+
+app.use(securityHeadersMiddleware);
 
 app.use(expressWinston.logger({
     winstonInstance: logger,
@@ -133,6 +139,46 @@ export const startServer = async () => {
             }
             process.exit(1);
         });
+
+        // Graceful shutdown handler
+        const gracefulShutdown = async (signal) => {
+            logger.info(`${signal} received, starting graceful shutdown...`);
+
+            // Stop accepting new connections
+            server.close(async () => {
+                logger.info('HTTP server closed, no longer accepting connections');
+
+                // Close Socket.IO
+                try {
+                    io.close();
+                    logger.info('Socket.IO closed');
+                } catch (err) {
+                    logger.error('Error closing Socket.IO:', err.message);
+                }
+
+                // Disconnect MongoDB
+                try {
+                    await closeDB();
+                } catch (err) {
+                    logger.error('Error closing database:', err.message);
+                }
+
+                logger.info('Graceful shutdown completed');
+                process.exit(0);
+            });
+
+            // Force shutdown after 30 seconds
+            const shutdownTimeout = setTimeout(() => {
+                logger.error('Graceful shutdown timeout, forcing exit');
+                process.exit(1);
+            }, 30000);
+
+            shutdownTimeout.unref();
+        };
+
+        // Register signal handlers
+        process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+        process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
         // Error handler middleware should be last
         if (process.env.SENTRY_DSN) {
