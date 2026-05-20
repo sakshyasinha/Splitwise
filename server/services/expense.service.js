@@ -583,12 +583,11 @@ export const settleDue = async (userId, expenseId) => {
         throw error;
     }
 
-    // Check if user is the payer (payers don't need to settle)
+    // If the payer ends up clicking settle, treat it as a no-op instead of a hard failure.
+    // The expense is already considered paid from the payer's side.
     if (String(expense.paidBy) === String(userId) || 
         (expense.payers && expense.payers.some(p => String(p.userId) === String(userId)))) {
-        const error = new Error('Payer does not need to settle this expense');
-        error.statusCode = 400;
-        throw error;
+        return { settled: true, alreadyPaid: true };
     }
 
     const participant = expense.participants?.find((entry) => {
