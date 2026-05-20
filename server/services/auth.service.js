@@ -66,6 +66,7 @@ export const loginUser=async({email,password})=>{
         await tokenService.storeRefreshToken(user._id.toString(), refreshToken);
 
         return {
+            token: accessToken,
             accessToken,
             refreshToken,
             user: toPublicUser(user)
