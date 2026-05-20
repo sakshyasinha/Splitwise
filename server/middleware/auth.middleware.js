@@ -7,6 +7,11 @@ export const protect=async(req,res,next)=>{
 
     try {
         const decoded=jwt.verify(token,process.env.JWT_SECRET);
+
+        if (decoded.type === 'refresh') {
+            return res.status(401).json({ message: 'Not authorized, invalid token type' });
+        }
+
         req.user=decoded;
         next();
     } catch (error) {

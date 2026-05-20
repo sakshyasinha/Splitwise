@@ -5,7 +5,7 @@ const REDIS_URL = process.env.REDIS_URL || process.env.REDIS_URI || 'redis://127
 
 // Lazy initialization - Redis connection only created when needed
 let redis = null;
-const getRedisClient = () => {
+export const getRedisClient = () => {
   if (!redis) {
     redis = new Redis(REDIS_URL);
     redis.on('error', (err) => {

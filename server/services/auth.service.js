@@ -1,6 +1,7 @@
 import User from '../models/user.model.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import * as tokenService from './token.service.js';
 
 function toPublicUser(user) {
     return {
@@ -51,7 +52,7 @@ export const loginUser=async({email,password})=>{
             error.statusCode = 404;
             throw error;
         }
-        
+
 
         const isMatch=await bcrypt.compare(password,user.password);
 
@@ -61,8 +62,12 @@ export const loginUser=async({email,password})=>{
             throw error;
         }
 
+        const { accessToken, refreshToken } = tokenService.generateTokens(user._id.toString());
+        await tokenService.storeRefreshToken(user._id.toString(), refreshToken);
+
         return {
-            token: jwt.sign({id:user._id},process.env.JWT_SECRET, { expiresIn: '7d' }),
+            accessToken,
+            refreshToken,
             user: toPublicUser(user)
         };
 };
