@@ -540,11 +540,21 @@ export const sendSettlementAlertEmail = async (settlementId) => {
       groupName = group?.name || 'Personal';
     }
 
+    // Defensive: ensure populated fields exist
+    const receiverEmail = settlement.to?.email;
+    const receiverName = settlement.to?.name || 'Friend';
+    const payerName = settlement.from?.name || 'Someone';
+
+    if (!receiverEmail) {
+      logger.warn(`sendSettlementAlertEmail: missing receiver email for settlement ${settlementId}`);
+      return { success: false, message: 'Missing receiver email' };
+    }
+
     // Generate email content
     const settlementUrl = `${process.env.CORS_ORIGIN || 'http://localhost:5173'}/settlements/${settlementId}`;
     const html = generateSettlementAlertTemplate({
-      receiverName: settlement.to.name,
-      payerName: settlement.from.name,
+      receiverName: receiverName,
+      payerName: payerName,
       description: settlement.description || 'Payment',
       amount: Number(settlement.amount),
       currency: settlement.expenseId?.currency || 'INR',
@@ -555,15 +565,19 @@ export const sendSettlementAlertEmail = async (settlementId) => {
       settlementUrl
     });
 
-    // Send email to receiver
-    const result = await sendEmail({
-      to: settlement.to.email,
-      subject: `Payment Received: ${settlement.description || 'Payment'}`,
-      html: html
-    });
-
-    logger.info(`Settlement alert email sent to ${settlement.to.email}`);
-    return result;
+    // Send email to receiver (guard send)
+    try {
+      const result = await sendEmail({
+        to: receiverEmail,
+        subject: `Payment Received: ${settlement.description || 'Payment'}`,
+        html: html
+      });
+      logger.info(`Settlement alert email sent to ${receiverEmail}`);
+      return result;
+    } catch (sendErr) {
+      logger.error(`Failed to send settlement alert email to ${receiverEmail}:`, sendErr);
+      return { success: false, message: 'Failed to send email', error: sendErr.toString() };
+    }
 
   } catch (error) {
     logger.error('Failed to send settlement alert email:', error);
@@ -582,7 +596,8 @@ export const sendDebtNudgeEmail = async (fromUserId, toUserId, groupId, amount, 
     const group = await Group.findById(groupId);
 
     if (!fromUser || !toUser || !group) {
-      throw new Error('User or group not found');
+      logger.warn('sendDebtNudgeEmail: missing fromUser/toUser/group', { fromUserId, toUserId, groupId });
+      return { success: false, message: 'User or group not found' };
     }
 
     // Generate email content
@@ -602,15 +617,19 @@ export const sendDebtNudgeEmail = async (fromUserId, toUserId, groupId, amount, 
       groupUrl: groupUrl
     });
 
-    // Send email
-    const result = await sendEmail({
-      to: toUser.email,
-      subject: `Payment Reminder from ${fromUser.name}`,
-      html: html
-    });
-
-    logger.info(`Debt nudge email sent from ${fromUser.email} to ${toUser.email}`);
-    return result;
+    // Send email (guard)
+    try {
+      const result = await sendEmail({
+        to: toUser.email,
+        subject: `Payment Reminder from ${fromUser.name}`,
+        html: html
+      });
+      logger.info(`Debt nudge email sent from ${fromUser.email} to ${toUser.email}`);
+      return result;
+    } catch (sendErr) {
+      logger.error(`Failed to send debt nudge email from ${fromUserId} to ${toUserId}:`, sendErr);
+      return { success: false, message: 'Failed to send email', error: sendErr.toString() };
+    }
 
   } catch (error) {
     logger.error('Failed to send debt nudge email:', error);

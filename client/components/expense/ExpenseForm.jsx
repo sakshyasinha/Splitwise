@@ -662,11 +662,26 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
       // Calculate amounts based on split type
       const paymentAmounts = calculatePaymentAmounts();
 
+      // Validate required fields before sending
+      if (!form.description || String(form.description).trim().length === 0) {
+        toast.error('Payment description is required');
+        return;
+      }
+
+      if (!form.amount || Number(form.amount) <= 0) {
+        toast.error('Payment amount must be greater than 0');
+        return;
+      }
+
       // Create settlements for each recipient with their calculated amount
       const paymentPromises = paymentRecipients.map(async (friendEmail) => {
-        const amount = paymentAmounts[friendEmail];
+        const amount = Number(paymentAmounts[friendEmail]) || 0;
+        if (amount <= 0) {
+          // skip zero-amount items (nothing to settle)
+          return Promise.resolve(null);
+        }
         const paymentData = {
-          description: `${form.description} (to ${friendEmail})`,
+          description: `${String(form.description).trim()} (to ${friendEmail})`,
           amount: amount,
           toEmail: friendEmail,
           fromEmail: paymentPaidByEmail,
