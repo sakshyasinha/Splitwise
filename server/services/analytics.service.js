@@ -2,63 +2,72 @@ import Expense from '../models/expense.model.js';
 import Group from '../models/group.model.js';
 import User from '../models/user.model.js';
 import RecurringExpense from '../models/recurring-expense.model.js';
+import cacheService, { CACHE_TTL } from './cache.service.js';
 
 /**
  * Get comprehensive analytics for a user
  */
 export const getUserAnalytics = async (userId, options = {}) => {
   try {
-    const {
-      startDate,
-      endDate,
-      groupId,
-      category,
-      currency = 'INR'
-    } = options;
+    // Build cache key with options
+    const cacheKey = cacheService.getCacheKey.userAnalytics(userId, options);
+    
+    // Return from cache or fetch fresh
+    return await cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        const {
+          startDate,
+          endDate,
+          groupId,
+          category,
+          currency = 'INR'
+        } = options;
 
-    // Build date filter
-    const dateFilter = {};
-    if (startDate || endDate) {
-      dateFilter.date = {};
-      if (startDate) dateFilter.date.$gte = new Date(startDate);
-      if (endDate) dateFilter.date.$lte = new Date(endDate);
-    }
+        // Build date filter
+        const dateFilter = {};
+        if (startDate || endDate) {
+          dateFilter.date = {};
+          if (startDate) dateFilter.date.$gte = new Date(startDate);
+          if (endDate) dateFilter.date.$lte = new Date(endDate);
+        }
 
-    // Build additional filters
-    const additionalFilters = {};
-    if (groupId) additionalFilters.group = groupId;
-    if (category) additionalFilters.category = category;
+        // Build additional filters
+        const additionalFilters = {};
+        if (groupId) additionalFilters.group = groupId;
+        if (category) additionalFilters.category = category;
 
-    // Find all expenses where user is involved
-    const expenses = await Expense.find({
-      $or: [
-        { paidBy: userId },
-        { createdBy: userId },
-        { 'payers.userId': userId },
-        { "participants.userId": userId }
-      ],
-      isDeleted: false,
-      ...dateFilter,
-      ...additionalFilters
-    })
-      .populate('group', 'name type')
-      .populate('paidBy', 'name email')
-      .populate('createdBy', 'name email')
-      .populate('participants.userId', 'name email')
-      .sort({ date: -1 });
+        // Find all expenses where user is involved
+        const expenses = await Expense.find({
+          $or: [
+            { paidBy: userId },
+            { createdBy: userId },
+            { 'payers.userId': userId },
+            { "participants.userId": userId }
+          ],
+          isDeleted: false,
+          ...dateFilter,
+          ...additionalFilters
+        })
+          .populate('group', 'name type')
+          .populate('paidBy', 'name email')
+          .populate('createdBy', 'name email')
+          .populate('participants.userId', 'name email')
+          .sort({ date: -1 });
 
-    // Calculate analytics
-    const analytics = {
-      overview: calculateOverview(expenses, userId),
-      spending: calculateSpendingAnalytics(expenses, userId),
-      categories: calculateCategoryAnalytics(expenses, userId),
-      groups: calculateGroupAnalytics(expenses, userId),
-      trends: calculateTrendAnalytics(expenses, userId),
-      relationships: calculateRelationshipAnalytics(expenses, userId),
-      timeDistribution: calculateTimeDistribution(expenses, userId)
-    };
-
-    return analytics;
+        // Calculate analytics
+        return {
+          overview: calculateOverview(expenses, userId),
+          spending: calculateSpendingAnalytics(expenses, userId),
+          categories: calculateCategoryAnalytics(expenses, userId),
+          groups: calculateGroupAnalytics(expenses, userId),
+          trends: calculateTrendAnalytics(expenses, userId),
+          relationships: calculateRelationshipAnalytics(expenses, userId),
+          timeDistribution: calculateTimeDistribution(expenses, userId)
+        };
+      },
+      CACHE_TTL.USER_ANALYTICS
+    );
   } catch (error) {
     console.error('Error in getUserAnalytics:', error);
     throw error;
@@ -517,109 +526,119 @@ const calculateTimeDistribution = (expenses, userId) => {
  */
 export const getGroupAnalytics = async (groupId, options = {}) => {
   try {
-    const {
-      startDate,
-      endDate
-    } = options;
+    // Build cache key with options
+    const cacheKey = cacheService.getCacheKey.groupAnalytics(groupId, options);
+    
+    // Return from cache or fetch fresh
+    return await cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        const {
+          startDate,
+          endDate
+        } = options;
 
-    // Build date filter
-    const dateFilter = {};
-    if (startDate || endDate) {
-      dateFilter.date = {};
-      if (startDate) dateFilter.date.$gte = new Date(startDate);
-      if (endDate) dateFilter.date.$lte = new Date(endDate);
-    }
-
-    // Find all expenses for the group
-    const expenses = await Expense.find({
-      group: groupId,
-      isDeleted: false,
-      ...dateFilter
-    })
-      .populate('paidBy', 'name email')
-      .populate('createdBy', 'name email')
-      .populate('participants.userId', 'name email')
-      .sort({ date: -1 });
-
-    // Get group details
-    const group = await Group.findById(groupId).populate('members', 'name email');
-
-    if (!group) {
-      const error = new Error('Group not found');
-      error.statusCode = 404;
-      throw error;
-    }
-
-    // Calculate group-specific analytics
-    const memberAnalytics = {};
-    const categoryTotals = {};
-
-    expenses.forEach(exp => {
-      const amount = Number(exp.amount || 0);
-      const category = exp.category || 'Other';
-
-      // Track by category
-      categoryTotals[category] = (categoryTotals[category] || 0) + amount;
-
-      // Track by member
-      const participants = exp.participants || [];
-      participants.forEach(participant => {
-        const memberId = String(participant.userId?._id || participant.userId);
-        const memberName = participant.userId?.name || participant.userId?.email || 'Unknown';
-
-        if (!memberAnalytics[memberId]) {
-          memberAnalytics[memberId] = {
-            id: memberId,
-            name: memberName,
-            totalPaid: 0,
-            totalOwed: 0,
-            totalShare: 0,
-            expenseCount: 0,
-            balance: 0
-          };
+        // Build date filter
+        const dateFilter = {};
+        if (startDate || endDate) {
+          dateFilter.date = {};
+          if (startDate) dateFilter.date.$gte = new Date(startDate);
+          if (endDate) dateFilter.date.$lte = new Date(endDate);
         }
 
-        const member = memberAnalytics[memberId];
-        member.expenseCount += 1;
-        member.totalShare += Number(participant.shareAmount || participant.amount || 0);
+        // Find all expenses for the group
+        const expenses = await Expense.find({
+          group: groupId,
+          isDeleted: false,
+          ...dateFilter
+        })
+          .populate('paidBy', 'name email')
+          .populate('createdBy', 'name email')
+          .populate('participants.userId', 'name email')
+          .sort({ date: -1 });
 
-        // Check if this member paid
-        const isPayer = String(participant.userId?._id || participant.userId) === String(exp.paidBy);
-        if (isPayer) {
-          member.totalPaid += amount;
+        // Get group details
+        const group = await Group.findById(groupId).populate('members', 'name email');
+
+        if (!group) {
+          const error = new Error('Group not found');
+          error.statusCode = 404;
+          throw error;
         }
 
-        // Calculate balance
-        member.balance = member.totalPaid - member.totalShare;
-      });
-    });
+        // Calculate group-specific analytics
+        const memberAnalytics = {};
+        const categoryTotals = {};
 
-    // Convert to array
-    const members = Object.values(memberAnalytics).sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+        expenses.forEach(exp => {
+          const amount = Number(exp.amount || 0);
+          const category = exp.category || 'Other';
 
-    // Calculate totals
-    const totalAmount = expenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-    const totalExpenses = expenses.length;
+          // Track by category
+          categoryTotals[category] = (categoryTotals[category] || 0) + amount;
 
-    return {
-      group: {
-        id: group._id,
-        name: group.name,
-        type: group.type,
-        memberCount: group.members.length
+          // Track by member
+          const participants = exp.participants || [];
+          participants.forEach(participant => {
+            const memberId = String(participant.userId?._id || participant.userId);
+            const memberName = participant.userId?.name || participant.userId?.email || 'Unknown';
+
+            if (!memberAnalytics[memberId]) {
+              memberAnalytics[memberId] = {
+                id: memberId,
+                name: memberName,
+                totalPaid: 0,
+                totalOwed: 0,
+                totalShare: 0,
+                expenseCount: 0,
+                balance: 0
+              };
+            }
+
+            const member = memberAnalytics[memberId];
+            member.expenseCount += 1;
+            member.totalShare += Number(participant.shareAmount || participant.amount || 0);
+
+            // Check if this member paid
+            const isPayer = String(participant.userId?._id || participant.userId) === String(exp.paidBy);
+            if (isPayer) {
+              member.totalPaid += amount;
+            }
+
+            // Calculate balance
+            member.balance = member.totalPaid - member.totalShare;
+          });
+        });
+
+        // Convert to array
+        const members = Object.values(memberAnalytics).sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+
+        // Calculate totals
+        const totalAmount = expenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+        const totalExpenses = expenses.length;
+
+        return {
+          group: {
+            id: group._id,
+            name: group.name,
+            type: group.type,
+            memberCount: group.members.length
+          },
+          overview: {
+            totalAmount,
+            totalExpenses,
+            averageExpense: totalExpenses > 0 ? totalAmount / totalExpenses : 0
+          },
+          members,
+          categories: Object.entries(categoryTotals).map(([category, total]) => ({
+            category,
+            total,
+            percentage: totalAmount > 0 ? (total / totalAmount) * 100 : 0
+          })).sort((a, b) => b.total - a.total)
+        };
       },
-      overview: {
-        totalAmount,
-        totalExpenses,
-        averageExpense: totalExpenses > 0 ? totalAmount / totalExpenses : 0
-      },
-      members,
-      categories: Object.entries(categoryTotals).map(([category, total]) => ({
-        category,
-        total,
-        percentage: totalAmount > 0 ? (total / totalAmount) * 100 : 0
-      })).sort((a, b) => b.total - a.total)
-    };
+      CACHE_TTL.ANALYTICS
+    );
   } catch (error) {
     console.error('Error in getGroupAnalytics:', error);
     throw error;
@@ -631,67 +650,77 @@ export const getGroupAnalytics = async (groupId, options = {}) => {
  */
 export const getSystemAnalytics = async (options = {}) => {
   try {
-    const {
-      startDate,
-      endDate
-    } = options;
+    // Build cache key with options
+    const cacheKey = cacheService.getCacheKey.systemAnalytics(options);
+    
+    // Return from cache or fetch fresh
+    return await cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        const {
+          startDate,
+          endDate
+        } = options;
 
-    // Build date filter
-    const dateFilter = {};
-    if (startDate || endDate) {
-      dateFilter.date = {};
-      if (startDate) dateFilter.date.$gte = new Date(startDate);
-      if (endDate) dateFilter.date.$lte = new Date(endDate);
-    }
+        // Build date filter
+        const dateFilter = {};
+        if (startDate || endDate) {
+          dateFilter.date = {};
+          if (startDate) dateFilter.date.$gte = new Date(startDate);
+          if (endDate) dateFilter.date.$lte = new Date(endDate);
+        }
 
-    // Get counts
-    const totalUsers = await User.countDocuments();
-    const totalGroups = await Group.countDocuments();
-    const totalExpenses = await Expense.countDocuments({ isDeleted: false, ...dateFilter });
-    const totalRecurringExpenses = await RecurringExpense.countDocuments({ isDeleted: false, isActive: true });
+        // Get counts
+        const totalUsers = await User.countDocuments();
+        const totalGroups = await Group.countDocuments();
+        const totalExpenses = await Expense.countDocuments({ isDeleted: false, ...dateFilter });
+        const totalRecurringExpenses = await RecurringExpense.countDocuments({ isDeleted: false, isActive: true });
 
-    // Get totals
-    const expenses = await Expense.find({ isDeleted: false, ...dateFilter });
-    const totalAmount = expenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+        // Get totals
+        const expenses = await Expense.find({ isDeleted: false, ...dateFilter });
+        const totalAmount = expenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
 
-    // Get active users (users with expenses in date range)
-    const activeUserIds = new Set();
-    expenses.forEach(exp => {
-      if (exp.paidBy) activeUserIds.add(String(exp.paidBy));
-      if (exp.createdBy) activeUserIds.add(String(exp.createdBy));
-      exp.participants?.forEach(p => activeUserIds.add(String(p.userId)));
-    });
+        // Get active users (users with expenses in date range)
+        const activeUserIds = new Set();
+        expenses.forEach(exp => {
+          if (exp.paidBy) activeUserIds.add(String(exp.paidBy));
+          if (exp.createdBy) activeUserIds.add(String(exp.createdBy));
+          exp.participants?.forEach(p => activeUserIds.add(String(p.userId)));
+        });
 
-    // Get category distribution
-    const categoryTotals = {};
-    expenses.forEach(exp => {
-      const category = exp.category || 'Other';
-      const amount = Number(exp.amount || 0);
-      categoryTotals[category] = (categoryTotals[category] || 0) + amount;
-    });
+        // Get category distribution
+        const categoryTotals = {};
+        expenses.forEach(exp => {
+          const category = exp.category || 'Other';
+          const amount = Number(exp.amount || 0);
+          categoryTotals[category] = (categoryTotals[category] || 0) + amount;
+        });
 
-    return {
-      users: {
-        total: totalUsers,
-        active: activeUserIds.size
+        return {
+          users: {
+            total: totalUsers,
+            active: activeUserIds.size
+          },
+          groups: {
+            total: totalGroups
+          },
+          expenses: {
+            total: totalExpenses,
+            totalAmount,
+            averageAmount: totalExpenses > 0 ? totalAmount / totalExpenses : 0
+          },
+          recurringExpenses: {
+            total: totalRecurringExpenses
+          },
+          categories: Object.entries(categoryTotals).map(([category, total]) => ({
+            category,
+            total,
+            percentage: totalAmount > 0 ? (total / totalAmount) * 100 : 0
+          })).sort((a, b) => b.total - a.total)
+        };
       },
-      groups: {
-        total: totalGroups
-      },
-      expenses: {
-        total: totalExpenses,
-        totalAmount,
-        averageAmount: totalExpenses > 0 ? totalAmount / totalExpenses : 0
-      },
-      recurringExpenses: {
-        total: totalRecurringExpenses
-      },
-      categories: Object.entries(categoryTotals).map(([category, total]) => ({
-        category,
-        total,
-        percentage: totalAmount > 0 ? (total / totalAmount) * 100 : 0
-      })).sort((a, b) => b.total - a.total)
-    };
+      CACHE_TTL.SYSTEM_ANALYTICS
+    );
   } catch (error) {
     console.error('Error in getSystemAnalytics:', error);
     throw error;

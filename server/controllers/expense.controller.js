@@ -1,5 +1,6 @@
 import * as expenseService from '../services/expense.service.js';
 import Expense from '../models/expense.model.js';
+import cacheService from '../services/cache.service.js';
 import mongoose from 'mongoose';
 
 // Helper function to convert Decimal128 to number and ensure paidBy field
@@ -51,6 +52,35 @@ export const addExpense = async (req, res) => {
             userId: req.user?.id || req.body.userId,
             ...req.body
         });
+
+        // Invalidate caches for all affected users and groups
+        setImmediate(async () => {
+          try {
+            const groupId = expense.group;
+            const userId = req.user?.id || req.body.userId;
+
+            // Invalidate user analytics cache
+            await cacheService.invalidateUserCache(String(userId));
+
+            // Invalidate group caches
+            if (groupId) {
+              await cacheService.invalidateGroupCache(String(groupId));
+            }
+
+            // Invalidate participant caches
+            if (expense.participants) {
+              for (const participant of expense.participants) {
+                const pId = String(participant.userId?._id || participant.userId);
+                if (pId && pId !== String(userId)) {
+                  await cacheService.invalidateUserCache(pId);
+                }
+              }
+            }
+          } catch (cacheError) {
+            console.warn('Cache invalidation error in addExpense:', cacheError);
+          }
+        });
+
         res.status(201).json(normalizeExpense(expense));
     } catch (error) {
         console.error('Error in addExpense controller:', error);

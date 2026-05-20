@@ -721,7 +721,7 @@ export default function ExpenseList({ onEdit }) {
                                 onClick={() => openChat(expense)}
                                 aria-label={`Open chat for ${expense.description || 'expense'}`}
                               >
-                                 Chat
+                                💬
                               </button>
                               {unreadCount > 0 && (
                                 <span className="chat-badge" title={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}>
