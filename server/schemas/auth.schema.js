@@ -12,7 +12,12 @@ export const loginSchema = joi.object({
   password: joi.string().required().max(128),
 });
 
+export const refreshTokenSchema = joi.object({
+  refreshToken: joi.string().required(),
+});
+
 export default {
   registerSchema,
   loginSchema,
+  refreshTokenSchema,
 };
