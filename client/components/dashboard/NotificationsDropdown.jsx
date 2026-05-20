@@ -160,6 +160,8 @@ export default function NotificationsDropdown({ onClose, onUnreadCountChange }) 
     try {
       await markActivitiesAsRead([activityId]);
       toast.success('Notification marked as read');
+      // Immediately remove the notification from the list
+      setActivities(activities.filter(activity => activity._id !== activityId));
       onUnreadCountChange?.(Math.max(unreadNotifications.length - 1, 0));
       window.dispatchEvent(new Event('splitwise:notifications-updated'));
     } catch (notificationError) {
