@@ -15,6 +15,8 @@ import {
     getFriendsList
 } from '../controllers/expense.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
+import validate from '../middleware/validation.middleware.js';
+import { addExpenseSchema, updateExpenseSchema } from '../schemas/expense.schema.js';
 
 const router = express.Router();
 
@@ -22,14 +24,14 @@ const router = express.Router();
 router.use(protect);
 
 // Basic CRUD operations
-router.post('/add', addExpense);
+router.post('/add', validate(addExpenseSchema), addExpense);
 router.get('/', getExpenses);
 router.get('/my', getMyDues);
 router.get('/lent', getMyLents);
 router.get('/breakdown', getExpenseBreakdown);
 router.get('/friends', getFriendsList);
 router.get('/:id', getExpenseById);
-router.put('/:id', updateExpense);
+router.put('/:id', validate(updateExpenseSchema), updateExpense);
 router.delete('/:id', deleteExpense);
 
 // Settlement operations

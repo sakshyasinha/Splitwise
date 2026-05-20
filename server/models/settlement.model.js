@@ -17,7 +17,7 @@ const settlementSchema = new mongoose.Schema({
         required: true
     },
     amount: {
-        type: Number,
+        type: mongoose.Decimal128,
         required: true
     },
     description: String,

@@ -1,6 +1,8 @@
 import express from "express";
 import { createGroup, updateGroup, deleteGroup, addMember, removeMember, getGroupBalance } from "../controllers/group.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
+import validate from "../middleware/validation.middleware.js";
+import { createGroupSchema, updateGroupSchema, addGroupMemberSchema, removeGroupMemberSchema } from "../schemas/group.schema.js";
 import Group from "../models/group.model.js";
 import Expense from "../models/expense.model.js";
 
@@ -13,7 +15,7 @@ const getGroupDedupKey = (group) => {
   return `${String(group.name || "").trim().toLowerCase()}::${String(creatorId || "")}`;
 };
 
-router.post("/create", protect, createGroup);
+router.post("/create", protect, validate(createGroupSchema), createGroup);
 
 router.get("/", protect, async (req, res) => {
   try {
@@ -93,10 +95,10 @@ router.get("/", protect, async (req, res) => {
   }
 });
 
-router.put("/:id", protect, updateGroup);
+router.put("/:id", protect, validate(updateGroupSchema), updateGroup);
 router.delete("/:id", protect, deleteGroup);
-router.patch("/:id/members/add", protect, addMember);
-router.patch("/:id/members/remove", protect, removeMember);
+router.patch("/:id/members/add", protect, validate(addGroupMemberSchema), addMember);
+router.patch("/:id/members/remove", protect, validate(removeGroupMemberSchema), removeMember);
 router.get("/:id/balance", protect, getGroupBalance);
 
 export default router;
