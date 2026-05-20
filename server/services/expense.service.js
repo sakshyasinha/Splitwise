@@ -587,7 +587,7 @@ export const settleDue = async (userId, expenseId) => {
     // The expense is already considered paid from the payer's side.
     if (String(expense.paidBy) === String(userId) || 
         (expense.payers && expense.payers.some(p => String(p.userId) === String(userId)))) {
-        return { settled: true, alreadyPaid: true };
+        return { settled: true, alreadyPaid: true, expense };
     }
 
     const participant = expense.participants?.find((entry) => {
@@ -606,7 +606,7 @@ export const settleDue = async (userId, expenseId) => {
     }
 
     if (participant.status === 'paid' || participant.status === 'settled') {
-        return { settled: true, alreadyPaid: true };
+        return { settled: true, alreadyPaid: true, expense };
     }
 
     // Update participant status
@@ -616,6 +616,9 @@ export const settleDue = async (userId, expenseId) => {
     // Update balance (they've now paid their share)
     participant.paidAmount = participant.shareAmount || participant.amount;
     participant.balance = 0;
+
+    // Mark participants array as modified so Mongoose saves the changes
+    expense.markModified('participants');
 
     // Add audit log
     if (expense.addAuditLog) {
