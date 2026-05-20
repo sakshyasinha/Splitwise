@@ -120,35 +120,34 @@ export const settleDue = async (req, res) => {
     try {
         const data = await expenseService.settleDue(req.user?.id, req.params.id);
 
-        // Invalidate caches for all affected users and groups after settlement
-        setImmediate(async () => {
-            try {
-                const userId = req.user?.id;
-                const expense = data.expense;
+        // Invalidate caches for all affected users and groups BEFORE responding
+        try {
+            const userId = req.user?.id;
+            const expense = data.expense;
 
-                // Invalidate the settling user's cache
-                await cacheService.invalidateUserCache(String(userId));
+            // Invalidate the settling user's cache
+            await cacheService.invalidateUserCache(String(userId));
 
-                // Invalidate group cache if expense is in a group
-                if (expense?.group) {
-                    await cacheService.invalidateGroupCache(String(expense.group));
-                }
+            // Invalidate group cache if expense is in a group
+            if (expense?.group) {
+                await cacheService.invalidateGroupCache(String(expense.group));
+            }
 
-                // Invalidate caches for all participants (their balances have changed)
-                if (expense?.participants) {
-                    for (const participant of expense.participants) {
-                        const pId = String(participant.userId?._id || participant.userId);
-                        if (pId && pId !== String(userId)) {
-                            await cacheService.invalidateUserCache(pId);
-                        }
+            // Invalidate caches for all participants (their balances have changed)
+            if (expense?.participants) {
+                for (const participant of expense.participants) {
+                    const pId = String(participant.userId?._id || participant.userId);
+                    if (pId && pId !== String(userId)) {
+                        await cacheService.invalidateUserCache(pId);
                     }
                 }
-            } catch (cacheError) {
-                console.warn('Cache invalidation error in settleDue:', cacheError);
             }
-        });
+        } catch (cacheError) {
+            console.warn('Cache invalidation error in settleDue:', cacheError);
+            // Don't block the response if cache invalidation fails
+        }
 
-        // Return only the settled flag, not the internal expense object
+        // Return response only after cache is cleared
         res.json({ settled: data.settled });
     } catch (error) {
         res.status(error.statusCode || 500).json({ message: error.message });
