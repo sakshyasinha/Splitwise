@@ -5,16 +5,25 @@ import logger from './logger.js';
  * Get email configuration (lazy-loaded to ensure env vars are available)
  */
 const getEmailConfig = () => {
+  const host = process.env.SMTP_HOST?.trim() || 'smtp.gmail.com';
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASS?.trim();
+  const configuredFrom = process.env.SMTP_FROM?.trim();
+  const isDefaultPlaceholderFrom = !configuredFrom || configuredFrom.includes('noreply@splitwise.com');
+  const from = isDefaultPlaceholderFrom && user && host.includes('gmail.com')
+    ? `Splitwise <${user}>`
+    : configuredFrom || 'Splitwise <noreply@splitwise.com>';
+
   return {
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    host,
     port: parseInt(process.env.SMTP_PORT) || 587,
     secure: process.env.SMTP_SECURE === 'true',
     auth: {
-      user: process.env.SMTP_USER?.trim(),
-      pass: process.env.SMTP_PASS?.trim()
+      user,
+      pass
     },
-    from: process.env.SMTP_FROM || 'Splitwise <noreply@splitwise.com>',
-    enabled: process.env.EMAIL_ENABLED !== 'false'
+    from,
+    enabled: String(process.env.EMAIL_ENABLED || 'true').trim() !== 'false'
   };
 };
 
@@ -55,7 +64,7 @@ const createTransporter = () => {
       user: emailConfig.auth.user
     });
 
-    transporter = nodemailer.createTransporter({
+    transporter = nodemailer.createTransport({
       host: emailConfig.host,
       port: emailConfig.port,
       secure: emailConfig.secure,

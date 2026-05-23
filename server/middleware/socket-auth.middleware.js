@@ -24,11 +24,15 @@ export const socketAuthMiddleware = (socket, next) => {
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
       logger.warn('Socket auth failed: token expired', { socketId: socket.id });
-      return next(new Error('Token expired'));
+      const authError = new Error('Token expired');
+      authError.data = { code: 'TOKEN_EXPIRED' };
+      return next(authError);
     }
     if (error.name === 'JsonWebTokenError') {
       logger.warn('Socket auth failed: invalid token', { socketId: socket.id, error: error.message });
-      return next(new Error('Invalid token'));
+      const authError = new Error('Invalid token');
+      authError.data = { code: 'INVALID_TOKEN' };
+      return next(authError);
     }
     logger.error('Socket auth failed: unknown error', { socketId: socket.id, error: error.message });
     next(new Error('Authentication failed'));

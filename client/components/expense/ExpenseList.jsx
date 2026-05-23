@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { initSocket, getSocket } from '../../src/services/socket.service.js';
+import { io } from 'socket.io-client';
 import useExpenses from '../../hooks/useExpenses.js';
 import useAuth from '../../hooks/useAuth.js';
 import useToast from '../../hooks/useToast.js';
@@ -12,7 +12,7 @@ import { getPersonName } from '../../utils/personUtils.js';
 const CATEGORIES = ['Food', 'Travel', 'Events', 'Utilities', 'Shopping', 'General', 'Rent', 'Transport', 'Entertainment', 'Healthcare', 'Education', 'Other'];
 const SPLIT_TYPES = ['equal', 'percentage', 'shares', 'itemized', 'adjustment', 'custom', 'payment'];
 
-export default function ExpenseList({ onEdit }) {
+export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
   const { user, token } = useAuth();
   const { expenses = [], loading, error, updateExpense, deleteExpense } = useExpenses();
   const toast = useToast();
@@ -49,13 +49,25 @@ export default function ExpenseList({ onEdit }) {
   const filteredExpenses = useMemo(() => {
     return expenses.filter(expense => {
       // Search query filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
+      const searchTerms = [externalSearchQuery, searchQuery]
+        .filter(Boolean)
+        .join(' ')
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean);
+
+      if (searchTerms.length > 0) {
         const description = (expense.description || '').toLowerCase();
         const groupName = (expense.group?.name || '').toLowerCase();
         const paidByName = (expense.paidBy?.name || expense.paidBy?.email || '').toLowerCase();
+        const participantNames = (expense.participants || [])
+          .map((participant) => participant?.userId?.name || participant?.userId?.email || '')
+          .join(' ')
+          .toLowerCase();
+        const searchableText = [description, groupName, paidByName, participantNames].join(' ');
 
-        if (!description.includes(query) && !groupName.includes(query) && !paidByName.includes(query)) {
+        if (!searchTerms.every((term) => searchableText.includes(term))) {
           return false;
         }
       }
@@ -111,7 +123,7 @@ export default function ExpenseList({ onEdit }) {
 
       return true;
     });
-  }, [expenses, searchQuery, selectedCategory, selectedSplitType, selectedStatus, amountRange, dateRange]);
+  }, [expenses, externalSearchQuery, searchQuery, selectedCategory, selectedSplitType, selectedStatus, amountRange, dateRange]);
 
   // Clear all filters
   const clearFilters = () => {
@@ -136,10 +148,29 @@ export default function ExpenseList({ onEdit }) {
   useEffect(() => {
     if (!token || socketRef.current) return;
 
-    // Initialize via centralized socket service. In dev Vite proxy maps
-    // /socket.io to the backend; in production set VITE_API_ORIGIN to the API URL.
-    const socket = initSocket(token);
+    const socket = io('/messages', {
+      auth: { token },
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
+    });
+
     socketRef.current = socket;
+
+    const onConnectError = (error) => {
+      const code = error?.data?.code;
+      const message = String(error?.message || '').toLowerCase();
+      if (
+        code === 'TOKEN_EXPIRED' ||
+        code === 'INVALID_TOKEN' ||
+        message.includes('token expired') ||
+        message.includes('invalid token')
+      ) {
+        socket.disconnect();
+        window.dispatchEvent(new Event('splitwise:auth-expired'));
+      }
+    };
 
     const onMessageReceived = (message) => {
       const expenseId = String(message?.expenseId || '');
@@ -164,14 +195,12 @@ export default function ExpenseList({ onEdit }) {
       }
     };
 
-    if (socket) {
-      socket.on('message-received', onMessageReceived);
-      socket.on('unread-updated', onUnreadUpdated);
-    } else {
-      console.warn('Socket not initialized (no API origin configured)');
-    }
+    socket.on('connect_error', onConnectError);
+    socket.on('message-received', onMessageReceived);
+    socket.on('unread-updated', onUnreadUpdated);
 
     return () => {
+      socket.off('connect_error', onConnectError);
       socket.off('message-received', onMessageReceived);
       socket.off('unread-updated', onUnreadUpdated);
       socket.disconnect();
@@ -432,7 +461,7 @@ export default function ExpenseList({ onEdit }) {
         {!loading && filteredExpenses.length === 0 && expenses.length > 0 && (
           <div className="empty-state">
             <div className="empty-icon">🔍</div>
-            No expenses match your filters — try adjusting your search criteria.
+            No expenses match your filters, try adjusting your search criteria.
           </div>
         )}
 
@@ -440,7 +469,7 @@ export default function ExpenseList({ onEdit }) {
         {!loading && expenses.length === 0 && (
           <div className="empty-state">
             <div className="empty-icon">🧾</div>
-            No expenses yet — add your first one above.
+            No expenses yet, add your first one above.
           </div>
         )}
 
@@ -720,7 +749,7 @@ export default function ExpenseList({ onEdit }) {
                                 onClick={() => openChat(expense)}
                                 aria-label={`Open chat for ${expense.description || 'expense'}`}
                               >
-                                💬
+                                 Chat
                               </button>
                               {unreadCount > 0 && (
                                 <span className="chat-badge" title={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}>

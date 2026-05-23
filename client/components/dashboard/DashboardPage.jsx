@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useAuth from '../../hooks/useAuth.js';
 import useExpenses from '../../hooks/useExpenses.js';
 import Card from '../ui/Card.jsx';
@@ -13,19 +13,20 @@ import HeroStrip from './HeroStrip.jsx';
 import StatsGrid from './StatsGrid.jsx';
 import QuickActions from './QuickActions.jsx';
 import GroupList from './GroupList.jsx';
+import ActivityFeed from './ActivityFeed.jsx';
 import DuesList from './DuesList.jsx';
 import LentsList from './LentsList.jsx';
 import GroupDetails from './GroupDetails.jsx';
 import NotificationsDropdown from './NotificationsDropdown.jsx';
 import EmailActions from './EmailActions.jsx';
-const AnalyticsDashboard = lazy(() => import('../analytics/AnalyticsDashboard.jsx'));
+import AnalyticsDashboard from '../analytics/AnalyticsDashboard.jsx';
 import RecurringExpensesManager from '../recurring/RecurringExpensesManager.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { getPersonLabel } from '../../utils/personUtils.js';
 import { normalizeGroupName, dedupeValues, prettifyGroupType } from '../../utils/stringUtils.js';
 import { getUnreadNotificationCount } from '../../services/activity.service.js';
 
-const DashboardPage = () => {
+const DashboardPage = ({ view = 'dashboard' }) => {
   const { logout, user } = useAuth();
   const {
     expenses,
@@ -50,6 +51,7 @@ const DashboardPage = () => {
   const [editingGroup, setEditingGroup] = useState(null);
   const [notificationCount, setNotificationCount] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [dashboardSearchQuery, setDashboardSearchQuery] = useState('');
 
   const refreshNotificationCount = async () => {
     try {
@@ -190,103 +192,9 @@ const DashboardPage = () => {
     return Array.from(mergedDues.values());
   }, [expenses, myDues, userId]);
 
-  const visibleLents = useMemo(() => {
-    const fromExpenses = expenses.flatMap((expense) => {
-      const participant = (expense.participants || []).find((entry) => {
-        if (!entry?.userId) return false;
-        const entryUserId = typeof entry.userId === 'object' ? entry.userId._id : entry.userId;
-        return String(entryUserId) === String(userId);
-      });
-
-      if (!participant) {
-        return [];
-      }
-
-      const balance = Number(
-        participant.balance ??
-        (Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0))
-      );
-
-      if (balance <= 0) {
-        return [];
-      }
-
-      if (expense.splitType === 'payment') {
-        const recipient = (expense.participants || []).find((entry) => {
-          if (!entry?.userId) return false;
-          const entryUserId = typeof entry.userId === 'object' ? entry.userId._id : entry.userId;
-          return String(entryUserId) !== String(userId);
-        });
-
-        if (!recipient?.userId) {
-          return [];
-        }
-
-        return [{
-          expenseId: expense._id,
-          description: expense.description || 'Unknown expense',
-          amount: Number(expense.amount || 0),
-          status: 'pending',
-          group: {
-            id: expense.group?._id,
-            name: expense.group?.name || '',
-          },
-          owedBy: [{
-            id: recipient.userId?._id,
-            name: recipient.userId?.name || recipient.userId?.email || 'Unknown',
-            amount: Number(expense.amount || 0),
-          }],
-          createdAt: expense.createdAt,
-        }];
-      }
-
-      const debtors = (expense.participants || [])
-        .filter((entry) => {
-          const entryUserId = typeof entry.userId === 'object' ? entry.userId._id : entry.userId;
-          return String(entryUserId) !== String(userId) && Number(entry.balance || 0) < 0;
-        })
-        .map((entry) => ({
-          id: entry.userId?._id,
-          name: entry.userId?.name || entry.userId?.email || 'Unknown',
-          amount: Math.abs(Number(entry.balance || 0)),
-        }));
-
-      if (debtors.length === 0) {
-        return [];
-      }
-
-      return [{
-        expenseId: expense._id,
-        description: expense.description || 'Unknown expense',
-        amount: debtors.reduce((sum, debtor) => sum + Number(debtor.amount || 0), 0),
-        status: participant.status || 'pending',
-        group: {
-          id: expense.group?._id,
-          name: expense.group?.name || '',
-        },
-        owedBy: debtors,
-        createdAt: expense.createdAt,
-      }];
-    });
-
-    const mergedLents = new Map();
-    [...myLents, ...fromExpenses].forEach((lent) => {
-      if (!lent) return;
-      const key = String(lent.expenseId || lent._id || `${lent.description || ''}-${lent.amount || 0}`);
-      mergedLents.set(key, lent);
-    });
-
-    return Array.from(mergedLents.values());
-  }, [expenses, myLents, userId]);
-
   const visibleTotalOwed = useMemo(
     () => visibleDues.reduce((sum, due) => sum + Number(due.amount || 0), 0),
     [visibleDues]
-  );
-
-  const visibleTotalLent = useMemo(
-    () => visibleLents.reduce((sum, lent) => sum + Number(lent.amount || 0), 0),
-    [visibleLents]
   );
 
   const getUserBalanceForExpense = (expense, targetUserId) => {
@@ -482,6 +390,28 @@ const DashboardPage = () => {
     [mergedGroupSummaries]
   );
 
+  const normalizedDashboardSearch = dashboardSearchQuery.trim().toLowerCase();
+
+  const visibleGroupsForSearch = useMemo(() => {
+    if (!normalizedDashboardSearch) {
+      return prioritizedGroups;
+    }
+
+    return prioritizedGroups.filter((group) => {
+      const searchableText = [
+        group.name,
+        group.description,
+        group.type,
+        ...(group.memberNames || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return searchableText.includes(normalizedDashboardSearch);
+    });
+  }, [prioritizedGroups, normalizedDashboardSearch]);
+
   const selectedGroup = useMemo(
     () => prioritizedGroups.find((group) => {
       const sourceGroupIds = Array.isArray(group._sourceGroupIds) ? group._sourceGroupIds.map(String) : [];
@@ -620,68 +550,234 @@ const DashboardPage = () => {
     setNotificationCount(nextCount);
   };
 
+  const isDashboardView = view === 'dashboard';
+  const isGroupsView = view === 'groups';
+  const isActivityView = view === 'activity';
+  const isAnalyticsView = view === 'analytics';
+  const isProfileView = view === 'profile';
+  const isSettingsView = view === 'settings';
+  const isAccountView = isProfileView || isSettingsView;
+  const profileDisplayName = userEmail ? userEmail.split('@')[0] : user?.name || 'User';
+
   return (
     <>
       <main className="dashboard-layout">
-        <DashboardHeader onLogout={logout} onNotificationClick={openNotifications} notificationCount={notificationCount} />
-
-        <HeroStrip
-          pendingDuesCount={visibleDues.length}
-          notificationCount={notificationCount}
+        <DashboardHeader
+          user={user}
+          onLogout={logout}
           onNotificationClick={openNotifications}
+          notificationCount={notificationCount}
+          searchQuery={dashboardSearchQuery}
+          onSearchChange={setDashboardSearchQuery}
         />
 
-        <StatsGrid
-          groupCount={prioritizedGroups.length}
-          totalLent={totalLent}
-          totalOwed={visibleTotalOwed}
-          expenseCount={totals.expenseCount}
-          totalSpend={totals.totalSpend}
-        />
+        {!isAccountView && (
+          <HeroStrip
+            pendingDuesCount={visibleDues.length}
+            totalSpend={totals.totalSpend}
+            totalOwed={visibleTotalOwed}
+            totalLent={totalLent}
+          />
+        )}
 
-        <section className="content-grid">
-          <div className="left-column stack-lg">
-            <QuickActions
-              onCreateGroup={() => setActiveModal('group')}
-              onAddExpense={() => setActiveModal('expense')}
-              onManageRecurring={() => setActiveModal('recurring')}
-            />
+        {(isDashboardView || isGroupsView) && (
+          <StatsGrid
+            groupCount={prioritizedGroups.length}
+            totalLent={totalLent}
+            totalOwed={visibleTotalOwed}
+            expenseCount={totals.expenseCount}
+            totalSpend={totals.totalSpend}
+          />
+        )}
 
-            <GroupList
-              groups={prioritizedGroups}
-              selectedGroupId={selectedGroupId}
-              currentUserId={userId}
-              onGroupClick={openGroupDetailsFor}
-              onGroupEdit={openEditGroup}
-              onGroupAddExpense={openAddExpenseForGroup}
-            />
+        {isDashboardView && (
+          <section className="content-grid">
+            <div className="left-column stack-lg">
+              <QuickActions
+                onCreateGroup={() => setActiveModal('group')}
+                onAddExpense={() => setActiveModal('expense')}
+                onManageRecurring={() => setActiveModal('recurring')}
+              />
 
-            <ExpenseList onEdit={openEditExpense} />
-          </div>
+              <ExpenseList onEdit={openEditExpense} externalSearchQuery={dashboardSearchQuery} />
+            </div>
 
-          <div className="right-column stack-lg">
-            <DuesList
-              dues={visibleDues}
-              settlingExpenseId={settlingExpenseId}
-              onSettleDue={handleSettleDue}
-            />
+            <div className="right-column stack-lg">
+              <DuesList
+                dues={visibleDues}
+                settlingExpenseId={settlingExpenseId}
+                onSettleDue={handleSettleDue}
+              />
 
-            <LentsList lents={visibleLents} />
+              <LentsList lents={myLents} />
 
-            
+              <AIChatPanel />
+            </div>
+          </section>
+        )}
 
-            <AIChatPanel />
-          </div>
-        </section>
+        {isGroupsView && (
+          <section className="content-grid dashboard-route-grid">
+            <div className="left-column stack-lg">
+              <QuickActions
+                onCreateGroup={() => setActiveModal('group')}
+                onAddExpense={() => setActiveModal('expense')}
+                onManageRecurring={() => setActiveModal('recurring')}
+              />
 
-        <section className="analytics-section">
-          <Suspense fallback={<div className="analytics-loading">Loading analytics…</div>}>
+              <GroupList
+                groups={visibleGroupsForSearch}
+                selectedGroupId={selectedGroupId}
+                currentUserId={userId}
+                onGroupClick={openGroupDetailsFor}
+                onGroupEdit={openEditGroup}
+                onGroupAddExpense={openAddExpenseForGroup}
+              />
+            </div>
+
+            <div className="right-column stack-lg">
+              <DuesList
+                dues={visibleDues}
+                settlingExpenseId={settlingExpenseId}
+                onSettleDue={handleSettleDue}
+              />
+              <LentsList lents={myLents} />
+            </div>
+          </section>
+        )}
+
+        {isActivityView && (
+          <section className="content-grid dashboard-route-grid">
+            <div className="left-column stack-lg">
+              <ActivityFeed limit={30} />
+            </div>
+
+            <div className="right-column stack-lg">
+              <ExpenseList onEdit={openEditExpense} externalSearchQuery={dashboardSearchQuery} />
+            </div>
+          </section>
+        )}
+
+        {isAnalyticsView && (
+          <section className="analytics-section">
             <AnalyticsDashboard
-              refreshKey={`${expenses.length}:${groups.length}:${visibleDues.length}:${visibleLents.length}`}
-              balanceSnapshot={{ totalLent: visibleTotalLent, totalOwed: visibleTotalOwed }}
+              refreshKey={`${expenses.length}:${groups.length}:${myDues.length}:${myLents.length}`}
+              balanceSnapshot={{ totalLent, totalOwed }}
             />
-          </Suspense>
-        </section>
+          </section>
+        )}
+
+        {isProfileView && (
+          <section className="content-grid dashboard-route-grid account-section">
+            <div className="left-column stack-lg">
+              <Card title="My Profile" subtitle="Your signed-in account details">
+                <div className="profile-summary">
+                  <div className="profile-summary-avatar">{profileDisplayName.slice(0, 2).toUpperCase()}</div>
+                  <div>
+                    <div className="profile-summary-name">{profileDisplayName}</div>
+                    <div className="profile-summary-email">{userEmail || 'No email available'}</div>
+                  </div>
+                </div>
+                <div className="account-details">
+                  <div>
+                    <span>Account ID</span>
+                    <strong>{userId || 'Not available'}</strong>
+                  </div>
+                  <div>
+                    <span>Email</span>
+                    <strong>{userEmail || 'Not available'}</strong>
+                  </div>
+                  <div>
+                    <span>Groups</span>
+                    <strong>{prioritizedGroups.length}</strong>
+                  </div>
+                  <div>
+                    <span>Expenses</span>
+                    <strong>{totals.expenseCount}</strong>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            <div className="right-column stack-lg">
+              <Card title="Balance Snapshot" subtitle="Quick view of your current position">
+                <div className="account-details">
+                  <div>
+                    <span>You owe</span>
+                    <strong className="danger">{formatCurrency(visibleTotalOwed)}</strong>
+                  </div>
+                  <div>
+                    <span>You lent</span>
+                    <strong className="success">{formatCurrency(totalLent)}</strong>
+                  </div>
+                  <div>
+                    <span>Total spend</span>
+                    <strong>{formatCurrency(totals.totalSpend)}</strong>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </section>
+        )}
+
+        {isSettingsView && (
+          <section className="content-grid dashboard-route-grid account-section">
+            <div className="left-column stack-lg">
+              <Card title="Settings" subtitle="Manage local preferences for this dashboard">
+                <div className="settings-list">
+                  <label className="settings-row">
+                    <span>
+                      <strong>Email reminders</strong>
+                      <small>Show email tools for reminders and tests</small>
+                    </span>
+                    <input type="checkbox" defaultChecked />
+                  </label>
+                  <label className="settings-row">
+                    <span>
+                      <strong>Notification refresh</strong>
+                      <small>Keep checking for unread activity while the app is open</small>
+                    </span>
+                    <input type="checkbox" defaultChecked />
+                  </label>
+                  <label className="settings-row">
+                    <span>
+                      <strong>Compact dashboard</strong>
+                      <small>Keep dashboard cards tight and scan-friendly</small>
+                    </span>
+                    <input type="checkbox" defaultChecked />
+                  </label>
+                </div>
+              </Card>
+
+              <EmailActions />
+            </div>
+
+            <div className="right-column stack-lg">
+              <Card title="Account" subtitle="Current session">
+                <div className="account-details">
+                  <div>
+                    <span>Signed in as</span>
+                    <strong>{userEmail || profileDisplayName}</strong>
+                  </div>
+                  <div>
+                    <span>Theme</span>
+                    <strong>Use the toggle in the top bar</strong>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </section>
+        )}
+
+        <button
+          type="button"
+          className="floating-add-expense"
+          onClick={() => setActiveModal('expense')}
+          aria-label="Add expense"
+        >
+          <span>Add Expense</span>
+          <strong>+</strong>
+        </button>
       </main>
 
       <Modal

@@ -26,6 +26,7 @@ export default function EmailActions() {
   });
 
   const friendOptions = useMemo(() => friends?.friends || [], [friends]);
+  const isEmailReady = Boolean(status?.enabled && status?.configured);
 
   useEffect(() => {
     let active = true;
@@ -124,9 +125,10 @@ export default function EmailActions() {
       <div className="stack-md">
         <div className="pill-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <span className="badge badge-violet">
-            {loadingStatus ? 'Checking email…' : status?.enabled ? 'Email enabled' : 'Email not configured'}
+            {loadingStatus ? 'Checking email...' : isEmailReady ? 'Email ready' : 'Email not configured'}
           </span>
           {status?.service && <span className="badge badge-green">{status.service}</span>}
+          {status?.host ? <span className="badge badge-green">{status.host}:{status.port}</span> : null}
         </div>
 
         <div className="flex items-center gap-sm" style={{ flexWrap: 'wrap' }}>

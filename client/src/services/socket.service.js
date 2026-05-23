@@ -2,6 +2,24 @@ import { io } from 'socket.io-client';
 
 let socket = null;
 
+function handleSocketAuthError(error) {
+  const code = error?.data?.code;
+  const message = String(error?.message || '').toLowerCase();
+  const isAuthError =
+    code === 'TOKEN_EXPIRED' ||
+    code === 'INVALID_TOKEN' ||
+    message.includes('token expired') ||
+    message.includes('invalid token');
+
+  if (!isAuthError) {
+    return;
+  }
+
+  socket?.disconnect();
+  socket = null;
+  window.dispatchEvent(new Event('splitwise:auth-expired'));
+}
+
 export function initSocket(token) {
   if (socket) return socket;
 
@@ -30,6 +48,8 @@ export function initSocket(token) {
     reconnectionAttempts: 5,
   });
 
+  socket.on('connect_error', handleSocketAuthError);
+
   return socket;
 }
 
@@ -39,6 +59,7 @@ export function getSocket() {
 
 export function disconnectSocket() {
   try {
+    socket?.off('connect_error', handleSocketAuthError);
     socket?.disconnect();
   } catch (e) {
     // ignore

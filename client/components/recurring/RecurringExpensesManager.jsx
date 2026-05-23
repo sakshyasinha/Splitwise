@@ -4,11 +4,13 @@ import Modal from '../ui/Modal.jsx';
 import Button from '../ui/Button.jsx';
 import Input from '../ui/Input.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
+import API from '../../services/api.js';
 
 const RecurringExpensesManager = () => {
   const [recurringExpenses, setRecurringExpenses] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [formData, setFormData] = useState({
@@ -31,14 +33,13 @@ const RecurringExpensesManager = () => {
 
   const fetchRecurringExpenses = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/recurring-bills', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      setRecurringExpenses(data);
+      setError('');
+      const { data } = await API.get('/recurring-bills');
+      setRecurringExpenses(Array.isArray(data) ? data : data?.recurringBills || data?.items || []);
     } catch (error) {
       console.error('Error fetching recurring expenses:', error);
+      setError(error?.response?.data?.message || error.message || 'Failed to load recurring bills');
+      setRecurringExpenses([]);
     } finally {
       setLoading(false);
     }
@@ -46,80 +47,53 @@ const RecurringExpensesManager = () => {
 
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/recurring-bills/stats', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      setStats(data);
+      const { data } = await API.get('/recurring-bills/stats');
+      setStats(data && typeof data === 'object' ? data : null);
     } catch (error) {
       console.error('Error fetching stats:', error);
+      setStats(null);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
       const url = editingExpense
-        ? `/api/recurring-bills/${editingExpense._id}`
-        : '/api/recurring-bills';
+        ? `/recurring-bills/${editingExpense._id}`
+        : '/recurring-bills';
       const method = editingExpense ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
-        setShowModal(false);
-        setEditingExpense(null);
-        resetForm();
-        fetchRecurringExpenses();
-        fetchStats();
-      }
+      await API.request({ url, method, data: formData });
+      setShowModal(false);
+      setEditingExpense(null);
+      resetForm();
+      fetchRecurringExpenses();
+      fetchStats();
     } catch (error) {
       console.error('Error saving recurring expense:', error);
+      setError(error?.response?.data?.message || error.message || 'Failed to save recurring bill');
     }
   };
 
   const handlePause = async (id) => {
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`/api/recurring-bills/${id}/pause`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ reason: 'Paused by user' })
-      });
+      await API.post(`/recurring-bills/${id}/pause`, { reason: 'Paused by user' });
       fetchRecurringExpenses();
       fetchStats();
     } catch (error) {
       console.error('Error pausing recurring expense:', error);
+      setError(error?.response?.data?.message || error.message || 'Failed to pause recurring bill');
     }
   };
 
   const handleResume = async (id) => {
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`/api/recurring-bills/${id}/resume`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ reason: 'Resumed by user' })
-      });
+      await API.post(`/recurring-bills/${id}/resume`, { reason: 'Resumed by user' });
       fetchRecurringExpenses();
       fetchStats();
     } catch (error) {
       console.error('Error resuming recurring expense:', error);
+      setError(error?.response?.data?.message || error.message || 'Failed to resume recurring bill');
     }
   };
 
@@ -127,19 +101,12 @@ const RecurringExpensesManager = () => {
     if (!confirm('Are you sure you want to delete this recurring expense?')) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`/api/recurring-bills/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ reason: 'Deleted by user' })
-      });
+      await API.delete(`/recurring-bills/${id}`, { data: { reason: 'Deleted by user' } });
       fetchRecurringExpenses();
       fetchStats();
     } catch (error) {
       console.error('Error deleting recurring expense:', error);
+      setError(error?.response?.data?.message || error.message || 'Failed to delete recurring bill');
     }
   };
 
@@ -160,16 +127,12 @@ const RecurringExpensesManager = () => {
     if (!confirm('Generate expense now? This will create a new expense instance.')) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`/api/recurring-bills/${id}/generate`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      await API.post(`/recurring-bills/${id}/generate`);
       alert('Expense generated successfully!');
       fetchRecurringExpenses();
     } catch (error) {
       console.error('Error generating expense:', error);
-      alert('Failed to generate expense');
+      alert(error?.response?.data?.message || error.message || 'Failed to generate expense');
     }
   };
 
@@ -189,7 +152,16 @@ const RecurringExpensesManager = () => {
   };
 
   const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('en-US', {
+    if (!date) {
+      return 'Not scheduled';
+    }
+
+    const nextDate = new Date(date);
+    if (Number.isNaN(nextDate.getTime())) {
+      return 'Not scheduled';
+    }
+
+    return nextDate.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric'
@@ -197,7 +169,7 @@ const RecurringExpensesManager = () => {
   };
 
   const getRecurrenceText = (recurrence) => {
-    const { type, interval } = recurrence;
+    const { type = 'monthly', interval = 1 } = recurrence || {};
     const intervalText = interval > 1 ? `every ${interval} ` : '';
 
     switch (type) {
@@ -223,6 +195,8 @@ const RecurringExpensesManager = () => {
           + Add Recurring Bill
         </Button>
       </div>
+
+      {error && <p className="banner error">{error}</p>}
 
       {stats && (
         <Card className="recurring-stats">
