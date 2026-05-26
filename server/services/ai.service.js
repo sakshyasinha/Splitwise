@@ -1,62 +1,239 @@
-const buildFallbackReply = ({ prompt, context = {} }) => {
-	const owes = Number(context.totalOwed || 0);
-	const groups = Number(context.groupCount || 0);
-	const expenses = Number(context.expenseCount || 0);
+import { retrieveRelevantDocs } from './retriever.service.js';
 
-	const bullets = [
-		`Track every shared cost within 24 hours to avoid forgotten payments.`,
-		`Set one fixed weekly settlement day for all active groups.`,
-		`Use category tags (food, travel, utilities) so recurring overspend is visible.`
-	];
+/* =========================
+   UTILITIES
+========================= */
 
-	if (owes > 0) {
-		bullets.unshift(`Your current pending dues are ${owes.toFixed(0)}. Prioritize the oldest dues first.`);
-	}
+const formatCurrency = (value) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(Number(value || 0));
 
-	if (groups > 0) {
-		bullets.push(`You are in ${groups} active group(s). Keep one owner per group to reduce confusion.`);
-	}
+const asArray = (v) => (Array.isArray(v) ? v : []);
 
-	if (expenses > 0) {
-		bullets.push(`You have ${expenses} recorded expense(s). Review top 3 biggest items before next split.`);
-	}
+const normalizeText = (v) => String(v || '').toLowerCase().trim();
 
-	return `Prompt: ${prompt}\n\nSuggested plan:\n- ${bullets.slice(0, 5).join('\n- ')}`;
+/* =========================
+   INTENT CLASSIFIER (IMPROVED)
+   - less brittle than regex-only
+========================= */
+
+const classifyIntent = (prompt) => {
+  const p = normalizeText(prompt);
+
+  const settlementKeywords = [
+    'settle', 'pay', 'minimal transaction', 'clear dues', 'balance', 'who owes'
+  ];
+
+  const overspendKeywords = [
+    'overspend', 'spending', 'where am i spending', 'breakdown', 'activity'
+  ];
+
+  const savingsKeywords = [
+    'reduce', 'save', 'cut', 'lower', 'avoid spending'
+  ];
+
+  if (settlementKeywords.some(k => p.includes(k))) return 'SETTLEMENT';
+  if (overspendKeywords.some(k => p.includes(k))) return 'OVERVIEW';
+  if (savingsKeywords.some(k => p.includes(k))) return 'SAVINGS';
+
+  return 'GENERIC';
 };
 
-const askGemini = async ({ prompt, context = {} }) => {
-	const apiKey = process.env.GEMINI_API_KEY;
-	if (!apiKey) {
-		return null;
-	}
+/* =========================
+   CORE FINANCE ENGINE (FIXED)
+   This replaces fake heuristics
+========================= */
 
-	const contextLine = `Context: totalOwed=${context.totalOwed || 0}, groupCount=${context.groupCount || 0}, expenseCount=${context.expenseCount || 0}`;
-	const fullPrompt = `You are a concise Splitwise-style finance assistant.\n${contextLine}\nUser prompt: ${prompt}\nReturn practical, bullet-point advice only.`;
+const computeNetBalances = (expenses = []) => {
+  const balanceMap = new Map();
 
-	const response = await fetch(
-		`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-		{
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				contents: [{ parts: [{ text: fullPrompt }] }]
-			})
-		}
-	);
+  for (const exp of expenses) {
+    const amount = Number(exp?.amount || 0);
+    if (!amount) continue;
 
-	if (!response.ok) {
-		return null;
-	}
+    const paidBy = exp?.paidBy || 'unknown';
+    const participants = asArray(exp?.involved);
 
-	const data = await response.json();
-	return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    const split = amount / Math.max(participants.length, 1);
+
+    // payer gets +amount
+    balanceMap.set(paidBy, (balanceMap.get(paidBy) || 0) + amount);
+
+    // participants owe -split
+    for (const p of participants) {
+      balanceMap.set(p, (balanceMap.get(p) || 0) - split);
+    }
+  }
+
+  return balanceMap;
 };
 
-export const generateAIReply = async ({ prompt, context }) => {
-	const geminiReply = await askGemini({ prompt, context });
-	if (geminiReply) {
-		return geminiReply;
-	}
+/* Greedy settlement minimization */
+const minimizeTransactions = (balanceMap) => {
+  const creditors = [];
+  const debtors = [];
 
-	return buildFallbackReply({ prompt, context });
+  for (const [person, amount] of balanceMap.entries()) {
+    if (amount > 0) creditors.push({ person, amount });
+    else if (amount < 0) debtors.push({ person, amount: -amount });
+  }
+
+  creditors.sort((a, b) => b.amount - a.amount);
+  debtors.sort((a, b) => b.amount - a.amount);
+
+  const transactions = [];
+
+  let i = 0, j = 0;
+
+  while (i < debtors.length && j < creditors.length) {
+    const debit = debtors[i];
+    const credit = creditors[j];
+
+    const settle = Math.min(debit.amount, credit.amount);
+
+    transactions.push({
+      from: debit.person,
+      to: credit.person,
+      amount: settle
+    });
+
+    debit.amount -= settle;
+    credit.amount -= settle;
+
+    if (debit.amount === 0) i++;
+    if (credit.amount === 0) j++;
+  }
+
+  return transactions;
+};
+
+/* =========================
+   REPLIES
+========================= */
+
+const buildSettlementReply = ({ prompt, context }) => {
+  const expenses = asArray(context.expenses);
+
+  const balances = computeNetBalances(expenses);
+  const transactions = minimizeTransactions(balances);
+
+  if (!transactions.length) {
+    return `Prompt: ${prompt}
+
+Deterministic settlement:
+- No pending balances detected.`;
+  }
+
+  const total = transactions.reduce((s, t) => s + t.amount, 0);
+
+  const lines = [
+    `Prompt: ${prompt}`,
+    '',
+    'Deterministic settlement plan:',
+    `- Total optimized transfers: ${transactions.length}`,
+    `- Total settlement volume: ${formatCurrency(total)}`,
+    ''
+  ];
+
+  for (const t of transactions.slice(0, 6)) {
+    lines.push(`- ${t.from} pays ${t.to}: ${formatCurrency(t.amount)}`);
+  }
+
+  if (transactions.length > 6) {
+    lines.push(`- +${transactions.length - 6} more transactions optimized`);
+  }
+
+  return lines.join('\n');
+};
+
+const buildOverspendReply = ({ prompt, context }) => {
+  const expenses = asArray(context.expenses);
+
+  const groupMap = new Map();
+
+  for (const e of expenses) {
+    const g = e?.group?.name || 'Ungrouped';
+    const amt = Number(e?.amount || 0);
+    groupMap.set(g, (groupMap.get(g) || 0) + amt);
+  }
+
+  const sorted = [...groupMap.entries()]
+    .map(([name, amount]) => ({ name, amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const total = sorted.reduce((s, g) => s + g.amount, 0);
+
+  const lines = [
+    `Prompt: ${prompt}`,
+    '',
+    'Spending breakdown:',
+    `- Total spend: ${formatCurrency(total)}`,
+    ''
+  ];
+
+  if (sorted.length) {
+    lines.push(`- Top category: ${sorted[0].name} (${formatCurrency(sorted[0].amount)})`);
+
+    sorted.slice(1, 4).forEach(g => {
+      lines.push(`- ${g.name}: ${formatCurrency(g.amount)}`);
+    });
+  }
+
+  return lines.join('\n');
+};
+
+const buildSavingsReply = ({ prompt, context }) => {
+  const expenses = asArray(context.expenses);
+  const groups = new Set(expenses.map(e => e?.group?.name).filter(Boolean));
+
+  return `
+Prompt: ${prompt}
+
+Cost optimization insights:
+- Active groups: ${groups.size}
+- Focus on reducing high-frequency shared expenses first
+- Batch similar expenses to reduce transaction noise
+- Set monthly caps per group instead of reacting daily
+`.trim();
+};
+
+const buildGenericReply = ({ prompt }) => `
+Prompt: ${prompt}
+
+I can help you with:
+- Settlement optimization
+- Spending breakdown
+- Savings suggestions
+`.trim();
+
+/* =========================
+   MAIN FUNCTION
+========================= */
+
+export const generateAIReply = async ({ prompt, context = {} }) => {
+  const intent = classifyIntent(prompt);
+
+  let retrieved = [];
+  try {
+    retrieved = retrieveRelevantDocs(prompt, { topK: 3 });
+  } catch {
+    retrieved = [];
+  }
+
+  if (intent === 'SETTLEMENT') {
+    return buildSettlementReply({ prompt, context, retrieved });
+  }
+
+  if (intent === 'OVERVIEW') {
+    return buildOverspendReply({ prompt, context, retrieved });
+  }
+
+  if (intent === 'SAVINGS') {
+    return buildSavingsReply({ prompt, context, retrieved });
+  }
+
+  return buildGenericReply({ prompt, retrieved });
 };
