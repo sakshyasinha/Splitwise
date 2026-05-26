@@ -17,6 +17,7 @@ export default function GroupCard({ group, isSelected, currentUserId, onClick, o
     ? group.createdBy[0]?._id || group.createdBy[0]?.id || group.createdBy[0]
     : group.createdBy?._id || group.createdBy?.id || group.createdBy;
   const canEdit = Boolean(currentUserId) && String(creatorId || '') === String(currentUserId);
+  const outstandingAmount = Number(group.totalDue || 0);
 
   return (
     <div
@@ -46,21 +47,23 @@ export default function GroupCard({ group, isSelected, currentUserId, onClick, o
           </div>
         </div>
         <div className="text-sm font-syne">
-          {Number(group.borrowedAmount || 0) > 0 ? (
+          {outstandingAmount > 0 ? (
             <div>
-              <span style={{ color: 'var(--danger)' }}>You borrowed {formatCurrency(Number(group.borrowedAmount || 0))}</span>
-              {Number(group.lentAmount || 0) > 0 && (
+              <span style={{ color: 'var(--danger)' }}>Outstanding {formatCurrency(outstandingAmount)}</span>
+              {(Number(group.borrowedAmount || 0) > 0 || Number(group.lentAmount || 0) > 0) && (
                 <div style={{ marginTop: 4, fontSize: 12, color: 'green' }}>
-                  Others owe you {formatCurrency(Number(group.lentAmount || 0))}
+                  {Number(group.borrowedAmount || 0) > 0
+                    ? `You borrowed ${formatCurrency(Number(group.borrowedAmount || 0))}`
+                    : `You lent ${formatCurrency(Number(group.lentAmount || 0))}`}
                 </div>
               )}
             </div>
-          ) : Number(group.lentAmount || 0) > 0 ? (
+          ) : Number(group.borrowedAmount || 0) > 0 ? (
             <div>
-              <span style={{ color: 'var(--success)' }}>You lent {formatCurrency(Number(group.lentAmount || 0))}</span>
-              {Number(group.borrowedAmount || 0) > 0 && (
+              <span style={{ color: 'var(--danger)' }}>You borrowed {formatCurrency(Number(group.borrowedAmount || 0))}</span>
+              {Number(group.lentAmount || 0) > 0 && (
                 <div style={{ marginTop: 4, fontSize: 12, color: 'var(--muted2)' }}>
-                  You owe {formatCurrency(Number(group.borrowedAmount || 0))}
+                  Others owe you {formatCurrency(Number(group.lentAmount || 0))}
                 </div>
               )}
             </div>

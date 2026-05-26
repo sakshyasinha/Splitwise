@@ -12,7 +12,7 @@ import { getPersonName } from '../../utils/personUtils.js';
 const CATEGORIES = ['Food', 'Travel', 'Events', 'Utilities', 'Shopping', 'General', 'Rent', 'Transport', 'Entertainment', 'Healthcare', 'Education', 'Other'];
 const SPLIT_TYPES = ['equal', 'percentage', 'shares', 'itemized', 'adjustment', 'custom', 'payment'];
 
-export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
+export default function ExpenseList({ onEdit }) {
   const { user, token } = useAuth();
   const { expenses = [], loading, error, updateExpense, deleteExpense } = useExpenses();
   const toast = useToast();
@@ -45,29 +45,23 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
     [form]
   );
 
+  const getParticipantNetBalance = (participant) => {
+    if (!participant) return 0;
+
+    return Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0);
+  };
+
   // Filter expenses based on search and filter criteria
   const filteredExpenses = useMemo(() => {
     return expenses.filter(expense => {
       // Search query filter
-      const searchTerms = [externalSearchQuery, searchQuery]
-        .filter(Boolean)
-        .join(' ')
-        .trim()
-        .toLowerCase()
-        .split(/\s+/)
-        .filter(Boolean);
-
-      if (searchTerms.length > 0) {
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
         const description = (expense.description || '').toLowerCase();
         const groupName = (expense.group?.name || '').toLowerCase();
         const paidByName = (expense.paidBy?.name || expense.paidBy?.email || '').toLowerCase();
-        const participantNames = (expense.participants || [])
-          .map((participant) => participant?.userId?.name || participant?.userId?.email || '')
-          .join(' ')
-          .toLowerCase();
-        const searchableText = [description, groupName, paidByName, participantNames].join(' ');
 
-        if (!searchTerms.every((term) => searchableText.includes(term))) {
+        if (!description.includes(query) && !groupName.includes(query) && !paidByName.includes(query)) {
           return false;
         }
       }
@@ -123,7 +117,7 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
 
       return true;
     });
-  }, [expenses, externalSearchQuery, searchQuery, selectedCategory, selectedSplitType, selectedStatus, amountRange, dateRange]);
+  }, [expenses, searchQuery, selectedCategory, selectedSplitType, selectedStatus, amountRange, dateRange]);
 
   // Clear all filters
   const clearFilters = () => {
@@ -158,20 +152,6 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
 
     socketRef.current = socket;
 
-    const onConnectError = (error) => {
-      const code = error?.data?.code;
-      const message = String(error?.message || '').toLowerCase();
-      if (
-        code === 'TOKEN_EXPIRED' ||
-        code === 'INVALID_TOKEN' ||
-        message.includes('token expired') ||
-        message.includes('invalid token')
-      ) {
-        socket.disconnect();
-        window.dispatchEvent(new Event('splitwise:auth-expired'));
-      }
-    };
-
     const onMessageReceived = (message) => {
       const expenseId = String(message?.expenseId || '');
       if (!expenseId) return;
@@ -195,12 +175,10 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
       }
     };
 
-    socket.on('connect_error', onConnectError);
     socket.on('message-received', onMessageReceived);
     socket.on('unread-updated', onUnreadUpdated);
 
     return () => {
-      socket.off('connect_error', onConnectError);
       socket.off('message-received', onMessageReceived);
       socket.off('unread-updated', onUnreadUpdated);
       socket.disconnect();
@@ -461,7 +439,8 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
         {!loading && filteredExpenses.length === 0 && expenses.length > 0 && (
           <div className="empty-state">
             <div className="empty-icon">🔍</div>
-            No expenses match your filters, try adjusting your search criteria.
+            No expenses match your filters, hi
+            try adjusting your search criteria.
           </div>
         )}
 
@@ -496,7 +475,12 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
                 const participantUserId = participant?.userId?._id || participant?.userId;
                 return String(participantUserId) === currentUserId;
               });
-              const currentUserBalance = Number(currentUserParticipant?.balance || 0);
+              const currentUserBalance = getParticipantNetBalance(currentUserParticipant);
+              console.log({
+  description: expense.description,
+  currentUserParticipant,
+  balance: currentUserBalance
+});
               const unreadCount = unreadByExpense[String(expense._id)] || 0;
 
               return (
@@ -637,6 +621,10 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
                               }
 
                               if (isPayment) {
+                                if (Number(currentUserBalance || 0) < 0) {
+                                  return <span style={{ color: 'var(--success)' }}>Payment received</span>;
+                                }
+
                                 if (pendingCount === 0) {
                                   return <span style={{ color: 'var(--success)' }}>Payment settled</span>;
                                 }
@@ -715,30 +703,34 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
                         const isPersonalExpense = totalParticipants === 1;
                         const isPayment = expense.splitType === 'payment';
                         const hasPending = pendingCount > 0;
-                        const paymentAmountColor = hasPending ? 'var(--danger)' : 'var(--success)';
-                        const expenseAmountColor = isPersonalExpense
+                        const sharedBalanceAmount = Number(currentUserBalance || 0);
+                        const displayAmount = isPersonalExpense || isPayment
+                          ? Number(expense.amount || 0)
+                          : Math.abs(sharedBalanceAmount || Number(expense.amount || 0));
+                        const isPaymentRecipientView = isPayment && Number(currentUserBalance || 0) < 0;
+                        const displayTone = isPersonalExpense
                           ? 'var(--text)'
                           : (isPayment
-                            ? paymentAmountColor
-                            : (currentUserBalance > 0
+                            ? (isPaymentRecipientView ? 'var(--success)' : 'var(--danger)')
+                            : (sharedBalanceAmount > 0
                               ? 'var(--success)'
-                              : currentUserBalance < 0
+                              : sharedBalanceAmount < 0
                                 ? 'var(--danger)'
                                 : (hasPending ? 'var(--danger)' : 'var(--success)')));
 
                         return (
                           <>
-                            <div className="expense-amount" style={{ color: expenseAmountColor }}>
-                              {formatCurrency(expense.amount)}
+                            <div className="expense-amount" style={{ color: displayTone }}>
+                              {formatCurrency(displayAmount)}
                             </div>
                             {!isPersonalExpense && !isPayment && hasPending && (
                               <div className="expense-share">
-                                ÷ {totalParticipants} people
+                                {sharedBalanceAmount > 0 ? 'You lent' : 'You owe'} · ÷ {totalParticipants} people · total {formatCurrency(expense.amount)}
                               </div>
                             )}
                             {isPayment && (
                               <div className="expense-share" style={{ fontSize: 11, opacity: 0.7 }}>
-                                Direct payment
+                                {isPaymentRecipientView ? 'Payment received' : 'Direct payment'}
                               </div>
                             )}
                             {/* small chat button below amount for easier access */}

@@ -2780,6 +2780,13 @@ body::after {
   padding: 22px 0;
 }
 
+.topbar-nav-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
 .topbar-nav-link:hover,
 .topbar-nav-link.active {
   color: var(--text);

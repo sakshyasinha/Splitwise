@@ -25,13 +25,13 @@ export const CalculateBalance=async(groupId)=>{
             continue;
         }
 
-        // For regular expenses, add the full amount to the payer's balance.
-        balances[payerId]=(balances[payerId] || 0) + totalAmount;
-
-        participants.forEach(({ userId, balance: participantBalance })=>{
+        // For regular expenses, derive each participant's net amount directly.
+        participants.forEach(({ userId, paidAmount, shareAmount, amount: participantAmount })=>{
             const participantId = userId?.toString();
-            const shareAmount = Number(participantBalance) || 0;
-            balances[participantId] = (balances[participantId] || 0) + shareAmount;
+            const shareValue = Number(shareAmount ?? participantAmount ?? 0);
+            const paidValue = Number(paidAmount || 0);
+            const participantNet = paidValue - shareValue;
+            balances[participantId] = (balances[participantId] || 0) + participantNet;
         });
     }
     return balances;

@@ -118,7 +118,7 @@ const calculateOverview = (expenses, userId) => {
       const paymentAmount = Number(exp.amount || 0);
       const balance = isPayment
         ? (String(userId) === payerId ? paymentAmount : -paymentAmount)
-        : Number(participant.balance || 0);
+        : Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0);
       if (balance > 0) {
         totalOwed += balance; // Others owe me
       } else if (balance < 0) {
@@ -378,7 +378,7 @@ const calculateRelationshipAnalytics = (expenses, userId) => {
     const viewerEntry = participants.find(p => String(p.userId?._id || p.userId) === String(userId));
     if (!viewerEntry) return; // viewer not involved in this expense
 
-    const viewerBalance = Number(viewerEntry.balance || 0);
+    const viewerBalance = Number(viewerEntry.paidAmount || 0) - Number(viewerEntry.shareAmount || viewerEntry.amount || 0);
 
     let foundPositiveCounterparty = false;
     let foundNegativeCounterparty = false;
@@ -387,7 +387,7 @@ const calculateRelationshipAnalytics = (expenses, userId) => {
       const participantId = String(participant.userId?._id || participant.userId);
       if (participantId === String(userId)) return; // Skip self
 
-      const pBalance = Number(participant.balance || 0);
+      const pBalance = Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0);
       if (pBalance === 0) return;
 
       const participantName = participant.userId?.name || participant.userId?.email || 'Unknown';

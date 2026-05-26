@@ -418,6 +418,7 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
 
       const email = String(member.email).toLowerCase();
       byEmail.set(email, {
+        id: String(member._id || member.id || ''),
         email,
         label: member.name ? `${member.name} (${member.email})` : member.email,
       });
@@ -432,6 +433,18 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
 
     return Array.from(byEmail.values());
   }, [selectedGroup, currentUserEmail, user?.name, user?.email]);
+
+  const selectedGroupMemberIdsByEmail = useMemo(() => {
+    const map = new Map();
+
+    selectedGroupMembers.forEach((member) => {
+      if (member?.email) {
+        map.set(String(member.email).toLowerCase(), String(member.id || ''));
+      }
+    });
+
+    return map;
+  }, [selectedGroupMembers]);
 
   useEffect(() => {
     if (!form.groupId || selectedGroupMemberEmails.size === 0) return;
@@ -753,6 +766,15 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
         // Calculate amounts based on split type
         const expenseAmounts = calculateExpenseAmounts();
 
+        const resolveMemberIdentifier = (email) => {
+          const normalizedEmail = String(email || '').trim().toLowerCase();
+          return selectedGroupMemberIdsByEmail.get(normalizedEmail) || normalizedEmail;
+        };
+
+        const resolvedPaidBy = resolveMemberIdentifier(paidByEmail);
+        const resolvedParticipants = [...new Set([resolvedPaidBy, ...participants.map(resolveMemberIdentifier)])];
+        const resolvedParticipantPayload = resolvedParticipants.map((userId) => ({ userId }));
+
         // Prepare split details based on split type
         let splitDetails = {};
         let backendSplitType = expenseSplitType;
@@ -780,13 +802,13 @@ export default function ExpenseForm({ onSuccess, editingExpense = null }) {
           description: form.description,
           amount: Number(form.amount),
           groupId: form.groupId,
-          paidBy: paidByEmail,
-          participants: [...new Set([paidByEmail, ...participants])], // Include payer in participants
+          paidBy: resolvedPaidBy,
+          participants: resolvedParticipantPayload,
           category: selectedCategory,
           currency: form.currency || 'INR',
           splitType: backendSplitType,
           splitDetails: splitDetails,
-          notes: form.notes?.trim() || '',
+          ...(form.notes?.trim() ? { notes: form.notes.trim() } : {}),
           receiptUrl: form.receiptUrl?.trim() || '',
           images: parseTextList(form.imageUrls),
           tags: parseTextList(form.tags),

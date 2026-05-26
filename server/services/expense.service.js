@@ -612,10 +612,20 @@ export const settleDue = async (userId, expenseId) => {
     // Update participant status
     participant.status = 'settled';
     participant.settledAt = new Date();
-    
-    // Update balance (they've now paid their share)
-    participant.paidAmount = participant.shareAmount || participant.amount;
-    participant.balance = 0;
+
+    // For the common two-person case, settle both sides together so the expense
+    // disappears from both debtor and creditor views without relying on mutable balance state.
+    if ((expense.participants || []).length === 2) {
+        const otherParticipant = (expense.participants || []).find((entry) => {
+            const id = entry.userId?._id?.toString?.() || entry.userId?.toString?.() || entry.userId;
+            return String(id) !== String(userId);
+        });
+
+        if (otherParticipant && otherParticipant.status !== 'settled') {
+            otherParticipant.status = 'settled';
+            otherParticipant.settledAt = new Date();
+        }
+    }
 
     // Mark participants array as modified so Mongoose saves the changes
     expense.markModified('participants');
@@ -701,14 +711,32 @@ export const getMyDues = async (userId) => {
                 (entry) => String(entry.userId?._id || entry.userId) === String(userId)
             );
 
-            if (!participant ||
-                participant.status === 'paid' ||
-                participant.status === 'settled') {
+            if (!participant) {
                 return null;
             }
 
-            // Support both legacy and new amount fields - convert to number
-            const amount = Number(participant.amount || participant.shareAmount || 0);
+            const paidAmount = Number(participant.paidAmount || 0);
+            const shareAmount = Number(participant.shareAmount || participant.amount || 0);
+            const balance = paidAmount - shareAmount;
+
+            const payerId = String(expense.paidBy?._id || expense.paidBy || expense.createdBy?._id || expense.createdBy || '');
+            const isPaymentExpense = expense.splitType === 'payment';
+
+            // Derive clear financial flags for the participant
+            const financial = {
+                netBalance: Math.round(balance * 100) / 100, // positive -> user is creditor
+                isCreditor: isPaymentExpense ? (payerId === String(userId)) : balance > 0,
+                owesMoney: isPaymentExpense ? (payerId !== String(userId)) : balance < 0,
+                paidShare: participant.status === 'paid' || participant.status === 'settled'
+            };
+
+            // Only show dues where the current user owes money
+            if (!financial.owesMoney) {
+                return null;
+            }
+
+            // If participant share is marked paid/settled but net balance still negative, treat as pending (user still owes until settled at expense level)
+            const amount = Math.abs(financial.netBalance);
 
             // For payment-type expenses, find the recipient (other participant)
             // For regular split expenses, the recipient is whoever paid
@@ -790,12 +818,32 @@ export const getMyLents = async (userId) => {
             .map((expense) => {
                 const expenseAmount = Number(expense.amount || 0);
                 const payerId = String(expense.paidBy?._id || expense.paidBy || expense.createdBy?._id || expense.createdBy || '');
+                const userParticipant = (expense.participants || []).find(
+                    (entry) => String(entry.userId?._id || entry.userId) === String(userId)
+                );
+
+                if (!userParticipant) {
+                    return null;
+                }
+
+                const paidAmount = Number(userParticipant.paidAmount || 0);
+                const shareAmount = Number(userParticipant.shareAmount || userParticipant.amount || 0);
+                const balance = paidAmount - shareAmount;
+                const isPaymentExpense = expense.splitType === 'payment';
+
+                const financial = {
+                    netBalance: Math.round(balance * 100) / 100,
+                    isCreditor: isPaymentExpense ? (payerId === String(userId)) : balance > 0,
+                    owesMoney: isPaymentExpense ? (payerId !== String(userId)) : balance < 0,
+                    paidShare: userParticipant.status === 'paid' || userParticipant.status === 'settled'
+                };
+
+                // Only show expenses where the current user is creditor (is owed money)
+                if (!financial.isCreditor) {
+                    return null;
+                }
 
                 if (expense.splitType === 'payment') {
-                    if (payerId !== String(userId)) {
-                        return null;
-                    }
-
                     const recipient = (expense.participants || []).find(
                         (entry) => String(entry.userId?._id || entry.userId) !== String(userId)
                     );
@@ -822,36 +870,20 @@ export const getMyLents = async (userId) => {
                     };
                 }
 
-                // Find the user's participant entry to get their balance
-                const userParticipant = (expense.participants || []).find(
-                    (entry) => String(entry.userId?._id || entry.userId) === String(userId)
-                );
-
-                if (!userParticipant) {
-                    return null;
-                }
-
-                // Calculate how much the user is owed (positive balance)
-                // balance = paidAmount - shareAmount
-                // If positive, user paid more than their share = they lent money
-                const userBalance = Number(userParticipant.balance || 0);
-
-                if (userBalance <= 0) {
-                    return null; // User doesn't lent anything in this expense
-                }
-
-                // Find who owes the user (other participants with negative balance)
+                // Find who owes the user (other participants with negative balance relative to their share)
                 const debtors = (expense.participants || [])
                     .filter((entry) => {
                         const participantId = String(entry.userId?._id || entry.userId);
                         const isNotUser = participantId !== String(userId);
-                        const owesMoney = Number(entry.balance || 0) < 0;
+                        const entryPaid = Number(entry.paidAmount || 0);
+                        const entryShare = Number(entry.shareAmount || entry.amount || 0);
+                        const owesMoney = (entryPaid - entryShare) < 0;
                         return isNotUser && owesMoney;
                     })
                     .map((entry) => ({
                         id: entry.userId?._id,
                         name: entry.userId?.name || entry.userId?.email || 'Unknown',
-                        amount: Math.abs(Number(entry.balance || 0)) // They owe this amount
+                        amount: Math.abs(Number(entry.paidAmount || 0) - Number(entry.shareAmount || entry.amount || 0)) // They owe this amount
                     }));
 
                 if (debtors.length === 0) {
@@ -1068,7 +1100,7 @@ export const getFriendsList = async (userId) => {
                 // Calculate balance for this friend
                 // If friend has negative balance, they owe money
                 // If friend has positive balance, I owe them money
-                const friendBalance = Number(participant.balance || 0);
+                const friendBalance = Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0);
 
                 if (!friendsMap.has(friendId)) {
                     friendsMap.set(friendId, {

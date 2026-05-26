@@ -1,5 +1,5 @@
 import ThemeToggle from '../ui/ThemeToggle.jsx';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 
 /**
  * Dashboard header component
@@ -17,6 +17,8 @@ export default function DashboardHeader({
   searchQuery = '',
   onSearchChange,
 }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const userEmail = String(user?.email || '').trim();
   const emailName = userEmail.split('@')[0] || 'User';
   const profileInitials = emailName
@@ -36,12 +38,20 @@ export default function DashboardHeader({
         </div>
       </div>
       <nav className="topbar-nav" aria-label="Dashboard navigation">
-        <NavLink className={({ isActive }) => `topbar-nav-link${isActive ? ' active' : ''}`} to="/dashboard">
+        <NavLink
+          className={() => `topbar-nav-link${location.pathname === '/dashboard' ? ' active' : ''}`}
+          to="/dashboard"
+        >
           Dashboard
         </NavLink>
-        <NavLink className={({ isActive }) => `topbar-nav-link${isActive ? ' active' : ''}`} to="/groups">
+        <button
+          type="button"
+          className={`topbar-nav-link topbar-nav-button${location.pathname === '/groups' ? ' active' : ''}`}
+          onClick={() => navigate('/groups')}
+          aria-pressed={location.pathname === '/groups'}
+        >
           Groups
-        </NavLink>
+        </button>
         <NavLink className={({ isActive }) => `topbar-nav-link${isActive ? ' active' : ''}`} to="/activity">
           Activity
         </NavLink>

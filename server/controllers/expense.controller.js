@@ -48,9 +48,14 @@ export const addExpense = async (req, res) => {
             body: req.body
         });
 
+        const normalizedBody = {
+            ...req.body,
+            groupId: req.body.groupId || req.body.group || null,
+        };
+
         const expense = await expenseService.addExpense({
             userId: req.user?.id || req.body.userId,
-            ...req.body
+            ...normalizedBody
         });
 
         // Invalidate caches for all affected users and groups

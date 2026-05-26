@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useAuth from '../../hooks/useAuth.js';
 import useExpenses from '../../hooks/useExpenses.js';
 import Card from '../ui/Card.jsx';
@@ -52,6 +52,15 @@ const DashboardPage = ({ view = 'dashboard' }) => {
   const [notificationCount, setNotificationCount] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [dashboardSearchQuery, setDashboardSearchQuery] = useState('');
+  const duesCardRef = useRef(null);
+
+  const isDashboardView = view === 'dashboard';
+  const isGroupsView = view === 'groups';
+  const isActivityView = view === 'activity';
+  const isAnalyticsView = view === 'analytics';
+  const isProfileView = view === 'profile';
+  const isSettingsView = view === 'settings';
+  const isAccountView = isProfileView || isSettingsView;
 
   const refreshNotificationCount = async () => {
     try {
@@ -143,8 +152,33 @@ const DashboardPage = ({ view = 'dashboard' }) => {
   const getExpenseGroupId = (expense) => (typeof expense.group === 'object' ? expense.group?._id : expense.group);
   const getExpenseGroupName = (expense) => (typeof expense.group === 'object' ? expense.group?.name : '');
 
+  const getParticipantNetBalance = (participant) => {
+    if (!participant) return 0;
+
+    return Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0);
+  };
+
+  const isParticipantPending = (participant) => {
+    const status = String(participant?.status || 'pending').toLowerCase();
+    return status !== 'settled' && status !== 'paid';
+  };
+
+  const isExpenseFullySettled = (expense) => {
+    if (!expense) return true;
+    if (expense.isSettled) return true;
+
+    const participants = Array.isArray(expense.participants) ? expense.participants : [];
+    if (participants.length === 0) return false;
+
+    return participants.every((entry) => !isParticipantPending(entry));
+  };
+
   const visibleDues = useMemo(() => {
     const fromExpenses = expenses.flatMap((expense) => {
+      if (isExpenseFullySettled(expense)) {
+        return [];
+      }
+
       const participant = (expense.participants || []).find((entry) => {
         if (!entry?.userId) return false;
         const entryUserId = typeof entry.userId === 'object' ? entry.userId._id : entry.userId;
@@ -155,10 +189,11 @@ const DashboardPage = ({ view = 'dashboard' }) => {
         return [];
       }
 
-      const balance = Number(
-        participant.balance ??
-        (Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0))
-      );
+      if (!isParticipantPending(participant)) {
+        return [];
+      }
+
+      const balance = getParticipantNetBalance(participant);
 
       if (balance >= 0) {
         return [];
@@ -183,13 +218,31 @@ const DashboardPage = ({ view = 'dashboard' }) => {
     });
 
     const mergedDues = new Map();
-    [...fromExpenses, ...myDues].forEach((due) => {
+
+    // First add dues derived from expenses as a fallback
+    (fromExpenses || []).forEach((due) => {
       if (!due) return;
-      const key = String(due.expenseId || due._id || `${due.description || ''}-${due.amount || 0}`);
-      mergedDues.set(key, due);
+      const key = String(due.expenseId || due._id || `${due.description || ''}-${due.createdAt || ''}`);
+      if (!mergedDues.has(key)) {
+        mergedDues.set(key, { ...due });
+      }
     });
 
-    return Array.from(mergedDues.values());
+    // Then overlay server-provided `myDues` (authoritative) to avoid duplicates
+    (myDues || []).forEach((due) => {
+      if (!due) return;
+      const key = String(due.expenseId || due._id || `${due.description || ''}-${due.createdAt || ''}`);
+      mergedDues.set(key, { ...due });
+    });
+
+    return Array.from(mergedDues.values()).filter((due) => {
+      const status = String(due?.status || 'pending').toLowerCase();
+      if (status === 'settled' || status === 'paid') {
+        return false;
+      }
+
+      return Number(due?.amount || 0) > 0;
+    });
   }, [expenses, myDues, userId]);
 
   const visibleTotalOwed = useMemo(
@@ -197,8 +250,75 @@ const DashboardPage = ({ view = 'dashboard' }) => {
     [visibleDues]
   );
 
+  const groupedOutstandingDues = useMemo(() => {
+    const merged = new Map();
+
+    // Keep personal actionable dues first.
+    visibleDues.forEach((due) => {
+      const key = String(due.expenseId || due._id);
+      if (!key) return;
+      merged.set(key, {
+        ...due,
+        canSettle: true,
+      });
+    });
+
+    // Add group-level outstanding expenses so grouped dues reflect all unresolved items.
+    (expenses || []).forEach((expense) => {
+      if (!expense || isExpenseFullySettled(expense)) {
+        return;
+      }
+
+      const key = String(expense._id || '');
+      if (!key || merged.has(key)) {
+        return;
+      }
+
+      const pendingParticipants = (expense.participants || []).filter((participant) =>
+        isParticipantPending(participant)
+      );
+
+      if (pendingParticipants.length === 0) {
+        return;
+      }
+
+      const pendingAmount = pendingParticipants.reduce(
+        (sum, participant) => sum + Number(participant?.shareAmount || participant?.amount || 0),
+        0
+      );
+
+      if (pendingAmount <= 0) {
+        return;
+      }
+
+      merged.set(key, {
+        expenseId: expense._id,
+        description: expense.description || 'Unknown expense',
+        amount: pendingAmount,
+        status: 'pending',
+        group: {
+          id: expense.group?._id,
+          name: expense.group?.name || '',
+        },
+        paidTo: {
+          id: expense.paidBy?._id || expense.createdBy?._id,
+          name: expense.paidBy?.name || expense.createdBy?.name || 'Unknown User',
+          email: expense.paidBy?.email || expense.createdBy?.email || '',
+        },
+        createdAt: expense.createdAt,
+        canSettle: false,
+        metaText: `${pendingParticipants.length} participant${pendingParticipants.length === 1 ? '' : 's'} pending`,
+      });
+    });
+
+    return Array.from(merged.values()).sort((left, right) =>
+      new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime()
+    );
+  }, [expenses, visibleDues]);
+
   const getUserBalanceForExpense = (expense, targetUserId) => {
     if (!expense?.participants) return 0;
+    if (isExpenseFullySettled(expense)) return 0;
     
     const targetIdStr = String(targetUserId);
     const participant = (expense.participants || []).find((entry) => {
@@ -208,10 +328,9 @@ const DashboardPage = ({ view = 'dashboard' }) => {
     });
 
     if (!participant) return 0;
+    if (!isParticipantPending(participant)) return 0;
     
-    // Return balance field if available, else calculate from share and paid amounts
-    const balance = Number(participant.balance ?? 
-      (Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0)));
+    const balance = getParticipantNetBalance(participant);
     
     return balance;
   };
@@ -444,8 +563,26 @@ const DashboardPage = ({ view = 'dashboard' }) => {
       ])
     : [];
 
+    const selectedGroupNetBalance = selectedGroup
+      ? Number(selectedGroup.lentAmount || 0) - Number(selectedGroup.borrowedAmount || 0)
+      : 0;
+
+    const selectedGroupOutstanding = selectedGroup ? Number(selectedGroup.totalDue || 0) : 0;
+
   const selectedGroupPosition = selectedGroup
-    ? Number(selectedGroup.borrowedAmount || 0) > 0
+      ? selectedGroupOutstanding > 0
+        ? {
+            tone: 'danger',
+            badgeClass: 'badge-red',
+            badgeText: 'Outstanding',
+            amount: selectedGroupOutstanding,
+            secondaryText: selectedGroupNetBalance > 0
+              ? `You are owed ${formatCurrency(selectedGroupNetBalance)}`
+              : selectedGroupNetBalance < 0
+                ? `You owe ${formatCurrency(Math.abs(selectedGroupNetBalance))}`
+                : '',
+          }
+        : Number(selectedGroup.borrowedAmount || 0) > 0
       ? {
           tone: 'danger',
           badgeClass: 'badge-red',
@@ -468,9 +605,9 @@ const DashboardPage = ({ view = 'dashboard' }) => {
         : {
             tone: 'success',
             badgeClass: 'badge-green',
-            badgeText: 'Settled',
+            badgeText: Number(selectedGroup.totalSpend || 0) > 0 ? 'Balanced' : 'Settled',
             amount: 0,
-          secondaryText: '',
+            secondaryText: '',
           }
     : null;
 
@@ -549,14 +686,6 @@ const DashboardPage = ({ view = 'dashboard' }) => {
   const handleNotificationsRead = (nextCount = 0) => {
     setNotificationCount(nextCount);
   };
-
-  const isDashboardView = view === 'dashboard';
-  const isGroupsView = view === 'groups';
-  const isActivityView = view === 'activity';
-  const isAnalyticsView = view === 'analytics';
-  const isProfileView = view === 'profile';
-  const isSettingsView = view === 'settings';
-  const isAccountView = isProfileView || isSettingsView;
   const profileDisplayName = userEmail ? userEmail.split('@')[0] : user?.name || 'User';
 
   return (
@@ -599,15 +728,21 @@ const DashboardPage = ({ view = 'dashboard' }) => {
                 onManageRecurring={() => setActiveModal('recurring')}
               />
 
-              <ExpenseList onEdit={openEditExpense} externalSearchQuery={dashboardSearchQuery} />
+              <ExpenseList
+                onEdit={openEditExpense}
+                externalSearchQuery={dashboardSearchQuery}
+              />
             </div>
 
             <div className="right-column stack-lg">
-              <DuesList
-                dues={visibleDues}
-                settlingExpenseId={settlingExpenseId}
-                onSettleDue={handleSettleDue}
-              />
+              <div ref={duesCardRef}>
+                <DuesList
+                  dues={visibleDues}
+                  settlingExpenseId={settlingExpenseId}
+                  onSettleDue={handleSettleDue}
+                  grouped={false}
+                />
+              </div>
 
               <LentsList lents={myLents} />
 
@@ -636,11 +771,14 @@ const DashboardPage = ({ view = 'dashboard' }) => {
             </div>
 
             <div className="right-column stack-lg">
-              <DuesList
-                dues={visibleDues}
-                settlingExpenseId={settlingExpenseId}
-                onSettleDue={handleSettleDue}
-              />
+              <div ref={duesCardRef}>
+                <DuesList
+                  dues={groupedOutstandingDues}
+                  settlingExpenseId={settlingExpenseId}
+                  onSettleDue={handleSettleDue}
+                  grouped
+                />
+              </div>
               <LentsList lents={myLents} />
             </div>
           </section>
