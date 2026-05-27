@@ -34,6 +34,11 @@ let transporter = null;
 
 const createTransporter = () => {
   try {
+    // Emergency override: if this env var is set we refuse to create a transporter
+    if (String(process.env.EMERGENCY_DISABLE_EMAILS || 'false').trim() === 'true') {
+      logger.warn('EMERGENCY_DISABLE_EMAILS is set. Email transporter will NOT be created.');
+      return null;
+    }
     const emailConfig = getEmailConfig();
 
     // Debug: Log current environment variable values
@@ -117,6 +122,12 @@ export const sendEmail = async (options) => {
   try {
     const emailConfig = getEmailConfig();
 
+    // Emergency short-circuit: skip sending even if configured
+    if (String(process.env.EMERGENCY_DISABLE_EMAILS || 'false').trim() === 'true') {
+      logger.warn('EMERGENCY_DISABLE_EMAILS is set. Skipping sendEmail to:', { to: options.to, subject: options.subject });
+      return { success: true, skipped: true, message: 'Email sending disabled by emergency flag' };
+    }
+
     // Check if email is enabled
     if (!emailConfig.enabled) {
       logger.info('Email sending is disabled. Skipping email to:', options.to);
@@ -189,6 +200,19 @@ export const sendEmail = async (options) => {
  */
 export const sendBulkEmails = async (emailOptions) => {
   try {
+    // Emergency short-circuit: skip all sends
+    if (String(process.env.EMERGENCY_DISABLE_EMAILS || 'false').trim() === 'true') {
+      logger.warn('EMERGENCY_DISABLE_EMAILS is set. Skipping sendBulkEmails for', { total: Array.isArray(emailOptions) ? emailOptions.length : 0 });
+      return {
+        total: Array.isArray(emailOptions) ? emailOptions.length : 0,
+        successful: 0,
+        failed: 0,
+        skipped: true,
+        message: 'Bulk email sending disabled by emergency flag',
+        results: []
+      };
+    }
+
     if (!Array.isArray(emailOptions) || emailOptions.length === 0) {
       throw new Error('Email options array is required');
     }

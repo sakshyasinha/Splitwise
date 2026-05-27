@@ -7,6 +7,7 @@ export default function useExpenses() {
 	const myLents = useExpenseStore((state) => state.myLents);
 	const totalOwed = useExpenseStore((state) => state.totalOwed);
 	const totalLent = useExpenseStore((state) => state.totalLent);
+	const debtSnapshot = useExpenseStore((state) => state.debtSnapshot);
 	const loading = useExpenseStore((state) => state.loading);
 	const error = useExpenseStore((state) => state.error);
 	const breakdown = useExpenseStore((state) => state.breakdown);
@@ -27,6 +28,7 @@ export default function useExpenses() {
 	const removeGroupMember = useExpenseStore((state) => state.removeGroupMember);
 	const fetchExpenseBreakdown = useExpenseStore((state) => state.fetchExpenseBreakdown);
 	const fetchFriendsList = useExpenseStore((state) => state.fetchFriendsList);
+	const fetchBalanceSnapshot = useExpenseStore((state) => state.fetchBalanceSnapshot);
 
 	return {
 		expenses,
@@ -35,6 +37,7 @@ export default function useExpenses() {
 		myLents,
 		totalOwed,
 		totalLent,
+		debtSnapshot,
 		loading,
 		error,
 		breakdown,
@@ -54,6 +57,7 @@ export default function useExpenses() {
 		addGroupMember,
 		removeGroupMember,
 		fetchExpenseBreakdown,
-		fetchFriendsList
+		fetchFriendsList,
+		fetchBalanceSnapshot,
 	};
 }

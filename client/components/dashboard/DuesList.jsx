@@ -12,6 +12,10 @@ import { formatCurrency } from '../../utils/formatCurrency.js';
  * @param {boolean} props.grouped - Show dues grouped by group name
  */
 export default function DuesList({ dues, settlingExpenseId, onSettleDue, grouped = false }) {
+  const getRowKey = (due) => String(due?.transactionId || due?.sourceExpenseId || due?.expenseId || due?._id || '');
+  const getDisplayName = (party) => party?.displayName || party?.name || party?.email || 'Unknown User';
+  const getAvatarInitial = (party) => getDisplayName(party).trim().charAt(0).toUpperCase() || '?';
+
   const groupedDues = useMemo(() => {
     const groups = new Map();
 
@@ -76,16 +80,16 @@ const groupName = due.group?.name;
 
                     <ul className="expense-list">
                       {group.dues.map((due) => (
-                        <li key={due.expenseId} className="expense-item">
+                                <li key={getRowKey(due)} className="expense-item">
                           <div className="due-avatar" style={{ background: 'var(--danger-dim)', color: 'var(--danger)' }}>
-                            {(due.paidTo?.name || due.paidTo?.email || '?')[0].toUpperCase()}
+                            {getAvatarInitial(due.paidTo)}
                           </div>
                           <div className="expense-info">
                             <div className="expense-title">{due.description}</div>
                             <div className="expense-meta">
                               {due.canSettle === false
                                 ? (due.metaText || 'Outstanding group expense')
-                                : `Pay -> ${due.paidTo?.name || due.paidTo?.email}`}
+                                : `Pay -> ${getDisplayName(due.paidTo)}`}
                             </div>
                             {due.canSettle !== false && (
                               <div className="settle-row">
@@ -113,16 +117,16 @@ const groupName = due.group?.name;
           ) : (
             <ul className="expense-list">
               {dues.map((due) => (
-                <li key={due.expenseId} className="expense-item">
+                <li key={getRowKey(due)} className="expense-item">
                   <div className="due-avatar" style={{ background: 'var(--danger-dim)', color: 'var(--danger)' }}>
-                    {(due.paidTo?.name || due.paidTo?.email || '?')[0].toUpperCase()}
+                    {getAvatarInitial(due.paidTo)}
                   </div>
                   <div className="expense-info">
                     <div className="expense-title">{due.description}</div>
                     <div className="expense-meta">
                       {due.canSettle === false
                         ? (due.metaText || 'Outstanding group expense')
-                        : `Pay -> ${due.paidTo?.name || due.paidTo?.email}`}
+                        : `Pay -> ${getDisplayName(due.paidTo)}`}
                       {due.group?.name ? ` · ${due.group.name}` : ''}
                     </div>
                     {due.canSettle !== false && (

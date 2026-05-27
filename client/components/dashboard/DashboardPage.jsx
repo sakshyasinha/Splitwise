@@ -33,8 +33,6 @@ const DashboardPage = ({ view = 'dashboard' }) => {
     groups,
     myDues,
     myLents,
-    totalOwed,
-    totalLent,
     fetchExpenses,
     fetchMyDues,
     fetchMyLents,
@@ -42,6 +40,8 @@ const DashboardPage = ({ view = 'dashboard' }) => {
     settleDue,
     fetchExpenseBreakdown,
     fetchFriendsList,
+    fetchBalanceSnapshot,
+    debtSnapshot,
   } = useExpenses();
 
   const [selectedGroupId, setSelectedGroupId] = useState(null);
@@ -77,8 +77,7 @@ const DashboardPage = ({ view = 'dashboard' }) => {
       try {
         await Promise.all([
           fetchExpenses(),
-          fetchMyDues(),
-          fetchMyLents(),
+          fetchBalanceSnapshot(),
           fetchGroups(),
           fetchExpenseBreakdown(),
           fetchFriendsList()
@@ -151,6 +150,23 @@ const DashboardPage = ({ view = 'dashboard' }) => {
   const getDueGroupName = (due) => due.group?.name || '';
   const getExpenseGroupId = (expense) => (typeof expense.group === 'object' ? expense.group?._id : expense.group);
   const getExpenseGroupName = (expense) => (typeof expense.group === 'object' ? expense.group?.name : '');
+  const getLedgerItemKey = (item) => String(
+    item?.ledgerNodeId ||
+    item?.canonicalLedgerId ||
+    item?.ledgerNode?.id ||
+    item?.transactionId ||
+    item?.sourceExpenseId ||
+    item?.expenseId ||
+    item?._id ||
+    `${item?.description || ''}-${item?.createdAt || ''}`
+  );
+
+  const getGroupLedgerKey = (item) => String(
+    item?.group?.id ||
+    item?.group?._id ||
+    item?.group?.name ||
+    ''
+  ).trim().toLowerCase();
 
   const getParticipantNetBalance = (participant) => {
     if (!participant) return 0;
@@ -174,64 +190,12 @@ const DashboardPage = ({ view = 'dashboard' }) => {
   };
 
   const visibleDues = useMemo(() => {
-    const fromExpenses = expenses.flatMap((expense) => {
-      if (isExpenseFullySettled(expense)) {
-        return [];
-      }
-
-      const participant = (expense.participants || []).find((entry) => {
-        if (!entry?.userId) return false;
-        const entryUserId = typeof entry.userId === 'object' ? entry.userId._id : entry.userId;
-        return String(entryUserId) === String(userId);
-      });
-
-      if (!participant) {
-        return [];
-      }
-
-      if (!isParticipantPending(participant)) {
-        return [];
-      }
-
-      const balance = getParticipantNetBalance(participant);
-
-      if (balance >= 0) {
-        return [];
-      }
-
-      return [{
-        expenseId: expense._id,
-        description: expense.description || 'Unknown expense',
-        amount: Math.abs(balance),
-        status: participant.status || 'pending',
-        group: {
-          id: expense.group?._id,
-          name: expense.group?.name || '',
-        },
-        paidTo: {
-          id: expense.paidBy?._id || expense.createdBy?._id,
-          name: expense.paidBy?.name || expense.createdBy?.name || 'Unknown User',
-          email: expense.paidBy?.email || expense.createdBy?.email || '',
-        },
-        createdAt: expense.createdAt,
-      }];
-    });
-
     const mergedDues = new Map();
 
-    // First add dues derived from expenses as a fallback
-    (fromExpenses || []).forEach((due) => {
-      if (!due) return;
-      const key = String(due.expenseId || due._id || `${due.description || ''}-${due.createdAt || ''}`);
-      if (!mergedDues.has(key)) {
-        mergedDues.set(key, { ...due });
-      }
-    });
-
-    // Then overlay server-provided `myDues` (authoritative) to avoid duplicates
+    // Use the server-provided `myDues` as the canonical source of truth.
     (myDues || []).forEach((due) => {
       if (!due) return;
-      const key = String(due.expenseId || due._id || `${due.description || ''}-${due.createdAt || ''}`);
+      const key = getLedgerItemKey(due);
       mergedDues.set(key, { ...due });
     });
 
@@ -243,19 +207,60 @@ const DashboardPage = ({ view = 'dashboard' }) => {
 
       return Number(due?.amount || 0) > 0;
     });
-  }, [expenses, myDues, userId]);
+  }, [myDues]);
 
-  const visibleTotalOwed = useMemo(
-    () => visibleDues.reduce((sum, due) => sum + Number(due.amount || 0), 0),
-    [visibleDues]
-  );
+  const visibleTotalOwed = Number(debtSnapshot?.totalOwed ?? 0);
+  const visibleTotalLent = Number(debtSnapshot?.totalToReceive ?? 0);
+  const visibleNetBalance = Number(debtSnapshot?.totalBalance ?? (visibleTotalLent - visibleTotalOwed));
+
+  const ledgerGroupBalances = useMemo(() => {
+    const grouped = new Map();
+
+    const upsertRow = (row, role) => {
+      if (!row) return;
+
+      const groupKey = getGroupLedgerKey(row);
+      if (!groupKey) return;
+
+      const groupName = row.group?.name || '';
+      const current = grouped.get(groupKey) || {
+        groupId: groupKey,
+        groupName,
+        borrowedAmount: 0,
+        lentAmount: 0,
+        dues: [],
+        lents: [],
+      };
+
+      const amount = Number(row.amount || 0);
+
+      if (role === 'borrowed') {
+        current.borrowedAmount += amount;
+        current.dues.push(row);
+      } else {
+        current.lentAmount += amount;
+        current.lents.push(row);
+      }
+
+      if (!current.groupName && groupName) {
+        current.groupName = groupName;
+      }
+
+      grouped.set(groupKey, current);
+    };
+
+    (myDues || []).forEach((due) => upsertRow(due, 'borrowed'));
+    (myLents || []).forEach((lent) => upsertRow(lent, 'lent'));
+
+    return grouped;
+  }, [myDues, myLents]);
 
   const groupedOutstandingDues = useMemo(() => {
     const merged = new Map();
 
-    // Keep personal actionable dues first.
+    // Keep only canonical server dues in grouped view.
     visibleDues.forEach((due) => {
-      const key = String(due.expenseId || due._id);
+      const key = getLedgerItemKey(due);
       if (!key) return;
       merged.set(key, {
         ...due,
@@ -263,58 +268,10 @@ const DashboardPage = ({ view = 'dashboard' }) => {
       });
     });
 
-    // Add group-level outstanding expenses so grouped dues reflect all unresolved items.
-    (expenses || []).forEach((expense) => {
-      if (!expense || isExpenseFullySettled(expense)) {
-        return;
-      }
-
-      const key = String(expense._id || '');
-      if (!key || merged.has(key)) {
-        return;
-      }
-
-      const pendingParticipants = (expense.participants || []).filter((participant) =>
-        isParticipantPending(participant)
-      );
-
-      if (pendingParticipants.length === 0) {
-        return;
-      }
-
-      const pendingAmount = pendingParticipants.reduce(
-        (sum, participant) => sum + Number(participant?.shareAmount || participant?.amount || 0),
-        0
-      );
-
-      if (pendingAmount <= 0) {
-        return;
-      }
-
-      merged.set(key, {
-        expenseId: expense._id,
-        description: expense.description || 'Unknown expense',
-        amount: pendingAmount,
-        status: 'pending',
-        group: {
-          id: expense.group?._id,
-          name: expense.group?.name || '',
-        },
-        paidTo: {
-          id: expense.paidBy?._id || expense.createdBy?._id,
-          name: expense.paidBy?.name || expense.createdBy?.name || 'Unknown User',
-          email: expense.paidBy?.email || expense.createdBy?.email || '',
-        },
-        createdAt: expense.createdAt,
-        canSettle: false,
-        metaText: `${pendingParticipants.length} participant${pendingParticipants.length === 1 ? '' : 's'} pending`,
-      });
-    });
-
     return Array.from(merged.values()).sort((left, right) =>
       new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime()
     );
-  }, [expenses, visibleDues]);
+  }, [visibleDues]);
 
   const getUserBalanceForExpense = (expense, targetUserId) => {
     if (!expense?.participants) return 0;
@@ -382,20 +339,17 @@ const DashboardPage = ({ view = 'dashboard' }) => {
           exactMatchedDues.length > 0
             ? exactMatchedDues
             : visibleDues.filter((due) => normalizeGroupName(getDueGroupName(due)) === normalizeGroupName(group.name));
-        const myTotalDue = dues.reduce((sum, due) => sum + Number(due.amount || 0), 0);
-        const balanceBreakdown = userId ? getGroupBalanceBreakdown(groupExpenses, userId) : { borrowedAmount: 0, lentAmount: 0 };
-        const netBalance = balanceBreakdown.lentAmount - balanceBreakdown.borrowedAmount;
-        const totalDue = groupExpenses.reduce(
-          (sum, expense) =>
-            sum +
-            (expense.participants || []).reduce(
-              (pendingSum, participant) =>
-                participant?.status === 'pending' ? pendingSum + Number(participant.amount || 0) : pendingSum,
-              0
-            ),
-          0
-        );
-        const memberDues = dues.map((due) => ({ name: due.paidTo?.name || due.paidTo?.email, amount: due.amount }));
+        const canonicalGroupKey = normalizeGroupName(group.name) || String(group._id);
+        const ledgerSummary = ledgerGroupBalances.get(String(group._id))
+          || ledgerGroupBalances.get(canonicalGroupKey)
+          || { borrowedAmount: 0, lentAmount: 0, dues: [], lents: [] };
+
+        const borrowedAmount = Number(ledgerSummary.borrowedAmount || 0);
+        const lentAmount = Number(ledgerSummary.lentAmount || 0);
+        const netBalance = lentAmount - borrowedAmount;
+        const totalDue = borrowedAmount;
+        const myTotalDue = borrowedAmount;
+        const memberDues = (ledgerSummary.dues || dues).map((due) => ({ name: due.paidTo?.name || due.paidTo?.email, amount: due.amount }));
         const memberNames = dedupeValues([
           ...(group.members || []).map((member, index) => getPersonLabel(member, index, user)),
           ...groupExpenses.flatMap((expense) =>
@@ -412,8 +366,8 @@ const DashboardPage = ({ view = 'dashboard' }) => {
           totalDue,
           myTotalDue,
           netBalance,
-          borrowedAmount: balanceBreakdown.borrowedAmount,
-          lentAmount: balanceBreakdown.lentAmount,
+          borrowedAmount,
+          lentAmount,
           memberDues,
           memberNames,
           memberCount,
@@ -449,9 +403,9 @@ const DashboardPage = ({ view = 'dashboard' }) => {
       });
       existing.groupExpenses = Array.from(expenseMap.values());
 
-      const dueMap = new Map((existing.dues || []).map((due) => [String(due.expenseId), due]));
+      const dueMap = new Map((existing.dues || []).map((due) => [getLedgerItemKey(due), due]));
       (group.dues || []).forEach((due) => {
-        dueMap.set(String(due.expenseId), due);
+        dueMap.set(getLedgerItemKey(due), due);
       });
       existing.dues = Array.from(dueMap.values());
 
@@ -460,19 +414,15 @@ const DashboardPage = ({ view = 'dashboard' }) => {
 
     return Array.from(byName.values()).map((group) => {
       const totalSpend = (group.groupExpenses || []).reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-      const balanceBreakdown = userId ? getGroupBalanceBreakdown(group.groupExpenses || [], userId) : { borrowedAmount: 0, lentAmount: 0 };
-      const netBalance = balanceBreakdown.lentAmount - balanceBreakdown.borrowedAmount;
-      const totalDue = (group.groupExpenses || []).reduce(
-        (sum, expense) =>
-          sum +
-          (expense.participants || []).reduce(
-            (pendingSum, participant) =>
-              participant?.status === 'pending' ? pendingSum + Number(participant.amount || 0) : pendingSum,
-            0
-          ),
-        0
-      );
-      const myTotalDue = (group.dues || []).reduce((sum, due) => sum + Number(due.amount || 0), 0);
+      const ledgerSummary = ledgerGroupBalances.get(String(group._sourceGroupIds?.[0] || ''))
+        || ledgerGroupBalances.get(normalizeGroupName(group.name) || String(group.groupKey))
+        || { borrowedAmount: 0, lentAmount: 0, dues: [], lents: [] };
+
+      const borrowedAmount = Number(ledgerSummary.borrowedAmount || 0);
+      const lentAmount = Number(ledgerSummary.lentAmount || 0);
+      const netBalance = lentAmount - borrowedAmount;
+      const totalDue = borrowedAmount;
+      const myTotalDue = borrowedAmount;
       const memberDues = (group.dues || []).map((due) => ({
         name: due.paidTo?.name || due.paidTo?.email,
         amount: due.amount,
@@ -489,14 +439,14 @@ const DashboardPage = ({ view = 'dashboard' }) => {
         totalDue,
         myTotalDue,
         netBalance,
-        borrowedAmount: balanceBreakdown.borrowedAmount,
-        lentAmount: balanceBreakdown.lentAmount,
+        borrowedAmount,
+        lentAmount,
         memberDues,
         memberNames,
         memberCount: Math.max(memberNames.length, 1),
       };
     });
-  }, [groupSummaries, user?.name, user?.email]);
+  }, [groupSummaries, ledgerGroupBalances, user?.name, user?.email]);
 
   const prioritizedGroups = useMemo(
     () =>
@@ -705,14 +655,14 @@ const DashboardPage = ({ view = 'dashboard' }) => {
             pendingDuesCount={visibleDues.length}
             totalSpend={totals.totalSpend}
             totalOwed={visibleTotalOwed}
-            totalLent={totalLent}
+            totalLent={visibleTotalLent}
           />
         )}
 
         {(isDashboardView || isGroupsView) && (
           <StatsGrid
             groupCount={prioritizedGroups.length}
-            totalLent={totalLent}
+            totalLent={visibleTotalLent}
             totalOwed={visibleTotalOwed}
             expenseCount={totals.expenseCount}
             totalSpend={totals.totalSpend}
@@ -799,8 +749,8 @@ const DashboardPage = ({ view = 'dashboard' }) => {
         {isAnalyticsView && (
           <section className="analytics-section">
             <AnalyticsDashboard
-              refreshKey={`${expenses.length}:${groups.length}:${myDues.length}:${myLents.length}`}
-              balanceSnapshot={{ totalLent, totalOwed }}
+              refreshKey={`${expenses.length}:${groups.length}:${myDues.length}:${myLents.length}:${visibleTotalOwed}:${visibleTotalLent}`}
+              balanceSnapshot={{ totalLent: visibleTotalLent, totalOwed: visibleTotalOwed }}
             />
           </section>
         )}
@@ -846,7 +796,13 @@ const DashboardPage = ({ view = 'dashboard' }) => {
                   </div>
                   <div>
                     <span>You lent</span>
-                    <strong className="success">{formatCurrency(totalLent)}</strong>
+                    <strong className="success">{formatCurrency(visibleTotalLent)}</strong>
+                  </div>
+                  <div>
+                    <span>Net balance</span>
+                    <strong className={visibleNetBalance >= 0 ? 'success' : 'danger'}>
+                      {formatCurrency(visibleNetBalance)}
+                    </strong>
                   </div>
                   <div>
                     <span>Total spend</span>

@@ -4,6 +4,21 @@ import User from '../models/user.model.js';
 import RecurringExpense from '../models/recurring-expense.model.js';
 import cacheService, { CACHE_TTL } from './cache.service.js';
 
+const isParticipantSettled = (participant) => {
+  const status = String(participant?.status || 'pending').toLowerCase();
+  return status === 'settled' || status === 'paid';
+};
+
+const isExpenseFullySettled = (expense) => {
+  if (!expense) return true;
+  if (expense.isSettled) return true;
+
+  const participants = Array.isArray(expense.participants) ? expense.participants : [];
+  if (participants.length === 0) return false;
+
+  return participants.every(isParticipantSettled);
+};
+
 /**
  * Get comprehensive analytics for a user
  */
@@ -340,6 +355,10 @@ const calculateRelationshipAnalytics = (expenses, userId) => {
   const relationships = new Map();
 
   expenses.forEach(exp => {
+    if (isExpenseFullySettled(exp)) {
+      return;
+    }
+
     const participants = exp.participants || [];
     const payerId = String(exp.paidBy?._id || exp.paidBy || exp.createdBy?._id || exp.createdBy || '');
     const paymentAmount = Number(exp.amount || 0);

@@ -78,7 +78,7 @@ const AnalyticsDashboard = ({ refreshKey = 0, balanceSnapshot = null }) => {
 
 
 const OverviewStats = ({ overview, balanceSnapshot }) => {
-  const owedToYou = Number(balanceSnapshot?.totalLent ?? overview.totalOwed ?? 0);
+  const owedToYou = Number(balanceSnapshot?.totalLent ?? overview.totalToReceive ?? overview.totalOwed ?? 0);
   const youOwe = Number(balanceSnapshot?.totalOwed ?? overview.totalOwe ?? 0);
   const netBalance = owedToYou - youOwe;
 

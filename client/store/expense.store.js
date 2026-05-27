@@ -11,6 +11,8 @@ import {
   getFriendsList as getFriendsListService,
 } from "../services/expense.service.js";
 
+import { getUserNetBalance as getUserNetBalanceService } from "../services/debt.service.js";
+
 import {
   createGroup as createGroupService,
   getGroups as getGroupsService,
@@ -38,6 +40,78 @@ const dedupeGroups = (groups = []) => {
   });
 };
 
+const emptyDebtSnapshot = {
+  totalBalance: 0,
+  totalOwed: 0,
+  totalToReceive: 0,
+  owesTo: [],
+  owedBy: [],
+  groupBreakdown: [],
+};
+
+const getLedgerIdentityKey = (item) => String(
+  item?.canonicalLedgerId ||
+  item?.ledgerNodeId ||
+  item?.transactionId ||
+  item?.sourceExpenseId ||
+  item?.expenseId ||
+  item?._id ||
+  ''
+).trim();
+
+const getLedgerPriority = (item) => {
+  const state = String(item?.ledgerState || item?.status || '').toLowerCase();
+  return state === 'settled' || state === 'paid' || item?.isSettled ? 2 : 1;
+};
+
+const dedupeLedgerRows = (rows = []) => {
+  const byKey = new Map();
+
+  rows.forEach((row, index) => {
+    if (!row) return;
+    const key = getLedgerIdentityKey(row) || `row-${index}`;
+    const existing = byKey.get(key);
+
+    if (!existing) {
+      byKey.set(key, row);
+      return;
+    }
+
+    const currentPriority = getLedgerPriority(row);
+    const existingPriority = getLedgerPriority(existing);
+    if (currentPriority > existingPriority) {
+      byKey.set(key, row);
+      return;
+    }
+
+    if (currentPriority === existingPriority) {
+      const currentTime = new Date(row.updatedAt || row.createdAt || 0).getTime();
+      const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+      if (currentTime >= existingTime) {
+        byKey.set(key, row);
+      }
+    }
+  });
+
+  return Array.from(byKey.values());
+};
+
+const loadFinancialSummary = async () => {
+  const [duesData, lentsData, debtData] = await Promise.all([
+    getMyDuesService(),
+    getMyLentsService(),
+    getUserNetBalanceService(),
+  ]);
+
+  return {
+    myDues: dedupeLedgerRows(duesData?.dues || []),
+    totalOwed: Number(duesData?.totalOwed || 0),
+    myLents: dedupeLedgerRows(lentsData?.lents || []),
+    totalLent: Number(lentsData?.totalLent || 0),
+    debtSnapshot: debtData || emptyDebtSnapshot,
+  };
+};
+
 const useExpenseStore = create((set, get) => ({
   expenses: [],
   groups: [],
@@ -59,6 +133,7 @@ const useExpenseStore = create((set, get) => ({
     totalIOwe: 0,
     netBalance: 0
   },
+  debtSnapshot: emptyDebtSnapshot,
 
   // ------------------ GROUPS ------------------
   fetchGroups: async () => {
@@ -82,6 +157,30 @@ const useExpenseStore = create((set, get) => ({
         loading: false,
       });
       throw err;
+    }
+  },
+
+  fetchBalanceSnapshot: async () => {
+    try {
+      set({ loading: true, error: null });
+
+      const data = await loadFinancialSummary();
+
+      set({
+        ...data,
+        loading: false,
+      });
+
+      return data;
+    } catch (error) {
+      set({
+        loading: false,
+        error:
+          error?.response?.data?.message ||
+          error.message ||
+          'Failed to fetch balance snapshot',
+      });
+      throw error;
     }
   },
 
@@ -117,7 +216,7 @@ const useExpenseStore = create((set, get) => ({
       const data = await getExpensesService();
 
       set({
-        expenses: data || [],
+        expenses: dedupeLedgerRows(data || []),
         loading: false,
       });
 
@@ -140,18 +239,14 @@ const useExpenseStore = create((set, get) => ({
 
       const expense = await addExpenseService(payload);
 
-      const [expensesData, duesData, lentsData] = await Promise.all([
+      const [expensesData, balanceData] = await Promise.all([
         getExpensesService(),
-        getMyDuesService(),
-        getMyLentsService(),
+        loadFinancialSummary(),
       ]);
 
       set({
         expenses: expensesData || [expense],
-        myDues: duesData.dues || [],
-        totalOwed: Number(duesData.totalOwed || 0),
-        myLents: lentsData.lents || [],
-        totalLent: Number(lentsData.totalLent || 0),
+        ...balanceData,
         loading: false,
       });
 
@@ -176,12 +271,16 @@ const useExpenseStore = create((set, get) => ({
 
       const updatedExpense = await updateExpenseService(id, payload);
 
-      set((state) => ({
-        expenses: state.expenses.map((expense) =>
-          expense._id === id ? updatedExpense : expense
-        ),
+      const [expensesData, balanceData] = await Promise.all([
+        getExpensesService(),
+        loadFinancialSummary(),
+      ]);
+
+      set({
+        expenses: dedupeLedgerRows(expensesData || [updatedExpense]),
+        ...balanceData,
         loading: false,
-      }));
+      });
 
       return updatedExpense;
     } catch (error) {
@@ -207,10 +306,9 @@ const useExpenseStore = create((set, get) => ({
 
       // Force a complete refresh of all data to ensure consistency
       console.log('Store: Refreshing all data from backend...');
-      const [expensesData, duesData, lentsData] = await Promise.all([
+      const [expensesData, balanceData] = await Promise.all([
         getExpensesService(),
-        getMyDuesService(),
-        getMyLentsService()
+        loadFinancialSummary()
       ]);
 
       console.log('Store: Backend refresh completed');
@@ -221,10 +319,7 @@ const useExpenseStore = create((set, get) => ({
       // Update all state with fresh data from backend
       set({
         expenses: expensesData || [],
-        myDues: duesData.dues || [],
-        totalOwed: Number(duesData.totalOwed || 0),
-        myLents: lentsData.lents || [],
-        totalLent: Number(lentsData.totalLent || 0),
+        ...balanceData,
         loading: false,
       });
 
@@ -307,18 +402,14 @@ const useExpenseStore = create((set, get) => ({
       await settleDueService(expenseId);
 
       // refresh data after settlement
-      const [expensesData, duesData, lentsData] = await Promise.all([
+      const [expensesData, balanceData] = await Promise.all([
         getExpensesService(),
-        getMyDuesService(),
-        getMyLentsService(),
+        loadFinancialSummary(),
       ]);
 
       set({
         expenses: expensesData || [],
-        myDues: duesData.dues || [],
-        totalOwed: Number(duesData.totalOwed || 0),
-        myLents: lentsData.lents || [],
-        totalLent: Number(lentsData.totalLent || 0),
+        ...balanceData,
         loading: false,
       });
 
@@ -478,6 +569,7 @@ const useExpenseStore = create((set, get) => ({
       myLents: [],
       totalOwed: 0,
       totalLent: 0,
+      debtSnapshot: emptyDebtSnapshot,
       loading: false,
       error: null,
     }),

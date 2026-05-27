@@ -1,6 +1,7 @@
 import Card from '../ui/Card.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { prettifyGroupType, dedupeValues } from '../../utils/stringUtils.js';
+import { getExpensePendingCount, isExpenseFullySettled } from '../../utils/expenseLifecycle.js';
 
 /**
  * Group details component
@@ -99,11 +100,20 @@ export default function GroupDetails({ group, memberNames, expenses, position })
             ) : (
               <div className="stack">
                 {expenses.slice(0, 8).map((expense) => {
-                  const participants = (expense.participants || [])
-                    .map((participant) => participant?.userId?.name || participant?.userId?.email)
-                    .filter(Boolean);
-                  const pendingParticipants = (expense.participants || []).filter(p => p?.status === 'pending');
-                  const hasPending = pendingParticipants.length > 0;
+                  const sharedGraph = expense.sharedGraph || {};
+                  const participants = (sharedGraph.involvedNames?.length > 0
+                    ? sharedGraph.involvedNames
+                    : (expense.participants || [])
+                        .map((participant) => participant?.userId?.name || participant?.userId?.email)
+                        .filter(Boolean));
+                  const pendingCount = Number(sharedGraph.pendingParticipantCount ?? getExpensePendingCount(expense));
+                  const isSettled = String(sharedGraph.settlementState || (isExpenseFullySettled(expense) ? 'settled' : 'pending')) === 'settled';
+                  const displayAmount = Number(sharedGraph.amount || expense.amount || 0);
+                  const expenseKind = sharedGraph.expenseKind === 'payment'
+                    ? 'Payment transaction'
+                    : sharedGraph.expenseKind === 'personal'
+                      ? 'Personal expense'
+                      : 'Shared expense';
 
                   return (
                     <div key={expense._id} className="group-expense-row">
@@ -111,16 +121,17 @@ export default function GroupDetails({ group, memberNames, expenses, position })
                         <div className="text-sm" style={{ fontWeight: 700 }}>{expense.description}</div>
                         <div className="expense-meta">
                           Involved: {dedupeValues([
-                            expense.paidBy?.name || expense.paidBy?.email || 'Payer',
+                            sharedGraph.payer?.name || sharedGraph.payer?.email || expense.paidBy?.name || expense.paidBy?.email || 'Payer',
                             ...participants,
                           ]).join(' · ')}
                         </div>
-                        {!hasPending && (
+                        {isSettled && (
                           <div className="expense-meta" style={{ marginTop: 4, color: 'var(--success)' }}>✓ Settled</div>
                         )}
+                        <div className="expense-meta" style={{ marginTop: 4, opacity: 0.7 }}>{expenseKind}</div>
                       </div>
-                      <span className="text-sm" style={{ fontWeight: 700, color: hasPending ? 'var(--danger)' : 'var(--success)' }}>
-                        {hasPending ? formatCurrency(expense.amount) : '✓'}
+                      <span className="text-sm" style={{ fontWeight: 700, color: isSettled ? 'var(--success)' : 'var(--danger)' }}>
+                        {formatCurrency(displayAmount)}
                       </span>
                     </div>
                   );

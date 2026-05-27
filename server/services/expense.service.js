@@ -93,6 +93,289 @@ const resolveParticipantUsers = async (participants, options = {}) => {
     return users;
 };
 
+const getLedgerTransactionId = (expense) => String(
+    expense?._id ||
+    expense?.transactionId ||
+    expense?.sourceExpenseId ||
+    expense?.expenseId ||
+    ''
+);
+
+const resolveLedgerIdentity = (value, fallbackId = '', fallbackLabel = 'Unknown User') => {
+    const resolvedValue = value?.toObject ? value.toObject() : value || {};
+    const id = String(resolvedValue._id || resolvedValue.id || fallbackId || '');
+    const name = String(resolvedValue.name || '').trim();
+    const email = String(resolvedValue.email || '').trim();
+    const displayName = name || email || id || fallbackLabel;
+
+    return {
+        id,
+        name,
+        email,
+        displayName,
+        label: displayName
+    };
+};
+
+const buildCanonicalLedgerNode = (expense) => {
+    const normalizedExpense = expense?.toObject ? expense.toObject() : { ...expense };
+    const transactionId = getLedgerTransactionId(expense);
+    const payerRecord = normalizedExpense.paidBy || normalizedExpense.createdBy || normalizedExpense.payers?.[0]?.userId || null;
+    const payerIdentity = resolveLedgerIdentity(payerRecord, transactionId, normalizedExpense.description || 'Unknown User');
+    const payerId = String(payerIdentity.id || payerRecord?._id || payerRecord || '');
+    const expenseKind = normalizedExpense.splitType === 'payment'
+        ? 'payment'
+        : ((normalizedExpense.participants || []).length === 1 ? 'personal' : 'shared');
+
+    const participants = (normalizedExpense.participants || []).map((participant) => {
+        const participantRecord = participant?.userId || null;
+        const participantId = String(participantRecord?._id || participantRecord || '');
+        const identity = resolveLedgerIdentity(participantRecord, participantId, 'Unknown User');
+        const shareAmount = Number(participant?.shareAmount || participant?.amount || 0);
+        const paidAmount = Number(participant?.paidAmount || 0);
+        const balance = Number(participant?.balance || (paidAmount - shareAmount));
+
+        return {
+            userId: participantId,
+            user: participantRecord || identity,
+            identity,
+            shareAmount,
+            paidAmount,
+            balance,
+            status: String(participant?.status || 'pending').toLowerCase(),
+            settled: isParticipantSettled(participant),
+            settledAt: participant?.settledAt || null
+        };
+    });
+
+    const payer = payerIdentity.id || payerIdentity.name || payerIdentity.email ? payerIdentity : null;
+
+    const settlementState = isExpenseFullySettled(expense) ? 'settled' : 'pending';
+    const pendingParticipantCount = getExpensePendingCount(expense);
+    const settledParticipantCount = participants.filter((participant) => participant.settled).length;
+
+    return {
+        id: transactionId,
+        transactionId,
+        sourceExpenseId: expense?._id,
+        expenseKind,
+        settlementState,
+        pendingParticipantCount,
+        settledParticipantCount,
+        participantCount: participants.length,
+        payer,
+        participants,
+        amount: Number(normalizedExpense.amount || 0),
+        splitType: normalizedExpense.splitType,
+        isSettled: settlementState === 'settled',
+        canonicalLedgerId: transactionId,
+        payerId,
+        primaryKey: transactionId
+    };
+};
+
+const getExpenseParticipant = (expense, userId) => {
+    return (expense?.participants || []).find((entry) => {
+        const entryUserId = entry?.userId?._id?.toString?.() || entry?.userId?.toString?.() || entry?.userId;
+        return String(entryUserId) === String(userId);
+    }) || null;
+};
+
+const isParticipantSettled = (participant) => {
+    const status = String(participant?.status || 'pending').toLowerCase();
+    return status === 'settled' || status === 'paid';
+};
+
+const getExpenseNetBalance = (expense, participant, userId) => {
+    if (!expense || !participant) return 0;
+
+    const amount = Number(expense.amount || 0);
+    const paidAmount = Number(participant.paidAmount || 0);
+    const shareAmount = Number(participant.shareAmount || participant.amount || 0);
+
+    if (expense.splitType === 'payment') {
+        const payerId = String(expense.paidBy?._id || expense.paidBy || expense.createdBy?._id || expense.createdBy || '');
+        return String(userId) === payerId ? amount : -amount;
+    }
+
+    return paidAmount - shareAmount;
+};
+
+const getExpensePendingCount = (expense) => {
+    return (expense?.participants || []).filter((participant) => !isParticipantSettled(participant)).length;
+};
+
+const isExpenseFullySettled = (expense) => {
+    if (!expense) return true;
+    if (expense.isSettled) return true;
+
+    const participants = Array.isArray(expense.participants) ? expense.participants : [];
+    if (participants.length === 0) return false;
+
+    return participants.every(isParticipantSettled);
+};
+
+const buildSharedExpenseGraph = (expense) => {
+    const ledgerNode = buildCanonicalLedgerNode(expense);
+    const transactionId = ledgerNode.transactionId;
+    const expenseKind = ledgerNode.expenseKind;
+    const participants = ledgerNode.participants || [];
+    const payerId = String(ledgerNode.payerId || '');
+    const payer = ledgerNode.payer;
+
+    const edges = expenseKind === 'payment'
+        ? participants
+            .filter((participant) => participant.userId && participant.userId !== payerId)
+            .map((participant) => ({
+                from: payerId,
+                to: participant.userId,
+                amount: Number(ledgerNode.amount || 0),
+                settled: participant.settled
+            }))
+        : participants
+            .filter((participant) => participant.userId && participant.userId !== payerId)
+            .map((participant) => ({
+                from: payerId,
+                to: participant.userId,
+                amount: Number(participant.shareAmount || 0),
+                balance: Number(participant.balance || 0),
+                settled: participant.settled
+            }));
+
+    const involvedNames = Array.from(new Set([
+        payer?.name || payer?.email || '',
+        ...participants.map((participant) => participant.user?.name || participant.user?.email || '').filter(Boolean)
+    ])).filter(Boolean);
+
+    return {
+        ...ledgerNode,
+        edges,
+        involvedNames,
+        ledgerNode
+    };
+};
+
+const decorateLedgerExpense = (expense) => {
+    const normalizedExpense = expense?.toObject ? expense.toObject() : { ...expense };
+    const sharedGraph = buildSharedExpenseGraph(expense);
+
+    return {
+        ...normalizedExpense,
+        transactionId: getLedgerTransactionId(expense),
+        canonicalLedgerId: sharedGraph.ledgerNode?.canonicalLedgerId || sharedGraph.transactionId,
+        sourceExpenseId: expense?._id,
+        pendingParticipantCount: getExpensePendingCount(expense),
+        ledgerState: isExpenseFullySettled(expense) ? 'settled' : 'pending',
+        isSettled: isExpenseFullySettled(expense),
+        expenseKind: sharedGraph.expenseKind,
+        sharedGraph,
+        ledgerNode: sharedGraph.ledgerNode || sharedGraph
+    };
+};
+
+const buildLedgerRow = (expense, userId, role) => {
+    const entry = buildUserLedgerEntry(expense, userId);
+    if (!entry) return null;
+
+    if (role === 'borrowed') {
+        return entry.direction === 'liability' ? entry : null;
+    }
+
+    if (role === 'lent') {
+        return entry.direction === 'asset' ? entry : null;
+    }
+
+    return null;
+};
+
+const getUserLedgerExpenses = async (userId) => {
+    return Expense.find({
+        $or: [
+            { paidBy: userId },
+            { createdBy: userId },
+            { 'payers.userId': userId },
+            { 'participants.userId': userId }
+        ],
+        isDeleted: false
+    })
+        .populate('paidBy', 'name email')
+        .populate('createdBy', 'name email')
+        .populate('group', 'name')
+        .populate('participants.userId', 'name email')
+        .populate('payers.userId', 'name email avatar')
+        .sort({ createdAt: -1 });
+};
+
+const buildUserLedgerEntry = (expense, userId) => {
+    const sharedGraph = buildSharedExpenseGraph(expense);
+    const ledgerNode = sharedGraph.ledgerNode || sharedGraph;
+    const transactionId = sharedGraph.transactionId;
+    const payer = sharedGraph.payer || null;
+    const participant = (sharedGraph.participants || []).find((entry) => String(entry.userId) === String(userId)) || null;
+    const isPayment = sharedGraph.expenseKind === 'payment';
+
+    if (!participant || ledgerNode.settlementState === 'settled') {
+        return null;
+    }
+
+    const balance = Number(participant.balance || 0);
+    const direction = balance >= 0 ? 'asset' : 'liability';
+    const roleDirection = direction === 'asset' ? 'is-owed' : 'owes';
+    const financialRole = direction === 'asset' ? 'lent' : 'borrowed';
+    const payerName = payer?.displayName || payer?.name || payer?.email || 'Unknown User';
+    const payerEmail = payer?.email || '';
+
+    const counterparty = direction === 'liability'
+        ? (isPayment
+            ? (payer ? { id: payer.id, name: payer.displayName || payer.name || payerEmail || 'Unknown User', email: payerEmail, displayName: payer.displayName || payer.name || payerEmail || 'Unknown User' } : null)
+            : {
+                id: payer?.id || null,
+                name: payerName,
+                email: payerEmail,
+                displayName: payerName,
+            })
+        : null;
+
+    const owedBy = direction === 'asset'
+        ? ((sharedGraph.participants || [])
+            .filter((entry) => entry.userId && entry.userId !== String(userId))
+            .filter((entry) => !isPayment || String(entry.userId) !== String(payer?.id || ''))
+            .filter((entry) => Number(entry.balance || 0) < 0)
+            .map((entry) => ({
+                id: entry.userId,
+                name: entry.identity?.displayName || entry.user?.name || entry.user?.email || 'Unknown',
+                displayName: entry.identity?.displayName || entry.user?.name || entry.user?.email || 'Unknown',
+                amount: isPayment
+                    ? Number(sharedGraph.amount || expense.amount || 0)
+                    : Math.abs(Number(entry.balance || 0))
+            })))
+        : [];
+
+    return {
+        expenseId: transactionId,
+        transactionId,
+        canonicalLedgerId: ledgerNode.canonicalLedgerId || transactionId,
+        ledgerNodeId: ledgerNode.id || transactionId,
+        sourceExpenseId: expense?._id,
+        ledgerState: ledgerNode.settlementState,
+        financialRole,
+        roleDirection,
+        direction,
+        description: expense.description || 'Unknown expense',
+        amount: Math.abs(Number(participant.balance || balance || 0)),
+        status: 'pending',
+        group: {
+            id: expense.group?._id,
+            name: expense.group?.name || ''
+        },
+        paidTo: counterparty,
+        owedBy,
+        sharedGraph,
+        ledgerNode,
+        createdAt: expense.createdAt
+    };
+};
+
 export const addExpense = async (data) => {
     try {
         console.log('addExpense called with data:', data);
@@ -305,7 +588,7 @@ export const addExpense = async (data) => {
     }
 };
 export const getVisibleExpenses = async (userId) => {
-    return Expense.find({
+    const expenses = await Expense.find({
         $or: [
             { paidBy: userId },
             { createdBy: userId },
@@ -320,6 +603,8 @@ export const getVisibleExpenses = async (userId) => {
         .populate("payers.userId", "name email avatar")
         .populate("participants.userId", "name email")
         .sort({ createdAt: -1 });
+
+    return expenses.map((expense) => decorateLedgerExpense(expense));
 };
 
 export const updateExpense = async (userId, expenseId, updates) => {
@@ -695,93 +980,10 @@ export const getGroupExpenses = async (userId, groupId) => {
 };
 
 export const getMyDues = async (userId) => {
-    const expenses = await Expense.find({
-        'participants.userId': userId,
-        isDeleted: false
-    })
-        .populate('paidBy', 'name email')
-        .populate('createdBy', 'name email')
-        .populate('group', 'name')
-        .populate('participants.userId', 'name email')
-        .sort({ createdAt: -1 });
+    const expenses = await getUserLedgerExpenses(userId);
 
     const dues = expenses
-        .map((expense) => {
-            const participant = expense.participants.find(
-                (entry) => String(entry.userId?._id || entry.userId) === String(userId)
-            );
-
-            if (!participant) {
-                return null;
-            }
-
-            const paidAmount = Number(participant.paidAmount || 0);
-            const shareAmount = Number(participant.shareAmount || participant.amount || 0);
-            const balance = paidAmount - shareAmount;
-
-            const payerId = String(expense.paidBy?._id || expense.paidBy || expense.createdBy?._id || expense.createdBy || '');
-            const isPaymentExpense = expense.splitType === 'payment';
-
-            // Derive clear financial flags for the participant
-            const financial = {
-                netBalance: Math.round(balance * 100) / 100, // positive -> user is creditor
-                isCreditor: isPaymentExpense ? (payerId === String(userId)) : balance > 0,
-                owesMoney: isPaymentExpense ? (payerId !== String(userId)) : balance < 0,
-                paidShare: participant.status === 'paid' || participant.status === 'settled'
-            };
-
-            // Only show dues where the current user owes money
-            if (!financial.owesMoney) {
-                return null;
-            }
-
-            // If participant share is marked paid/settled but net balance still negative, treat as pending (user still owes until settled at expense level)
-            const amount = Math.abs(financial.netBalance);
-
-            // For payment-type expenses, find the recipient (other participant)
-            // For regular split expenses, the recipient is whoever paid
-            let paidTo;
-            if (expense.splitType === 'payment') {
-                // Payment expense: find the other participant (the recipient)
-                const otherParticipant = expense.participants.find(
-                    (entry) => String(entry.userId?._id || entry.userId) !== String(userId)
-                );
-                if (otherParticipant && otherParticipant.userId) {
-                    paidTo = {
-                        id: otherParticipant.userId?._id,
-                        name: otherParticipant.userId?.name || 'Unknown User',
-                        email: otherParticipant.userId?.email || ''
-                    };
-                } else {
-                    // Fallback if other participant not found
-                    paidTo = {
-                        id: expense.paidBy?._id || expense.createdBy?._id,
-                        name: expense.paidBy?.name || expense.createdBy?.name || 'Unknown User',
-                        email: expense.paidBy?.email || expense.createdBy?.email || ''
-                    };
-                }
-            } else {
-                // Regular split: recipient is whoever paid
-                paidTo = {
-                    id: expense.paidBy?._id || expense.createdBy?._id,
-                    name: expense.paidBy?.name || expense.createdBy?.name || 'Unknown User',
-                    email: expense.paidBy?.email || expense.createdBy?.email || ''
-                };
-            }
-
-            return {
-                expenseId: expense._id,
-                description: expense.description,
-                amount: amount,
-                status: participant.status,
-                group: {
-                    id: expense.group?._id,
-                    name: expense.group?.name || '' // Default to 'Friends' if no group
-                },
-                paidTo,
-                createdAt: expense.createdAt
-            };
-        })
+        .map((expense) => buildLedgerRow(expense, userId, 'borrowed'))
         .filter(Boolean);
 
     const totalOwed = dues.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -797,117 +999,10 @@ export const getMyLents = async (userId) => {
             throw error;
         }
 
-        // Find expenses where the user is involved
-        const expenses = await Expense.find({
-            $or: [
-                { paidBy: userId },
-                { createdBy: userId },
-                { 'payers.userId': userId },
-                { "participants.userId": userId }
-            ],
-            isDeleted: false
-        })
-            .populate('paidBy', 'name email')
-            .populate('createdBy', 'name email')
-            .populate('group', 'name')
-            .populate('participants.userId', 'name email')
-            .populate('payers.userId', 'name email avatar')
-            .sort({ createdAt: -1 });
+        const expenses = await getUserLedgerExpenses(userId);
 
         const lents = expenses
-            .map((expense) => {
-                const expenseAmount = Number(expense.amount || 0);
-                const payerId = String(expense.paidBy?._id || expense.paidBy || expense.createdBy?._id || expense.createdBy || '');
-                const userParticipant = (expense.participants || []).find(
-                    (entry) => String(entry.userId?._id || entry.userId) === String(userId)
-                );
-
-                if (!userParticipant) {
-                    return null;
-                }
-
-                const paidAmount = Number(userParticipant.paidAmount || 0);
-                const shareAmount = Number(userParticipant.shareAmount || userParticipant.amount || 0);
-                const balance = paidAmount - shareAmount;
-                const isPaymentExpense = expense.splitType === 'payment';
-
-                const financial = {
-                    netBalance: Math.round(balance * 100) / 100,
-                    isCreditor: isPaymentExpense ? (payerId === String(userId)) : balance > 0,
-                    owesMoney: isPaymentExpense ? (payerId !== String(userId)) : balance < 0,
-                    paidShare: userParticipant.status === 'paid' || userParticipant.status === 'settled'
-                };
-
-                // Only show expenses where the current user is creditor (is owed money)
-                if (!financial.isCreditor) {
-                    return null;
-                }
-
-                if (expense.splitType === 'payment') {
-                    const recipient = (expense.participants || []).find(
-                        (entry) => String(entry.userId?._id || entry.userId) !== String(userId)
-                    );
-
-                    if (!recipient) {
-                        return null;
-                    }
-
-                    return {
-                        expenseId: expense._id,
-                        description: expense.description || 'Unknown expense',
-                        amount: expenseAmount,
-                        status: 'pending',
-                        group: {
-                            id: expense.group?._id,
-                            name: expense.group?.name || 'Friends'
-                        },
-                        owedBy: [{
-                            id: recipient.userId?._id,
-                            name: recipient.userId?.name || recipient.userId?.email || 'Unknown',
-                            amount: expenseAmount
-                        }],
-                        createdAt: expense.createdAt
-                    };
-                }
-
-                // Find who owes the user (other participants with negative balance relative to their share)
-                const debtors = (expense.participants || [])
-                    .filter((entry) => {
-                        const participantId = String(entry.userId?._id || entry.userId);
-                        const isNotUser = participantId !== String(userId);
-                        const entryPaid = Number(entry.paidAmount || 0);
-                        const entryShare = Number(entry.shareAmount || entry.amount || 0);
-                        const owesMoney = (entryPaid - entryShare) < 0;
-                        return isNotUser && owesMoney;
-                    })
-                    .map((entry) => ({
-                        id: entry.userId?._id,
-                        name: entry.userId?.name || entry.userId?.email || 'Unknown',
-                        amount: Math.abs(Number(entry.paidAmount || 0) - Number(entry.shareAmount || entry.amount || 0)) // They owe this amount
-                    }));
-
-                if (debtors.length === 0) {
-                    return null;
-                }
-
-                const totalOwedToUser = debtors.reduce(
-                    (sum, debtor) => sum + debtor.amount,
-                    0
-                );
-
-                return {
-                    expenseId: expense._id,
-                    description: expense.description || 'Unknown expense',
-                    amount: totalOwedToUser,
-                    status: 'pending',
-                    group: {
-                        id: expense.group?._id,
-                        name: expense.group?.name || 'Friends' // Default to 'Friends' if no group
-                    },
-                    owedBy: debtors,
-                    createdAt: expense.createdAt
-                };
-            })
+            .map((expense) => buildLedgerRow(expense, userId, 'lent'))
             .filter(Boolean);
 
         const totalLent = lents.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -954,6 +1049,10 @@ export const getExpenseBreakdown = async (userId) => {
         const sharedExpenses = [];
 
         expenses.forEach(expense => {
+            if (isExpenseFullySettled(expense)) {
+                return;
+            }
+
             const expenseAmount = Number(expense.amount) || 0;
             const participants = expense.participants || [];
             const isPersonalExpense = participants.length === 1 &&
@@ -962,7 +1061,10 @@ export const getExpenseBreakdown = async (userId) => {
             if (isPersonalExpense) {
                 personalTotal += expenseAmount;
                 personalExpenses.push({
-                    expenseId: expense._id,
+                    expenseId: getLedgerTransactionId(expense),
+                    transactionId: getLedgerTransactionId(expense),
+                    sourceExpenseId: expense._id,
+                    ledgerState: 'pending',
                     description: expense.description,
                     amount: expenseAmount,
                     category: expense.category,
@@ -972,7 +1074,10 @@ export const getExpenseBreakdown = async (userId) => {
             } else {
                 sharedTotal += expenseAmount;
                 sharedExpenses.push({
-                    expenseId: expense._id,
+                    expenseId: getLedgerTransactionId(expense),
+                    transactionId: getLedgerTransactionId(expense),
+                    sourceExpenseId: expense._id,
+                    ledgerState: 'pending',
                     description: expense.description,
                     amount: expenseAmount,
                     category: expense.category,
@@ -1038,6 +1143,10 @@ export const getFriendsList = async (userId) => {
         const friendsMap = new Map();
 
         expenses.forEach(expense => {
+            if (isExpenseFullySettled(expense)) {
+                return;
+            }
+
             const participants = expense.participants || [];
             const payerId = String(expense.paidBy?._id || expense.paidBy || expense.createdBy?._id || expense.createdBy || '');
             const totalAmount = Number(expense.amount || 0);
@@ -1076,7 +1185,10 @@ export const getFriendsList = async (userId) => {
                 }
 
                 friendData.expenses.push({
-                    expenseId: expense._id,
+                    expenseId: getLedgerTransactionId(expense),
+                    transactionId: getLedgerTransactionId(expense),
+                    sourceExpenseId: expense._id,
+                    ledgerState: 'pending',
                     description: expense.description,
                     amount: totalAmount,
                     date: expense.date,
@@ -1124,7 +1236,10 @@ export const getFriendsList = async (userId) => {
                 }
 
                 friendData.expenses.push({
-                    expenseId: expense._id,
+                    expenseId: getLedgerTransactionId(expense),
+                    transactionId: getLedgerTransactionId(expense),
+                    sourceExpenseId: expense._id,
+                    ledgerState: 'pending',
                     description: expense.description,
                     amount: Math.abs(friendBalance),
                     date: expense.date,

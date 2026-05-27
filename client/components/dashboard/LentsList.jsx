@@ -14,6 +14,7 @@ export default function LentsList({ lents }) {
   const { user } = useAuth();
   const toast = useToast();
   const [nudgingId, setNudgingId] = useState(null);
+  const getRowKey = (lent) => String(lent?.transactionId || lent?.sourceExpenseId || lent?.expenseId || lent?._id || '');
 
   const handleNudge = async (lent) => {
     if (!lent.owedBy || lent.owedBy.length === 0) {
@@ -67,7 +68,7 @@ export default function LentsList({ lents }) {
         ) : (
           <ul className="expense-list">
             {lents.map((lent) => (
-              <li key={lent.expenseId} className="expense-item">
+              <li key={getRowKey(lent)} className="expense-item">
                 <div className="due-avatar" style={{ background: 'var(--success-dim)', color: 'var(--success)' }}>
                   {(lent.owedBy?.[0]?.name || lent.owedBy?.[0]?.email || '?')[0].toUpperCase()}
                 </div>

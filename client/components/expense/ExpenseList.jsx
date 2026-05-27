@@ -8,6 +8,7 @@ import CategoryIcon from '../ui/CategoryIcon.jsx';
 import ChatModal from './ChatModal.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { getPersonName } from '../../utils/personUtils.js';
+import { getExpensePendingCount, isExpenseFullySettled } from '../../utils/expenseLifecycle.js';
 
 const CATEGORIES = ['Food', 'Travel', 'Events', 'Utilities', 'Shopping', 'General', 'Rent', 'Transport', 'Entertainment', 'Healthcare', 'Education', 'Other'];
 const SPLIT_TYPES = ['equal', 'percentage', 'shares', 'itemized', 'adjustment', 'custom', 'payment'];
@@ -36,20 +37,10 @@ export default function ExpenseList({ onEdit }) {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [showFilters, setShowFilters] = useState(false);
 
-  // Debug logging to track expenses changes
-  console.log('ExpenseList: Current expenses count:', expenses.length);
-  console.log('ExpenseList: Expenses:', expenses);
-
   const canSave = useMemo(
     () => form.description.trim() && Number(form.amount) > 0,
     [form]
   );
-
-  const getParticipantNetBalance = (participant) => {
-    if (!participant) return 0;
-
-    return Number(participant.paidAmount || 0) - Number(participant.shareAmount || participant.amount || 0);
-  };
 
   // Filter expenses based on search and filter criteria
   const filteredExpenses = useMemo(() => {
@@ -78,15 +69,17 @@ export default function ExpenseList({ onEdit }) {
 
       // Status filter
       if (selectedStatus) {
-        const pendingCount = (expense.participants || []).filter(p => p?.status === 'pending').length;
-        const totalParticipants = (expense.participants || []).length;
-        const isPersonalExpense = totalParticipants === 1;
-        const isPayment = expense.splitType === 'payment';
+        const sharedGraph = expense.sharedGraph || {};
+        const totalParticipants = Number(sharedGraph.participantCount ?? (expense.participants || []).length);
+        const expenseKind = sharedGraph.expenseKind || (expense.splitType === 'payment' ? 'payment' : (totalParticipants === 1 ? 'personal' : 'shared'));
+        const settlementState = sharedGraph.settlementState || (isExpenseFullySettled(expense) ? 'settled' : 'pending');
+        const isPersonalExpense = expenseKind === 'personal' || totalParticipants === 1;
+        const isPayment = expenseKind === 'payment';
 
-        if (selectedStatus === 'pending' && (pendingCount === 0 || isPersonalExpense)) {
+        if (selectedStatus === 'pending' && settlementState === 'settled') {
           return false;
         }
-        if (selectedStatus === 'settled' && pendingCount > 0) {
+        if (selectedStatus === 'settled' && settlementState !== 'settled') {
           return false;
         }
         if (selectedStatus === 'personal' && !isPersonalExpense) {
@@ -119,7 +112,6 @@ export default function ExpenseList({ onEdit }) {
     });
   }, [expenses, searchQuery, selectedCategory, selectedSplitType, selectedStatus, amountRange, dateRange]);
 
-  // Clear all filters
   const clearFilters = () => {
     setSearchQuery('');
     setSelectedCategory('');
@@ -249,13 +241,13 @@ export default function ExpenseList({ onEdit }) {
       toast.success('Expense updated successfully');
       cancelEdit();
     } catch (err) {
+      console.error('Update error:', err);
       toast.error('Failed to update expense');
     }
   };
 
   const removeExpense = async (expenseId) => {
     try {
-      console.log('Deleting expense:', expenseId);
       console.log('Current expenses count:', expenses.length);
       await deleteExpense(expenseId);
       console.log('Delete completed');
@@ -460,27 +452,19 @@ export default function ExpenseList({ onEdit }) {
               const canManage = user?.id && String(paidById) === String(user.id);
               const isEditing = editingId === expense._id;
               const isConfirming = confirmDelete === expense._id;
-              const involvedPeople = (expense.participants || [])
-                .map((participant) => getPersonName(participant?.userId, 'Member'))
-                .filter((name, index, arr) => arr.indexOf(name) === index); // Remove duplicates
+              const sharedGraph = expense.sharedGraph || {};
+              const involvedPeople = (sharedGraph.involvedNames?.length > 0
+                ? sharedGraph.involvedNames
+                : (expense.participants || [])
+                    .map((participant) => getPersonName(participant?.userId, 'Member'))
+                    .filter((name, index, arr) => arr.indexOf(name) === index));
 
-              // Check if expense is settled
-              const pendingCount = (expense.participants || []).filter(p => p?.status === 'pending').length;
-              const totalParticipants = (expense.participants || []).length;
-              const isPersonalExpense = totalParticipants === 1;
-              const isPayment = expense.splitType === 'payment';
-              const isSettled = !isPersonalExpense && !isPayment && pendingCount === 0;
-              const currentUserId = String(user?.id || user?._id || '');
-              const currentUserParticipant = (expense.participants || []).find((participant) => {
-                const participantUserId = participant?.userId?._id || participant?.userId;
-                return String(participantUserId) === currentUserId;
-              });
-              const currentUserBalance = getParticipantNetBalance(currentUserParticipant);
-              console.log({
-  description: expense.description,
-  currentUserParticipant,
-  balance: currentUserBalance
-});
+              const pendingCount = Number(sharedGraph.pendingParticipantCount ?? getExpensePendingCount(expense));
+              const totalParticipants = Number(sharedGraph.participantCount ?? (expense.participants || []).length);
+              const isPersonalExpense = sharedGraph.expenseKind === 'personal' || totalParticipants === 1;
+              const isPayment = sharedGraph.expenseKind === 'payment' || expense.splitType === 'payment';
+              const isSettled = String(sharedGraph.settlementState || (isExpenseFullySettled(expense) ? 'settled' : 'pending')) === 'settled';
+              const displayAmount = Number(sharedGraph.amount || expense.amount || 0);
               const unreadCount = unreadByExpense[String(expense._id)] || 0;
 
               return (
@@ -510,7 +494,7 @@ export default function ExpenseList({ onEdit }) {
                           💳
                         </div>
                       )}
-                      {expense.participants?.length === 1 && (
+                      {isPersonalExpense && (
                         <div style={{
                           position: 'absolute',
                           top: -4,
@@ -610,33 +594,12 @@ export default function ExpenseList({ onEdit }) {
                         {/* Show pending vs settled status */}
                         {expense.participants?.length > 0 && (
                           <div className="expense-meta" style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-                            {(() => {
-                              const pendingCount = (expense.participants || []).filter(p => p?.status === 'pending').length;
-                              const totalParticipants = (expense.participants || []).length;
-                              const isPersonalExpense = totalParticipants === 1;
-                              const isPayment = expense.splitType === 'payment';
-
-                              if (isPersonalExpense) {
-                                return <span style={{ color: 'var(--success)' }}>Personal expense</span>;
-                              }
-
-                              if (isPayment) {
-                                if (Number(currentUserBalance || 0) < 0) {
-                                  return <span style={{ color: 'var(--success)' }}>Payment received</span>;
-                                }
-
-                                if (pendingCount === 0) {
-                                  return <span style={{ color: 'var(--success)' }}>Payment settled</span>;
-                                }
-                                return <span style={{ color: 'var(--danger)' }}>Payment pending</span>;
-                              }
-
-                             if (pendingCount === 0) {
-                                return <span style={{ color: 'var(--success)' }}>All settled</span>;
-                              }
-
-                              return <span style={{ color: 'var(--danger)' }}>{pendingCount} pending</span>;
-                            })()}
+                            <span style={{ color: isSettled ? 'var(--success)' : 'var(--danger)' }}>
+                              {isSettled ? 'Settled' : `${pendingCount} pending`}
+                            </span>
+                            <span style={{ marginLeft: 8, opacity: 0.7 }}>
+                              {isPayment ? 'Payment transaction' : isPersonalExpense ? 'Personal expense' : 'Shared expense'}
+                            </span>
                           </div>
                         )}
 
@@ -686,7 +649,7 @@ export default function ExpenseList({ onEdit }) {
                           )
                         ) : (
                           <div className="text-sm muted" style={{ marginTop: 6 }}>
-                            {isSettled ? '' : 'View only'}
+                            {isSettled ? '' : 'Read only'}
                           </div>
                         )}
                       </>
@@ -697,40 +660,21 @@ export default function ExpenseList({ onEdit }) {
                   {!isEditing && (
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       {(() => {
-                        const pendingParticipants = (expense.participants || []).filter(p => p?.status === 'pending');
-                        const pendingCount = pendingParticipants.length;
-                        const totalParticipants = (expense.participants || []).length;
-                        const isPersonalExpense = totalParticipants === 1;
-                        const isPayment = expense.splitType === 'payment';
-                        const hasPending = pendingCount > 0;
-                        const sharedBalanceAmount = Number(currentUserBalance || 0);
-                        const displayAmount = isPersonalExpense || isPayment
-                          ? Number(expense.amount || 0)
-                          : Math.abs(sharedBalanceAmount || Number(expense.amount || 0));
-                        const isPaymentRecipientView = isPayment && Number(currentUserBalance || 0) < 0;
-                        const displayTone = isPersonalExpense
-                          ? 'var(--text)'
-                          : (isPayment
-                            ? (isPaymentRecipientView ? 'var(--success)' : 'var(--danger)')
-                            : (sharedBalanceAmount > 0
-                              ? 'var(--success)'
-                              : sharedBalanceAmount < 0
-                                ? 'var(--danger)'
-                                : (hasPending ? 'var(--danger)' : 'var(--success)')));
+                        const displayTone = isSettled ? 'var(--success)' : 'var(--danger)';
 
                         return (
                           <>
                             <div className="expense-amount" style={{ color: displayTone }}>
                               {formatCurrency(displayAmount)}
                             </div>
-                            {!isPersonalExpense && !isPayment && hasPending && (
+                            {!isPersonalExpense && !isPayment && !isSettled && (
                               <div className="expense-share">
-                                {sharedBalanceAmount > 0 ? 'You lent' : 'You owe'} · ÷ {totalParticipants} people · total {formatCurrency(expense.amount)}
+                                Shared expense · ÷ {totalParticipants} people · total {formatCurrency(displayAmount)}
                               </div>
                             )}
                             {isPayment && (
                               <div className="expense-share" style={{ fontSize: 11, opacity: 0.7 }}>
-                                {isPaymentRecipientView ? 'Payment received' : 'Direct payment'}
+                                Payment transaction
                               </div>
                             )}
                             {/* small chat button below amount for easier access */}
