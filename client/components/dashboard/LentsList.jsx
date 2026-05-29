@@ -22,21 +22,25 @@ export default function LentsList({ lents }) {
       return;
     }
 
-    const debtor = lent.owedBy[0]; // Nudge the first person who owes money
-    if (!debtor.id) {
+    const debtorRaw = lent.owedBy[0]; // Nudge the first person who owes money
+    // Debt entry may contain different shapes: { id }, { _id }, { userId }, or a raw user object.
+    const debtorId = debtorRaw?.id || debtorRaw?._id || (debtorRaw?.userId && (debtorRaw.userId._id || debtorRaw.userId)) || null;
+    if (!debtorId) {
       toast.error('Could not find user to nudge');
       return;
     }
 
     try {
       setNudgingId(lent.expenseId);
-      await sendPaymentReminder(
-        debtor.id,
-        lent.amount,
-        lent.group?.id || null,
-        `Hey! Just reminding you about the ₹${lent.amount} you owe for "${lent.description}"`
-      );
-      toast.success(`Reminder sent to ${debtor.name || debtor.email || 'user'}`);
+        await sendPaymentReminder(
+          debtorId,
+          lent.amount,
+          lent.group?.id || null,
+          `Hey! Just reminding you about the ₹${lent.amount} you owe for "${lent.description}"`
+        );
+      toast.success(`Reminder sent to ${debtorRaw?.name || debtorRaw?.email || 'user'}`);
+        // Let notifications refresh
+        try { window.dispatchEvent(new Event('splitwise:notifications-updated')); } catch (e) { /* ignore */ }
     } catch (error) {
       console.error('Error sending nudge:', error);
       const message = error?.response?.data?.message || error.message || 'Failed to send reminder';

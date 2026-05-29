@@ -22,6 +22,7 @@ import EmailActions from './EmailActions.jsx';
 import AnalyticsDashboard from '../analytics/AnalyticsDashboard.jsx';
 import RecurringExpensesManager from '../recurring/RecurringExpensesManager.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
+import { isExpense as isExpenseTx } from '../../utils/transactionUtils.js';
 import { getPersonLabel } from '../../utils/personUtils.js';
 import { normalizeGroupName, dedupeValues, prettifyGroupType } from '../../utils/stringUtils.js';
 import { getUnreadNotificationCount } from '../../services/activity.service.js';
@@ -153,11 +154,12 @@ const DashboardPage = ({ view = 'dashboard' }) => {
     return () => window.removeEventListener('keydown', onEscape);
   }, [activeModal]);
 
+  // Only consider true expense transactions for expense metrics (use normalized check)
+  const expenseTransactions = (expenses || []).filter((tx) => isExpenseTx(tx));
+
   const totals = {
-    expenseCount: expenses.length,
-    totalSpend: expenses
-      .filter((expense) => String(expense?.splitType || '').toLowerCase() !== 'payment')
-      .reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
+    expenseCount: expenseTransactions.length,
+    totalSpend: expenseTransactions.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
   };
 
   const getDueGroupId = (due) => due.group?._id || due.group?.id || null;
@@ -251,6 +253,31 @@ const DashboardPage = ({ view = 'dashboard' }) => {
     [visibleLents]
   );
   const visibleNetBalance = visibleTotalLent - visibleTotalOwed;
+
+  // Runtime sanity checks — useful during debugging when balances look inconsistent
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      // Basic consistency: if there are pending dues but expenseTransactions are empty, warn
+      if ((visibleDues.length > 0 || visibleLents.length > 0) && expenseTransactions.length === 0) {
+        console.warn('Dashboard Debug: ledger-derived dues/lents exist but expenseTransactions is empty — possible type/classification mismatch or backend inconsistency', {
+          userId,
+          duesSample: visibleDues.slice(0, 3),
+          lentsSample: visibleLents.slice(0, 3),
+          expenseTypes: expenses.slice(0, 6).map((t) => ({ id: t._id || t.transactionId || t.expenseId, type: t.type, splitType: t.splitType })),
+        });
+      }
+
+      // If totals are non-zero but no corresponding items exist, warn
+      if (visibleTotalLent > 0 && visibleLents.length === 0) {
+        console.warn('Dashboard Debug: visibleTotalLent > 0 but myLents list is empty', { visibleTotalLent, myLentsSample: myLents.slice(0, 4) });
+      }
+      if (visibleTotalOwed > 0 && visibleDues.length === 0) {
+        console.warn('Dashboard Debug: visibleTotalOwed > 0 but myDues list is empty', { visibleTotalOwed, myDuesSample: myDues.slice(0, 4) });
+      }
+    } catch (err) {
+      console.error('Dashboard Debug: sanity checks failed', err);
+    }
+  }
 
   const ledgerGroupBalances = useMemo(() => {
     const grouped = new Map();
@@ -366,11 +393,12 @@ const DashboardPage = ({ view = 'dashboard' }) => {
 
   const groupSummaries = groups.length > 0
     ? groups.map((group) => {
-        const exactMatchedExpenses = expenses.filter((expense) => String(getExpenseGroupId(expense)) === String(group._id));
+        // Only use true expense transactions when computing group expenses
+        const exactMatchedExpenses = expenseTransactions.filter((expense) => String(getExpenseGroupId(expense)) === String(group._id));
         const groupExpenses =
           exactMatchedExpenses.length > 0
             ? exactMatchedExpenses
-            : expenses.filter((expense) => normalizeGroupName(getExpenseGroupName(expense)) === normalizeGroupName(group.name));
+            : expenseTransactions.filter((expense) => normalizeGroupName(getExpenseGroupName(expense)) === normalizeGroupName(group.name));
 
         const totalSpend = groupExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
         const exactMatchedDues = visibleDues.filter((due) => String(getDueGroupId(due)) === String(group._id));
@@ -638,6 +666,8 @@ const DashboardPage = ({ view = 'dashboard' }) => {
       await settleDue(expenseId);
       // Refresh all data after settling
       await Promise.all([fetchExpenses(), fetchMyDues(), fetchMyLents(), fetchGroups()]);
+      // Notify notification components to refresh (ensure activity appears)
+      try { window.dispatchEvent(new Event('splitwise:notifications-updated')); } catch (e) { /* ignore */ }
     } catch (_) {
     } finally {
       setSettlingExpenseId(null);

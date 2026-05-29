@@ -7,6 +7,7 @@ import Card from '../ui/Card.jsx';
 import CategoryIcon from '../ui/CategoryIcon.jsx';
 import ChatModal from './ChatModal.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
+import { isExpense as isExpenseTx, isPayment as isPaymentTx } from '../../utils/transactionUtils.js';
 import { getPersonName } from '../../utils/personUtils.js';
 import { getExpensePendingCount, isExpenseFullySettled } from '../../utils/expenseLifecycle.js';
 
@@ -45,7 +46,14 @@ export default function ExpenseList({ onEdit }) {
 
   // Filter expenses based on search and filter criteria
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(expense => {
+    // Choose base set: show true expenses by default, but allow payments when user requests that status
+    const normalizedStatus = String(selectedStatus || '').toLowerCase();
+    let base = (expenses || []).filter((tx) => isExpenseTx(tx));
+    if (normalizedStatus === 'payment') {
+      base = (expenses || []).filter((tx) => isPaymentTx(tx));
+    }
+
+    return base.filter(expense => {
       // Search query filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -466,8 +474,7 @@ export default function ExpenseList({ onEdit }) {
         {!loading && filteredExpenses.length === 0 && expenses.length > 0 && (
           <div className="empty-state">
             <div className="empty-icon">🔍</div>
-            No expenses match your filters, hi
-            try adjusting your search criteria.
+            No expenses match your filters, try adjusting your search criteria.
           </div>
         )}
 
@@ -601,14 +608,25 @@ export default function ExpenseList({ onEdit }) {
                     ) : (
                       /* ── VIEW MODE ── */
                       <>
-                        <div className="expense-title">{expense.description || 'Untitled expense'}</div>
-                        <div className="expense-meta">
-                          {expense.group?.name && <span>{expense.group.name}</span>}
-                          {expense.group?.name && <span style={{ margin: '0 4px', opacity: 0.4 }}>·</span>}
-                          <span>
-                            Paid by {expense.paidBy?.name || expense.paidBy?.email || 'n/a'}
-                          </span>
-                        </div>
+                        {isPayment ? (
+                          <>
+                            <div className="expense-title">{`${getPersonName(expense.paidBy, 'Member')} paid ${getPersonName(settlementRecipient, 'Member')}`}</div>
+                            <div className="expense-meta">
+                              <span>Settlement payment</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="expense-title">{expense.description || 'Untitled expense'}</div>
+                            <div className="expense-meta">
+                              {expense.group?.name && <span>{expense.group.name}</span>}
+                              {expense.group?.name && <span style={{ margin: '0 4px', opacity: 0.4 }}>·</span>}
+                              <span>
+                                Paid by {expense.paidBy?.name || expense.paidBy?.email || 'n/a'}
+                              </span>
+                            </div>
+                          </>
+                        )}
                         <div className="expense-meta" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <strong style={{ fontWeight: 700 }}>Involved:</strong>
@@ -701,7 +719,8 @@ export default function ExpenseList({ onEdit }) {
                   {!isEditing && (
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       {(() => {
-                        const displayTone = isSettled ? 'var(--success)' : 'var(--danger)';
+                        // Show green for settled items or when the current user is the payer
+                        const displayTone = (isSettled || canManage) ? 'var(--success)' : 'var(--danger)';
 
                         return (
                           <>
