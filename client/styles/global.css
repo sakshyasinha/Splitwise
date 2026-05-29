@@ -1593,21 +1593,41 @@ select.input option {
   justify-content: flex-end;
 }
 
+.notification-popover-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
 /* Notifications Dropdown */
 
 .notifications-dropdown {
-  position: fixed;
-  top: 100px;
-  right: 70px;
-  width: 380px;
-  max-height: 500px;
-  background: rgba(255, 255, 255, 0.85);
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(540px, calc(100dvh - 140px));
+  background: var(--card-strong, #ffffff);
   border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   z-index: 1000;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.notifications-dropdown::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  right: 18px;
+  width: 14px;
+  height: 14px;
+  background: var(--card-strong, #ffffff);
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  transform: rotate(45deg);
 }
 
 .notifications-dropdown-header {
@@ -1649,8 +1669,14 @@ select.input option {
   background: rgba(255, 255, 255, 0.2);
 }
 [data-theme='dark'] .notifications-dropdown {
-  background: rgba(22, 27, 34, 0.95);
+  background: var(--card-strong, #161b22);
   border-color: rgba(240, 246, 252, 0.12);
+}
+
+[data-theme='dark'] .notifications-dropdown::before {
+  background: var(--card-strong, #161b22);
+  border-left-color: rgba(240, 246, 252, 0.12);
+  border-top-color: rgba(240, 246, 252, 0.12);
 }
 
 .notification-item-dropdown {

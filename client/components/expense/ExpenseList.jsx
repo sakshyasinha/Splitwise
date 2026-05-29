@@ -23,6 +23,7 @@ export default function ExpenseList({ onEdit }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [activeExpense, setActiveExpense] = useState(null);
   const [chatInitialUnreadCount, setChatInitialUnreadCount] = useState(0);
+  const [chatPosition, setChatPosition] = useState(null);
   const [unreadByExpense, setUnreadByExpense] = useState({});
   const socketRef = useRef(null);
   const joinedRoomsRef = useRef(new Set());
@@ -72,7 +73,9 @@ export default function ExpenseList({ onEdit }) {
         const sharedGraph = expense.sharedGraph || {};
         const totalParticipants = Number(sharedGraph.participantCount ?? (expense.participants || []).length);
         const expenseKind = sharedGraph.expenseKind || (expense.splitType === 'payment' ? 'payment' : (totalParticipants === 1 ? 'personal' : 'shared'));
-        const settlementState = sharedGraph.settlementState || (isExpenseFullySettled(expense) ? 'settled' : 'pending');
+        const settlementState = expense.splitType === 'payment'
+          ? 'settled'
+          : (sharedGraph.settlementState || (isExpenseFullySettled(expense) ? 'settled' : 'pending'));
         const isPersonalExpense = expenseKind === 'personal' || totalParticipants === 1;
         const isPayment = expenseKind === 'payment';
 
@@ -205,11 +208,43 @@ export default function ExpenseList({ onEdit }) {
     });
   }, [expenses]);
 
-  const openChat = (expense) => {
+  const getChatPosition = (anchorElement) => {
+    if (!anchorElement || typeof window === 'undefined') {
+      return null;
+    }
+
+    const rect = anchorElement.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const gap = 12;
+    const margin = 16;
+    const preferredWidth = Math.min(560, viewportWidth - margin * 2);
+    const maxHeight = Math.min(760, viewportHeight - margin * 2);
+    const spaceBelow = viewportHeight - rect.bottom - margin;
+    const spaceAbove = rect.top - margin;
+    const openBelow = spaceBelow >= 280 || spaceBelow >= spaceAbove;
+    const preferredTop = openBelow ? rect.bottom + gap : rect.top - gap - maxHeight;
+    const top = Math.max(margin, Math.min(preferredTop, viewportHeight - margin - maxHeight));
+    const left = Math.max(
+      margin,
+      Math.min(rect.right - preferredWidth, viewportWidth - margin - preferredWidth)
+    );
+
+    return {
+      top,
+      left,
+      width: preferredWidth,
+      maxHeight,
+      placement: openBelow ? 'bottom' : 'top',
+    };
+  };
+
+  const openChat = (expense, anchorElement) => {
     const expenseId = String(expense?._id || '');
     const currentUnread = unreadByExpense[expenseId] || 0;
     setChatInitialUnreadCount(currentUnread);
     setActiveExpense(expense);
+    setChatPosition(getChatPosition(anchorElement));
     setChatOpen(true);
     setUnreadByExpense((prev) => {
       if (!prev[expenseId]) return prev;
@@ -463,9 +498,15 @@ export default function ExpenseList({ onEdit }) {
               const totalParticipants = Number(sharedGraph.participantCount ?? (expense.participants || []).length);
               const isPersonalExpense = sharedGraph.expenseKind === 'personal' || totalParticipants === 1;
               const isPayment = sharedGraph.expenseKind === 'payment' || expense.splitType === 'payment';
-              const isSettled = String(sharedGraph.settlementState || (isExpenseFullySettled(expense) ? 'settled' : 'pending')) === 'settled';
+              const isSettled = isPayment || String(sharedGraph.settlementState || (isExpenseFullySettled(expense) ? 'settled' : 'pending')) === 'settled';
+              const settlementStatusLabel = isPayment ? 'Completed' : (isSettled ? 'Settled' : `${pendingCount} pending`);
               const displayAmount = Number(sharedGraph.amount || expense.amount || 0);
               const unreadCount = unreadByExpense[String(expense._id)] || 0;
+              const settlementPayerName = expense.paidBy?.name || expense.paidBy?.email || 'n/a';
+              const settlementRecipient = (expense.participants || []).find((participant) => {
+                const participantId = participant?.userId?._id || participant?.userId;
+                return String(participantId) !== String(paidById || '');
+              })?.userId;
 
               return (
                 <li key={expense._id} className="expense-item" style={{ alignItems: 'flex-start', paddingTop: 14, paddingBottom: 14 }}>
@@ -595,10 +636,10 @@ export default function ExpenseList({ onEdit }) {
                         {expense.participants?.length > 0 && (
                           <div className="expense-meta" style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
                             <span style={{ color: isSettled ? 'var(--success)' : 'var(--danger)' }}>
-                              {isSettled ? 'Settled' : `${pendingCount} pending`}
+                              {settlementStatusLabel}
                             </span>
                             <span style={{ marginLeft: 8, opacity: 0.7 }}>
-                              {isPayment ? 'Payment transaction' : isPersonalExpense ? 'Personal expense' : 'Shared expense'}
+                              {isPayment ? 'Settlement payment' : isPersonalExpense ? 'Personal expense' : 'Shared expense'}
                             </span>
                           </div>
                         )}
@@ -674,7 +715,7 @@ export default function ExpenseList({ onEdit }) {
                             )}
                             {isPayment && (
                               <div className="expense-share" style={{ fontSize: 11, opacity: 0.7 }}>
-                                Payment transaction
+                                Settlement payment · {settlementPayerName} paid {getPersonName(settlementRecipient, 'Member')}
                               </div>
                             )}
                             {/* small chat button below amount for easier access */}
@@ -682,7 +723,7 @@ export default function ExpenseList({ onEdit }) {
                               <button
                                 className="btn btn-ghost"
                                 style={{ fontSize: 12, padding: '4px 8px' }}
-                                onClick={() => openChat(expense)}
+                                onClick={(event) => openChat(expense, event.currentTarget)}
                                 aria-label={`Open chat for ${expense.description || 'expense'}`}
                               >
                                  Chat
@@ -707,11 +748,12 @@ export default function ExpenseList({ onEdit }) {
       </div>
       <ChatModal
         open={chatOpen}
-        onClose={() => { setChatOpen(false); setChatInitialUnreadCount(0); }}
+        onClose={() => { setChatOpen(false); setChatInitialUnreadCount(0); setChatPosition(null); }}
         expense={activeExpense}
         currentUser={user}
         token={token}
         initialUnreadCount={chatInitialUnreadCount}
+        position={chatPosition}
       />
     </Card>
   );

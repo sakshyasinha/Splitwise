@@ -9,12 +9,23 @@ import { formatCurrency } from '../../utils/formatCurrency.js';
  * @param {Array} props.dues - Array of dues
  * @param {string|null} props.settlingExpenseId - ID of expense being settled
  * @param {function} props.onSettleDue - Settle due handler
+ * @param {string|null} props.currentUserId - Current user id for self-counterparty checks
  * @param {boolean} props.grouped - Show dues grouped by group name
  */
-export default function DuesList({ dues, settlingExpenseId, onSettleDue, grouped = false }) {
+export default function DuesList({ dues, settlingExpenseId, onSettleDue, currentUserId = null, grouped = false }) {
   const getRowKey = (due) => String(due?.transactionId || due?.sourceExpenseId || due?.expenseId || due?._id || '');
   const getDisplayName = (party) => party?.displayName || party?.name || party?.email || 'Unknown User';
   const getAvatarInitial = (party) => getDisplayName(party).trim().charAt(0).toUpperCase() || '?';
+  const getCounterpartyLabel = (due) => {
+    const displayName = getDisplayName(due?.paidTo);
+    const counterpartyId = String(due?.paidTo?.id || due?.paidTo?._id || due?.paidTo?.userId || '');
+
+    if (currentUserId && counterpartyId && counterpartyId === String(currentUserId)) {
+      return 'Already settled';
+    }
+
+    return displayName;
+  };
 
   const groupedDues = useMemo(() => {
     const groups = new Map();
@@ -61,7 +72,7 @@ const groupName = due.group?.name;
           {dues.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">✅</div>
-              You're all clear — no pending dues.
+              You don't owe anyone right now.
             </div>
           ) : grouped ? (
             <div className="stack" style={{ gap: 14 }}>
@@ -89,7 +100,7 @@ const groupName = due.group?.name;
                             <div className="expense-meta">
                               {due.canSettle === false
                                 ? (due.metaText || 'Outstanding group expense')
-                                : `Pay -> ${getDisplayName(due.paidTo)}`}
+                                : `Pay -> ${getCounterpartyLabel(due)}`}
                             </div>
                             {due.canSettle !== false && (
                               <div className="settle-row">
@@ -126,7 +137,7 @@ const groupName = due.group?.name;
                     <div className="expense-meta">
                       {due.canSettle === false
                         ? (due.metaText || 'Outstanding group expense')
-                        : `Pay -> ${getDisplayName(due.paidTo)}`}
+                        : `Pay -> ${getCounterpartyLabel(due)}`}
                       {due.group?.name ? ` · ${due.group.name}` : ''}
                     </div>
                     {due.canSettle !== false && (

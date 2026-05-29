@@ -313,8 +313,8 @@ const useExpenseStore = create((set, get) => ({
 
       console.log('Store: Backend refresh completed');
       console.log('Store: New expenses count:', expensesData.length);
-      console.log('Store: New dues count:', duesData.dues?.length || 0);
-      console.log('Store: New lents count:', lentsData.lents?.length || 0);
+      console.log('Store: New dues count:', balanceData.myDues?.length || 0);
+      console.log('Store: New lents count:', balanceData.myLents?.length || 0);
 
       // Update all state with fresh data from backend
       set({

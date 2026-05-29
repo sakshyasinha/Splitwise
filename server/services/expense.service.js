@@ -101,6 +101,8 @@ const getLedgerTransactionId = (expense) => String(
     ''
 );
 
+const isSettlementTransaction = (expense) => String(expense?.splitType || '').toLowerCase() === 'payment';
+
 const resolveLedgerIdentity = (value, fallbackId = '', fallbackLabel = 'Unknown User') => {
     const resolvedValue = value?.toObject ? value.toObject() : value || {};
     const id = String(resolvedValue._id || resolvedValue.id || fallbackId || '');
@@ -120,6 +122,7 @@ const resolveLedgerIdentity = (value, fallbackId = '', fallbackLabel = 'Unknown 
 const buildCanonicalLedgerNode = (expense) => {
     const normalizedExpense = expense?.toObject ? expense.toObject() : { ...expense };
     const transactionId = getLedgerTransactionId(expense);
+    const transactionType = isSettlementTransaction(normalizedExpense) ? 'settlement' : 'expense';
     const payerRecord = normalizedExpense.paidBy || normalizedExpense.createdBy || normalizedExpense.payers?.[0]?.userId || null;
     const payerIdentity = resolveLedgerIdentity(payerRecord, transactionId, normalizedExpense.description || 'Unknown User');
     const payerId = String(payerIdentity.id || payerRecord?._id || payerRecord || '');
@@ -133,7 +136,7 @@ const buildCanonicalLedgerNode = (expense) => {
         const identity = resolveLedgerIdentity(participantRecord, participantId, 'Unknown User');
         const shareAmount = Number(participant?.shareAmount || participant?.amount || 0);
         const paidAmount = Number(participant?.paidAmount || 0);
-        const balance = Number(participant?.balance || (paidAmount - shareAmount));
+        const balance = Number(participant?.balance || calculateParticipantBalance(normalizedExpense, participant));
 
         return {
             userId: participantId,
@@ -163,6 +166,7 @@ const buildCanonicalLedgerNode = (expense) => {
         pendingParticipantCount,
         settledParticipantCount,
         participantCount: participants.length,
+        transactionType,
         payer,
         participants,
         amount: Number(normalizedExpense.amount || 0),
@@ -186,7 +190,7 @@ const isParticipantSettled = (participant) => {
     return status === 'settled' || status === 'paid';
 };
 
-const getExpenseNetBalance = (expense, participant, userId) => {
+const calculateParticipantBalance = (expense, participant, userId = null) => {
     if (!expense || !participant) return 0;
 
     const amount = Number(expense.amount || 0);
@@ -195,10 +199,22 @@ const getExpenseNetBalance = (expense, participant, userId) => {
 
     if (expense.splitType === 'payment') {
         const payerId = String(expense.paidBy?._id || expense.paidBy || expense.createdBy?._id || expense.createdBy || '');
-        return String(userId) === payerId ? amount : -amount;
+        const participantId = String(participant.userId?._id || participant.userId || '');
+
+        if (userId != null) {
+            return String(userId) === payerId ? amount : -amount;
+        }
+
+        return participantId === payerId ? amount : -amount;
     }
 
     return paidAmount - shareAmount;
+};
+
+const getExpenseNetBalance = (expense, participant, userId) => {
+    if (!expense || !participant) return 0;
+
+    return calculateParticipantBalance(expense, participant, userId);
 };
 
 const getExpensePendingCount = (expense) => {
@@ -314,6 +330,10 @@ const buildUserLedgerEntry = (expense, userId) => {
     const participant = (sharedGraph.participants || []).find((entry) => String(entry.userId) === String(userId)) || null;
     const isPayment = sharedGraph.expenseKind === 'payment';
 
+    if (isSettlementTransaction(expense)) {
+        return null;
+    }
+
     if (!participant || ledgerNode.settlementState === 'settled') {
         return null;
     }
@@ -364,6 +384,7 @@ const buildUserLedgerEntry = (expense, userId) => {
         description: expense.description || 'Unknown expense',
         amount: Math.abs(Number(participant.balance || balance || 0)),
         status: 'pending',
+        transactionType: isPayment ? 'settlement' : 'expense',
         group: {
             id: expense.group?._id,
             name: expense.group?.name || ''
@@ -373,6 +394,88 @@ const buildUserLedgerEntry = (expense, userId) => {
         sharedGraph,
         ledgerNode,
         createdAt: expense.createdAt
+    };
+};
+
+export const buildNormalizedUserLedger = (expenses, userId) => {
+    const rows = [];
+
+    (expenses || []).forEach((expense) => {
+        const entry = buildUserLedgerEntry(expense, userId);
+        if (entry) {
+            rows.push(entry);
+        }
+    });
+
+    return rows;
+};
+
+export const summarizeUserLedgerRows = (rows = []) => {
+    const groupBalances = new Map();
+
+    rows.forEach((row) => {
+        const groupId = String(row.group?.id || row.group?.name || row.transactionId || row.sourceExpenseId || '');
+        if (!groupBalances.has(groupId)) {
+            groupBalances.set(groupId, {
+                groupId,
+                groupName: String(row.group?.name || ''),
+                balance: 0,
+            });
+        }
+
+        const groupBalance = groupBalances.get(groupId);
+        const signedAmount = row.direction === 'asset'
+            ? Number(row.amount || 0)
+            : -Number(row.amount || 0);
+
+        groupBalance.balance += signedAmount;
+
+        if (!groupBalance.groupName && row.group?.name) {
+            groupBalance.groupName = row.group.name;
+        }
+    });
+
+    const owesTo = [];
+    const owedBy = [];
+    let totalBalance = 0;
+
+    groupBalances.forEach((groupBalance) => {
+        totalBalance += groupBalance.balance;
+        const roundedBalance = Math.round(groupBalance.balance * 100) / 100;
+
+        if (roundedBalance < -0.01) {
+            owesTo.push({
+                ...groupBalance,
+                balance: roundedBalance,
+                amount: Math.abs(roundedBalance)
+            });
+        } else if (roundedBalance > 0.01) {
+            owedBy.push({
+                ...groupBalance,
+                balance: roundedBalance,
+                amount: roundedBalance
+            });
+        }
+    });
+
+    const totalOwed = rows
+        .filter((row) => row.direction === 'liability')
+        .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+
+    const totalToReceive = rows
+        .filter((row) => row.direction === 'asset')
+        .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+
+    return {
+        totalBalance: Math.round(totalBalance * 100) / 100,
+        totalOwed: Math.round(totalOwed * 100) / 100,
+        totalToReceive: Math.round(totalToReceive * 100) / 100,
+        owesTo,
+        owedBy,
+        groupBreakdown: Array.from(groupBalances.values()).map((groupBalance) => ({
+            ...groupBalance,
+            balance: Math.round(groupBalance.balance * 100) / 100,
+        }))
     };
 };
 
@@ -507,10 +610,10 @@ export const addExpense = async (data) => {
         // This ensures proper balance calculation
         const participantSplits = splits.map((split) => {
             const isPayer = String(split.userId) === payerId;
-            const isPayment = splitType === 'payment';
-            const balance = isPayment
-                ? (isPayer ? numericAmount : -numericAmount)
-                : (isPayer ? (numericAmount - split.amount) : -split.amount);
+            const balance = calculateParticipantBalance(
+                { amount: numericAmount, splitType, paidBy: payerId, createdBy: userId },
+                { userId: split.userId, paidAmount: isPayer ? numericAmount : 0, shareAmount: split.amount }
+            );
 
             return {
                 userId: split.userId,
@@ -741,15 +844,16 @@ export const updateExpense = async (userId, expenseId, updates) => {
     expense.participants = splits
         .map((split) => {
             const isPayer = String(split.userId) === String(userId);
-            const isPayment = nextSplitType === 'payment';
+            const balance = calculateParticipantBalance(
+                { amount: nextAmount, splitType: nextSplitType, paidBy: userId, createdBy: userId },
+                { userId: split.userId, paidAmount: isPayer ? nextAmount : 0, shareAmount: split.amount }
+            );
             return {
                 userId: split.userId,
                 amount: split.amount,
                 shareAmount: split.amount,
                 paidAmount: isPayer ? nextAmount : 0,
-                balance: isPayment
-                    ? (isPayer ? nextAmount : -nextAmount)
-                    : (isPayer ? (nextAmount - split.amount) : -split.amount),
+                balance,
                 status: isPayer ? 'settled' : 'pending'
             };
         });
@@ -982,9 +1086,8 @@ export const getGroupExpenses = async (userId, groupId) => {
 export const getMyDues = async (userId) => {
     const expenses = await getUserLedgerExpenses(userId);
 
-    const dues = expenses
-        .map((expense) => buildLedgerRow(expense, userId, 'borrowed'))
-        .filter(Boolean);
+    const ledgerRows = buildNormalizedUserLedger(expenses, userId);
+    const dues = ledgerRows.filter((entry) => entry.direction === 'liability');
 
     const totalOwed = dues.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
@@ -1001,9 +1104,8 @@ export const getMyLents = async (userId) => {
 
         const expenses = await getUserLedgerExpenses(userId);
 
-        const lents = expenses
-            .map((expense) => buildLedgerRow(expense, userId, 'lent'))
-            .filter(Boolean);
+        const ledgerRows = buildNormalizedUserLedger(expenses, userId);
+        const lents = ledgerRows.filter((entry) => entry.direction === 'asset');
 
         const totalLent = lents.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
@@ -1049,7 +1151,7 @@ export const getExpenseBreakdown = async (userId) => {
         const sharedExpenses = [];
 
         expenses.forEach(expense => {
-            if (isExpenseFullySettled(expense)) {
+            if (isSettlementTransaction(expense) || isExpenseFullySettled(expense)) {
                 return;
             }
 
@@ -1143,7 +1245,7 @@ export const getFriendsList = async (userId) => {
         const friendsMap = new Map();
 
         expenses.forEach(expense => {
-            if (isExpenseFullySettled(expense)) {
+            if (isSettlementTransaction(expense) || isExpenseFullySettled(expense)) {
                 return;
             }
 

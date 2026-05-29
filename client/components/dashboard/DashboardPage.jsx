@@ -71,8 +71,16 @@ const DashboardPage = ({ view = 'dashboard' }) => {
     }
   };
 
+  const userId = String(user?._id || user?.id || '');
+  const userEmail = String(user?.email || '').toLowerCase();
+  const userName = String(user?.name || '').toLowerCase();
+
   useEffect(() => {
-    console.log('DashboardPage: Initial data load');
+    if (!userId) {
+      return undefined;
+    }
+
+    console.log('DashboardPage: Initial data load for user', userId);
     const loadData = async () => {
       try {
         await Promise.all([
@@ -88,7 +96,15 @@ const DashboardPage = ({ view = 'dashboard' }) => {
       }
     };
     loadData();
-  }, []);
+  }, [userId]);
+
+  useEffect(() => {
+    setSelectedGroupId(null);
+    setActiveModal(null);
+    setSettlingExpenseId(null);
+    setEditingExpense(null);
+    setEditingGroup(null);
+  }, [userId]);
 
   // Debug logging for expenses changes
   useEffect(() => {
@@ -139,12 +155,10 @@ const DashboardPage = ({ view = 'dashboard' }) => {
 
   const totals = {
     expenseCount: expenses.length,
-    totalSpend: expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
+    totalSpend: expenses
+      .filter((expense) => String(expense?.splitType || '').toLowerCase() !== 'payment')
+      .reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
   };
-
-  const userId = String(user?._id || user?.id || '');
-  const userEmail = String(user?.email || '').toLowerCase();
-  const userName = String(user?.name || '').toLowerCase();
 
   const getDueGroupId = (due) => due.group?._id || due.group?.id || null;
   const getDueGroupName = (due) => due.group?.name || '';
@@ -209,9 +223,34 @@ const DashboardPage = ({ view = 'dashboard' }) => {
     });
   }, [myDues]);
 
-  const visibleTotalOwed = Number(debtSnapshot?.totalOwed ?? 0);
-  const visibleTotalLent = Number(debtSnapshot?.totalToReceive ?? 0);
-  const visibleNetBalance = Number(debtSnapshot?.totalBalance ?? (visibleTotalLent - visibleTotalOwed));
+  const visibleLents = useMemo(() => {
+    const mergedLents = new Map();
+
+    (myLents || []).forEach((lent) => {
+      if (!lent) return;
+      const key = getLedgerItemKey(lent);
+      mergedLents.set(key, { ...lent });
+    });
+
+    return Array.from(mergedLents.values()).filter((lent) => {
+      const status = String(lent?.status || 'pending').toLowerCase();
+      if (status === 'settled' || status === 'paid') {
+        return false;
+      }
+
+      return Number(lent?.amount || 0) > 0;
+    });
+  }, [myLents]);
+
+  const visibleTotalOwed = useMemo(
+    () => visibleDues.reduce((sum, due) => sum + Number(due?.amount || 0), 0),
+    [visibleDues]
+  );
+  const visibleTotalLent = useMemo(
+    () => visibleLents.reduce((sum, lent) => sum + Number(lent?.amount || 0), 0),
+    [visibleLents]
+  );
+  const visibleNetBalance = visibleTotalLent - visibleTotalOwed;
 
   const ledgerGroupBalances = useMemo(() => {
     const grouped = new Map();
@@ -648,11 +687,18 @@ const DashboardPage = ({ view = 'dashboard' }) => {
           notificationCount={notificationCount}
           searchQuery={dashboardSearchQuery}
           onSearchChange={setDashboardSearchQuery}
+          notificationsDropdown={isNotificationsOpen ? (
+            <NotificationsDropdown
+              onClose={closeNotifications}
+              onUnreadCountChange={handleNotificationsRead}
+            />
+          ) : null}
         />
 
         {!isAccountView && (
           <HeroStrip
             pendingDuesCount={visibleDues.length}
+            pendingReceivablesCount={visibleLents.length}
             totalSpend={totals.totalSpend}
             totalOwed={visibleTotalOwed}
             totalLent={visibleTotalLent}
@@ -690,6 +736,7 @@ const DashboardPage = ({ view = 'dashboard' }) => {
                   dues={visibleDues}
                   settlingExpenseId={settlingExpenseId}
                   onSettleDue={handleSettleDue}
+                  currentUserId={userId}
                   grouped={false}
                 />
               </div>
@@ -726,6 +773,7 @@ const DashboardPage = ({ view = 'dashboard' }) => {
                   dues={groupedOutstandingDues}
                   settlingExpenseId={settlingExpenseId}
                   onSettleDue={handleSettleDue}
+                  currentUserId={userId}
                   grouped
                 />
               </div>
@@ -924,12 +972,6 @@ const DashboardPage = ({ view = 'dashboard' }) => {
         <RecurringExpensesManager />
       </Modal>
 
-      {isNotificationsOpen && (
-        <NotificationsDropdown
-          onClose={closeNotifications}
-          onUnreadCountChange={handleNotificationsRead}
-        />
-      )}
     </>
   );
 };

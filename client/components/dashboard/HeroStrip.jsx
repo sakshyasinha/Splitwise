@@ -2,19 +2,23 @@
  * Dashboard hero strip component
  * @param {object} props - Component props
  * @param {number} props.pendingDuesCount - Number of pending dues
+ * @param {number} props.pendingReceivablesCount - Number of pending receivables
  */
 import { formatCurrency } from '../../utils/formatCurrency.js';
 
-export default function HeroStrip({ pendingDuesCount, totalSpend = 0, totalOwed = 0, totalLent = 0 }) {
+export default function HeroStrip({ pendingDuesCount, pendingReceivablesCount = 0, totalSpend = 0, totalOwed = 0, totalLent = 0 }) {
+  const isSettled = pendingDuesCount === 0 && pendingReceivablesCount === 0;
+  const pendingTotal = pendingDuesCount + pendingReceivablesCount;
+
   return (
     <section className="hero-strip">
       <div className="hero-copy">
         <h1>Shared finances,&nbsp;without the chaos.</h1>
         <p>Track expenses, settle smarter, and keep friendships healthy.</p>
         <span className="due-pill">
-          {pendingDuesCount === 0
+          {isSettled
             ? 'All dues settled'
-            : `${pendingDuesCount} pending due${pendingDuesCount !== 1 ? 's' : ''}`}
+            : `${pendingTotal} pending item${pendingTotal !== 1 ? 's' : ''}`}
         </span>
       </div>
       <div className="hero-summary-card" aria-label="Current balance overview">

@@ -1,6 +1,23 @@
 import Expense from '../models/expense.model.js';
 import mongoose from 'mongoose';
 
+const isSettlementTransaction = (expense) => String(expense?.splitType || '').toLowerCase() === 'payment';
+
+const isParticipantSettled = (participant) => {
+    const status = String(participant?.status || 'pending').toLowerCase();
+    return status === 'settled' || status === 'paid';
+};
+
+const isExpenseFullySettled = (expense) => {
+    if (!expense) return true;
+    if (expense.isSettled) return true;
+
+    const participants = Array.isArray(expense.participants) ? expense.participants : [];
+    if (participants.length === 0) return false;
+
+    return participants.every(isParticipantSettled);
+};
+
 /**
  * Debt Simplification Service
  * Implements graph algorithm to minimize total payments in a group
@@ -192,6 +209,10 @@ export const getUserNetBalance = async (userId) => {
         const groupBalances = new Map();
 
         expenses.forEach(expense => {
+            if (isSettlementTransaction(expense) || isExpenseFullySettled(expense)) {
+                return;
+            }
+
             const groupId = String(expense.group?._id);
             const groupName = String(expense.group?.name || '');
             const expenseAmount = Number(expense.amount) || 0;

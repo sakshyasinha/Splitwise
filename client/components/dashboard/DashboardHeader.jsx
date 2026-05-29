@@ -16,6 +16,7 @@ export default function DashboardHeader({
   notificationCount = 0,
   searchQuery = '',
   onSearchChange,
+  notificationsDropdown = null,
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -69,15 +70,18 @@ export default function DashboardHeader({
         />
       </label>
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          className="notification-button"
-          onClick={onNotificationClick}
-          aria-label={`Open notifications${notificationCount > 0 ? ` (${notificationCount} unread)` : ''}`}
-        >
-          <span className="notification-icon">🔔</span>
-          {notificationCount > 0 ? <span className="notification-count">{notificationCount}</span> : null}
-        </button>
+        <div className="notification-popover-anchor">
+          <button
+            type="button"
+            className="notification-button"
+            onClick={onNotificationClick}
+            aria-label={`Open notifications${notificationCount > 0 ? ` (${notificationCount} unread)` : ''}`}
+          >
+            <span className="notification-icon">🔔</span>
+            {notificationCount > 0 ? <span className="notification-count">{notificationCount}</span> : null}
+          </button>
+          {notificationsDropdown}
+        </div>
         <div className="profile-picture" aria-label="User menu" role="button" tabIndex={0}>
           <span className="profile-initials">{profileInitials}</span>
           <span className="profile-name">{emailName}</span>

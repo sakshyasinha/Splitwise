@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { initSocket, getSocket } from '../../src/services/socket.service.js';
 import { getPersonName } from '../../utils/personUtils.js';
 import '../../styles/chat.css';
 
-export default function ChatModal({ open, onClose, expense, currentUser, token, initialUnreadCount = 0 }) {
+export default function ChatModal({ open, onClose, expense, currentUser, token, initialUnreadCount = 0, position = null }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -158,9 +159,27 @@ export default function ChatModal({ open, onClose, expense, currentUser, token, 
 
   if (!open) return null;
 
-  return (
+  const portalTarget = typeof document !== 'undefined' ? document.body : null;
+
+  const modalStyle = position
+    ? {
+        position: 'fixed',
+        top: `${position.top}px`,
+        left: `${position.left}px`,
+        width: `${position.width}px`,
+        maxHeight: `${position.maxHeight}px`,
+        transform: 'none',
+      }
+    : {
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+      };
+
+  const modal = (
     <div className="chat-overlay" onClick={onClose}>
-      <div className="chat-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div className="chat-modal" style={modalStyle} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="chat-header">
           <div>
             <div className="chat-title">Chat about: {expense?.description || 'Expense'}</div>
@@ -183,27 +202,27 @@ export default function ChatModal({ open, onClose, expense, currentUser, token, 
 
         {!loading && (
           <div className="chat-body" ref={listRef}>
-                {messages.length === 0 ? (
+            {messages.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 12px', color: '#999' }}>
                 No messages yet. Start the conversation!
               </div>
             ) : (
-                  messages.map((m, idx) => (
-                    <div key={m.id}>
-                      {initialUnreadCount > 0 && idx === messages.length - initialUnreadCount && (
-                        <div className="chat-unread-divider">
-                          <div className="line" />
-                          <div className="label">{initialUnreadCount} new message{initialUnreadCount > 1 ? 's' : ''}</div>
-                          <div className="line" />
-                        </div>
-                      )}
-                      <div className={`chat-message ${m.sender === (currentUser?.name || 'You') ? 'me' : 'them'}`}>
-                        <div className="chat-sender">{m.sender}</div>
-                        <div className="chat-bubble">{m.text}</div>
-                        <div className="chat-time">{m.time}</div>
-                      </div>
+              messages.map((m, idx) => (
+                <div key={m.id}>
+                  {initialUnreadCount > 0 && idx === messages.length - initialUnreadCount && (
+                    <div className="chat-unread-divider">
+                      <div className="line" />
+                      <div className="label">{initialUnreadCount} new message{initialUnreadCount > 1 ? 's' : ''}</div>
+                      <div className="line" />
                     </div>
-                  ))
+                  )}
+                  <div className={`chat-message ${m.sender === (currentUser?.name || 'You') ? 'me' : 'them'}`}>
+                    <div className="chat-sender">{m.sender}</div>
+                    <div className="chat-bubble">{m.text}</div>
+                    <div className="chat-time">{m.time}</div>
+                  </div>
+                </div>
+              ))
             )}
           </div>
         )}
@@ -229,4 +248,6 @@ export default function ChatModal({ open, onClose, expense, currentUser, token, 
       </div>
     </div>
   );
+
+  return portalTarget ? createPortal(modal, portalTarget) : modal;
 }
