@@ -54,7 +54,6 @@ export default function AuthPage() {
       await login(form.email, form.password);
       navigate('/');
     } catch (_error) {
-      // Error is handled in store state.
     }
   };
 

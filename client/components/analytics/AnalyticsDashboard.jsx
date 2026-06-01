@@ -394,47 +394,72 @@ const TimeChart = ({
   renderLabel,
   columns = 24,
   accentIndex = null,
-}) => (
-  <div className="time-section">
-    <h4>{title}</h4>
-    <div className="distribution-summary">
-      <div className="distribution-pill distribution-pill-accent">
-        <span className="distribution-pill-label">{peakLabel}</span>
-        <span className="distribution-pill-value">{peakValue}</span>
-      </div>
-    </div>
-    <div
-      className="time-chart"
-      style={{ '--chart-columns': columns }}
-      aria-label={title}
-    >
-      <div className="time-chart-grid">
-        {series.map((point, index) => {
-          const amount = Number(point.amount || 0);
-          const barHeight = maxAmount > 0 ? Math.max((amount / maxAmount) * 100, amount > 0 ? 10 : 4) : 4;
-          const isPeak = accentIndex !== null && index === accentIndex;
-          const label = renderLabel?.(point, index) ?? labels[index] ?? '';
+}) => {
+  const tickRatios = [1, 0.75, 0.5, 0.25, 0];
+  const yTicks = tickRatios.map((ratio) => ({
+    value: maxAmount > 0 ? maxAmount * ratio : 0,
+    label: formatCurrency(maxAmount > 0 ? maxAmount * ratio : 0),
+  }));
 
-          return (
-            <div key={point.key ?? index} className={`time-chart-column${isPeak ? ' is-peak' : ''}${amount === 0 ? ' is-zero' : ''}`}>
-              <div className="time-chart-track">
-                <div
-                  className="time-chart-fill"
-                  style={{
-                    height: `${Math.min(barHeight, 100)}%`,
-                    opacity: amount > 0 ? 1 : 0.16,
-                  }}
-                  title={point.title || `${label || point.label || index}: ${formatCurrency(amount)}`}
-                />
-              </div>
-              <div className={`time-chart-label${label ? '' : ' is-muted'}`}>{label || '\u00A0'}</div>
-            </div>
-          );
-        })}
+  return (
+    <div className="time-section">
+      <h4>{title}</h4>
+      <div className="distribution-summary">
+        <div className="distribution-pill distribution-pill-accent">
+          <span className="distribution-pill-label">{peakLabel}</span>
+          <span className="distribution-pill-value">{peakValue}</span>
+        </div>
+      </div>
+      <div className="time-chart-frame" style={{ '--chart-columns': columns }} aria-label={title}>
+        <div className="time-chart-yaxis" aria-hidden="true">
+          {yTicks.map((tick) => (
+            <span key={tick.label}>{tick.label}</span>
+          ))}
+        </div>
+
+        <div className="time-chart-plot">
+          <div className="time-chart-gridlines" aria-hidden="true">
+            {yTicks.map((tick) => (
+              <span key={tick.label} className="time-chart-gridline" />
+            ))}
+          </div>
+
+          <div className="time-chart-bars">
+            {series.map((point, index) => {
+              const amount = Number(point.amount || 0);
+              const barHeight = maxAmount > 0 ? Math.max((amount / maxAmount) * 100, amount > 0 ? 10 : 4) : 4;
+              const isPeak = accentIndex !== null && index === accentIndex;
+
+              return (
+                <div key={point.key ?? index} className={`time-chart-column${isPeak ? ' is-peak' : ''}${amount === 0 ? ' is-zero' : ''}`}>
+                  <div
+                    className="time-chart-fill"
+                    style={{
+                      height: `${Math.min(barHeight, 100)}%`,
+                      opacity: amount > 0 ? 1 : 0.16,
+                    }}
+                    title={point.title || `${point.label || index}: ${formatCurrency(amount)}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="time-chart-xaxis" aria-hidden="true">
+          {series.map((point, index) => {
+            const label = renderLabel?.(point, index) ?? labels[index] ?? '';
+            return (
+              <span key={point.key ?? index} className={`time-chart-label${label ? '' : ' is-muted'}`}>
+                {label || '\u00A0'}
+              </span>
+            );
+          })}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const TimeDistribution = ({ timeDistribution }) => {
   const byHour = timeDistribution.byHour || {};
