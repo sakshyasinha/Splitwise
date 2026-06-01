@@ -728,7 +728,7 @@ const DashboardPage = ({ view = 'dashboard' }) => {
   const handleNotificationsRead = (nextCount = 0) => {
     setNotificationCount(nextCount);
   };
-  const profileDisplayName = userEmail ? userEmail.split('@')[0] : user?.name || 'User';
+  const profileDisplayName = String(user?.name || '').trim() || (userEmail ? userEmail.split('@')[0] : 'User');
 
   return (
     <>
@@ -812,6 +812,8 @@ const DashboardPage = ({ view = 'dashboard' }) => {
 
               <GroupList
                 groups={visibleGroupsForSearch}
+                searchQuery={dashboardSearchQuery}
+                onSearchChange={setDashboardSearchQuery}
                 selectedGroupId={selectedGroupId}
                 currentUserId={userId}
                 onGroupClick={openGroupDetailsFor}
@@ -861,7 +863,13 @@ const DashboardPage = ({ view = 'dashboard' }) => {
             <div className="left-column stack-lg">
               <Card title="My Profile" subtitle="Your signed-in account details">
                 <div className="profile-summary">
-                  <div className="profile-summary-avatar">{profileDisplayName.slice(0, 2).toUpperCase()}</div>
+                  <div className="profile-summary-avatar">
+                    {user?.avatarUrl ? (
+                      <img className="profile-summary-avatar-image" src={user.avatarUrl} alt="" aria-hidden="true" />
+                    ) : (
+                      profileDisplayName.slice(0, 2).toUpperCase()
+                    )}
+                  </div>
                   <div>
                     <div className="profile-summary-name">{profileDisplayName}</div>
                     <div className="profile-summary-email">{userEmail || 'No email available'}</div>

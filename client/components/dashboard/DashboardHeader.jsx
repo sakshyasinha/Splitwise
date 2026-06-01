@@ -21,14 +21,14 @@ export default function DashboardHeader({
   const location = useLocation();
   const navigate = useNavigate();
   const userEmail = String(user?.email || '').trim();
-  const emailName = userEmail.split('@')[0] || 'User';
-  const profileInitials = emailName
+  const profileName = String(user?.name || '').trim() || userEmail.split('@')[0] || 'User';
+  const profileInitials = profileName
     .split(/[._\-\s]+/)
     .filter(Boolean)
     .map((part) => part[0])
     .join('')
     .slice(0, 2)
-    .toUpperCase() || emailName.slice(0, 2).toUpperCase();
+    .toUpperCase() || profileName.slice(0, 2).toUpperCase();
 
   return (
     <header className="topbar">
@@ -60,15 +60,7 @@ export default function DashboardHeader({
           Analytics
         </NavLink>
       </nav>
-      <label className="topbar-search" aria-label="Search">
-        <span>⌕</span>
-        <input
-          type="search"
-          placeholder="Search groups, expenses, people..."
-          value={searchQuery}
-          onChange={(event) => onSearchChange?.(event.target.value)}
-        />
-      </label>
+      
       <div className="flex items-center gap-3">
         <div className="notification-popover-anchor">
           <button
@@ -83,8 +75,14 @@ export default function DashboardHeader({
           {notificationsDropdown}
         </div>
         <div className="profile-picture" aria-label="User menu" role="button" tabIndex={0}>
-          <span className="profile-initials">{profileInitials}</span>
-          <span className="profile-name">{emailName}</span>
+          <span className="profile-avatar-chip">
+            {user?.avatarUrl ? (
+              <img className="profile-avatar-image" src={user.avatarUrl} alt="" aria-hidden="true" />
+            ) : (
+              <span className="profile-initials">{profileInitials}</span>
+            )}
+          </span>
+          <span className="profile-name">{profileName}</span>
           <div className="profile-dropdown" role="menu" aria-label="Profile actions">
             <NavLink to="/profile" role="menuitem">My Profile</NavLink>
             <NavLink to="/settings" role="menuitem">Settings</NavLink>

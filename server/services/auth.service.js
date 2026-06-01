@@ -68,6 +68,18 @@ async function verifyGoogleCredential(credential) {
     return payload;
 }
 
+function normalizeGoogleUser(googleUser) {
+    const normalizedEmail = String(googleUser.email || '').trim().toLowerCase();
+    const displayName = String(googleUser.name || normalizedEmail.split('@')[0] || 'User').trim();
+
+    return {
+        email: normalizedEmail,
+        name: displayName,
+        avatarUrl: googleUser.picture || null,
+        googleId: googleUser.sub || null,
+    };
+}
+
 export const registerUser=async({name,email,password})=>{
     if (!name || !email || !password) {
         const error = new Error('name, email and password are required');
@@ -136,8 +148,8 @@ export const getGoogleAuthConfig = () => {
 };
 
 export const loginWithGoogle = async ({ credential }) => {
-    const googleUser = await verifyGoogleCredential(credential);
-    const normalizedEmail = String(googleUser.email || '').trim().toLowerCase();
+    const googleUser = normalizeGoogleUser(await verifyGoogleCredential(credential));
+    const normalizedEmail = googleUser.email;
 
     if (!normalizedEmail) {
         const error = new Error('Google account did not provide an email');
@@ -149,18 +161,18 @@ export const loginWithGoogle = async ({ credential }) => {
 
     if (!user) {
         user = await User.create({
-            name: String(googleUser.name || normalizedEmail.split('@')[0]).trim(),
+            name: googleUser.name,
             email: normalizedEmail,
             authProvider: 'google',
-            googleId: googleUser.sub,
-            avatarUrl: googleUser.picture || undefined,
+            googleId: googleUser.googleId,
+            avatarUrl: googleUser.avatarUrl || undefined,
             isTemporary: false
         });
     } else {
-        user.name = user.name || String(googleUser.name || normalizedEmail.split('@')[0]).trim();
-        user.authProvider = user.authProvider === 'local' && user.password ? 'local' : 'google';
-        user.googleId = user.googleId || googleUser.sub;
-        user.avatarUrl = googleUser.picture || user.avatarUrl;
+        user.name = googleUser.name;
+        user.authProvider = 'google';
+        user.googleId = googleUser.googleId || user.googleId;
+        user.avatarUrl = googleUser.avatarUrl || user.avatarUrl;
         user.isTemporary = false;
         await user.save();
     }
