@@ -384,13 +384,83 @@ const RelationshipAnalytics = ({ relationships }) => (
   </Card>
 );
 
+const TimeChart = ({
+  title,
+  peakLabel,
+  peakValue,
+  series,
+  maxAmount,
+  labels = [],
+  renderLabel,
+  columns = 24,
+  accentIndex = null,
+}) => (
+  <div className="time-section">
+    <h4>{title}</h4>
+    <div className="distribution-summary">
+      <div className="distribution-pill distribution-pill-accent">
+        <span className="distribution-pill-label">{peakLabel}</span>
+        <span className="distribution-pill-value">{peakValue}</span>
+      </div>
+    </div>
+    <div
+      className="time-chart"
+      style={{ '--chart-columns': columns }}
+      aria-label={title}
+    >
+      <div className="time-chart-grid">
+        {series.map((point, index) => {
+          const amount = Number(point.amount || 0);
+          const barHeight = maxAmount > 0 ? Math.max((amount / maxAmount) * 100, amount > 0 ? 10 : 4) : 4;
+          const isPeak = accentIndex !== null && index === accentIndex;
+          const label = renderLabel?.(point, index) ?? labels[index] ?? '';
+
+          return (
+            <div key={point.key ?? index} className={`time-chart-column${isPeak ? ' is-peak' : ''}${amount === 0 ? ' is-zero' : ''}`}>
+              <div className="time-chart-track">
+                <div
+                  className="time-chart-fill"
+                  style={{
+                    height: `${Math.min(barHeight, 100)}%`,
+                    opacity: amount > 0 ? 1 : 0.16,
+                  }}
+                  title={point.title || `${label || point.label || index}: ${formatCurrency(amount)}`}
+                />
+              </div>
+              <div className={`time-chart-label${label ? '' : ' is-muted'}`}>{label || '\u00A0'}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </div>
+);
+
 const TimeDistribution = ({ timeDistribution }) => {
   const byHour = timeDistribution.byHour || {};
   const byDayOfWeek = timeDistribution.byDayOfWeek || {};
-  const maxHourAmount = Math.max(...Object.values(byHour).map(Number), 0);
-  const maxDayAmount = Math.max(...Object.values(byDayOfWeek).map(Number), 0);
+  const hourSeries = Array.from({ length: 24 }, (_, hour) => ({
+    key: `hour-${hour}`,
+    hour,
+    amount: Number(byHour[hour] || 0),
+    title: `${hour}:00`,
+    label: `${hour}:00`,
+  }));
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const daySeries = dayNames.map((day, dayIndex) => ({
+    key: `day-${dayIndex}`,
+    day,
+    dayIndex,
+    amount: Number(byDayOfWeek[dayIndex] || 0),
+    title: day,
+    label: day,
+  }));
+  const maxHourAmount = Math.max(...hourSeries.map((point) => point.amount), 0);
+  const maxDayAmount = Math.max(...daySeries.map((point) => point.amount), 0);
   const peakHourAmount = Number(timeDistribution.peakHour?.amount ?? 0) || 0;
   const peakDayAmount = Number(timeDistribution.peakDay?.amount ?? 0) || 0;
+  const activeHourCount = hourSeries.filter((point) => point.amount > 0).length;
+  const activeDayCount = daySeries.filter((point) => point.amount > 0).length;
 
   if (Object.keys(byHour).length === 0 && Object.keys(byDayOfWeek).length === 0) {
     return null;
@@ -402,81 +472,53 @@ const TimeDistribution = ({ timeDistribution }) => {
       <div className="distribution-lede">
         When spend happens, at a glance.
       </div>
+      <div className="distribution-insights">
+        <div className="distribution-insight">
+          <span className="distribution-insight-label">Peak hour</span>
+          <strong>{timeDistribution.peakHour ? `${timeDistribution.peakHour.hour}:00` : '—'}</strong>
+          <span>{formatCurrency(peakHourAmount)}</span>
+        </div>
+        <div className="distribution-insight">
+          <span className="distribution-insight-label">Peak day</span>
+          <strong>{timeDistribution.peakDay?.day || '—'}</strong>
+          <span>{formatCurrency(peakDayAmount)}</span>
+        </div>
+        <div className="distribution-insight subtle">
+          <span className="distribution-insight-label">Hours with spend</span>
+          <strong>{activeHourCount}/24</strong>
+          <span>Distribution width</span>
+        </div>
+        <div className="distribution-insight subtle">
+          <span className="distribution-insight-label">Days with spend</span>
+          <strong>{activeDayCount}/7</strong>
+          <span>Spread across the week</span>
+        </div>
+      </div>
       <div className="time-sections">
         {Object.keys(byHour).length > 0 && (
-          <div className="time-section">
-            <h4>By Hour of Day</h4>
-            <div className="distribution-summary">
-              <div className="distribution-pill">
-                <span className="distribution-pill-label">Peak hour</span>
-                <span className="distribution-pill-value">
-                  {timeDistribution.peakHour?.hour}:00 · {formatCurrency(peakHourAmount)}
-                </span>
-              </div>
-            </div>
-            <div className="hour-chart">
-              {Object.entries(byHour).map(([hour, amount]) => {
-                const numericAmount = Number(amount) || 0;
-                const barHeight = maxHourAmount > 0 ? (numericAmount / maxHourAmount) * 100 : 0;
-
-                return (
-                  <div key={hour} className="hour-bar">
-                    <div
-                      className="hour-bar-fill"
-                      style={{
-                        height: `${Math.min(barHeight, 100)}%`
-                      }}
-                    />
-                    <div className="hour-label">{hour}:00</div>
-                  </div>
-                );
-              })}
-            </div>
-            {timeDistribution.peakHour && (
-              <div className="peak-info">
-                Peak: {timeDistribution.peakHour.hour}:00 ({formatCurrency(timeDistribution.peakHour.amount)})
-              </div>
-            )}
-          </div>
+          <TimeChart
+            title="By Hour of Day"
+            peakLabel="Peak hour"
+            peakValue={`${timeDistribution.peakHour?.hour}:00 · ${formatCurrency(peakHourAmount)}`}
+            series={hourSeries}
+            maxAmount={maxHourAmount}
+            columns={24}
+            accentIndex={timeDistribution.peakHour?.hour ?? null}
+            renderLabel={(point) => (point.hour % 3 === 0 || point.hour === timeDistribution.peakHour?.hour ? `${point.hour}:00` : '')}
+          />
         )}
 
         {Object.keys(byDayOfWeek).length > 0 && (
-          <div className="time-section">
-            <h4>By Day of Week</h4>
-            <div className="distribution-summary">
-              <div className="distribution-pill">
-                <span className="distribution-pill-label">Peak day</span>
-                <span className="distribution-pill-value">
-                  {timeDistribution.peakDay?.day} · {formatCurrency(peakDayAmount)}
-                </span>
-              </div>
-            </div>
-            <div className="day-chart">
-              {Object.entries(byDayOfWeek).map(([day, amount]) => {
-                const numericAmount = Number(amount) || 0;
-                const barHeight = maxDayAmount > 0 ? (numericAmount / maxDayAmount) * 100 : 0;
-
-                return (
-                  <div key={day} className="day-bar">
-                    <div
-                      className="day-bar-fill"
-                      style={{
-                        height: `${Math.min(barHeight, 100)}%`
-                      }}
-                    />
-                    <div className="day-label">
-                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {timeDistribution.peakDay && (
-              <div className="peak-info">
-                Peak: {timeDistribution.peakDay.day} ({formatCurrency(timeDistribution.peakDay.amount)})
-              </div>
-            )}
-          </div>
+          <TimeChart
+            title="By Day of Week"
+            peakLabel="Peak day"
+            peakValue={`${timeDistribution.peakDay?.day} · ${formatCurrency(peakDayAmount)}`}
+            series={daySeries}
+            maxAmount={maxDayAmount}
+            columns={7}
+            accentIndex={timeDistribution.peakDay?.day ? dayNames.indexOf(timeDistribution.peakDay.day) : null}
+            renderLabel={(point) => point.day}
+          />
         )}
       </div>
     </Card>
