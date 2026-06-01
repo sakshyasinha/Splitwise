@@ -9,6 +9,16 @@ export const setupMessageSocket = (io) => {
   messageNamespace.on('connection', (socket) => {
     logger.info('Socket connected', { socketId: socket.id, userId: socket.userId });
 
+    // Join a per-user room so server can target notifications directly
+    try {
+      if (socket.userId) {
+        socket.join(`user:${socket.userId}`);
+        logger.info('Socket joined user room', { socketId: socket.id, userId: socket.userId });
+      }
+    } catch (err) {
+      logger.warn('Failed to join user room', { socketId: socket.id, error: err.message });
+    }
+
     socket.on('join-expense', (expenseId, callback) => {
       try {
         if (!expenseId) {

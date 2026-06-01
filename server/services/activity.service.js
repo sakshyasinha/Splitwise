@@ -94,6 +94,60 @@ try {
     Activity = mongoose.model('Activity', activitySchema);
 }
 
+let activitySocketIO = null;
+
+export const setActivitySocketIO = (io) => {
+    activitySocketIO = io;
+};
+
+const getActivityTargetUserIds = (activity) => {
+    const ids = new Set();
+
+    const addId = (value) => {
+        const id = String(value?._id || value?.id || value || '').trim();
+        if (id) {
+            ids.add(id);
+        }
+    };
+
+    addId(activity?.userId);
+    (activity?.mentionedUsers || []).forEach(addId);
+
+    return Array.from(ids);
+};
+
+const emitActivityCreated = (activity) => {
+    if (!activitySocketIO) {
+        return;
+    }
+
+    try {
+        const payload = {
+            activity,
+            activityId: String(activity?._id || ''),
+            type: activity?.type,
+        };
+
+        for (const userId of getActivityTargetUserIds(activity)) {
+            activitySocketIO.of('/messages').to(`user:${userId}`).emit('activity-created', payload);
+        }
+    } catch (error) {
+        console.error('Failed to emit activity-created:', error);
+    }
+};
+
+const getUserActivityVisibilityQuery = (userId) => {
+    const id = String(userId || '');
+    const userObjectId = mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id;
+
+    return {
+        $or: [
+            { userId: userObjectId },
+            { mentionedUsers: userObjectId }
+        ]
+    };
+};
+
 /**
  * Create an activity log entry
  * @param {Object} activityData - Activity data
@@ -111,6 +165,8 @@ export const createActivity = async (activityData) => {
         if (activity.expenseId) {
             await activity.populate('expenseId', 'description amount');
         }
+
+        emitActivityCreated(activity);
 
         return activity;
     } catch (error) {
@@ -135,12 +191,7 @@ export const getUserActivityFeed = async (userId, options = {}) => {
             groupId = null
         } = options;
 
-        const query = {
-            $or: [
-                { userId }, // Activities where user is the actor
-                { mentionedUsers: userId } // Activities where user is mentioned
-            ]
-        };
+        const query = getUserActivityVisibilityQuery(userId);
 
         if (unreadOnly) {
             query.isRead = false;
@@ -228,10 +279,7 @@ export const markActivitiesAsRead = async (userId, activityIds) => {
         const result = await Activity.updateMany(
             {
                 _id: { $in: objectIds },
-                $or: [
-                    { userId },
-                    { mentionedUsers: userId }
-                ]
+                ...getUserActivityVisibilityQuery(userId)
             },
             { isRead: true }
         );
@@ -258,6 +306,7 @@ export const markActivitiesAsRead = async (userId, activityIds) => {
 
         return {
             modifiedCount: result.modifiedCount,
+            readActivityIds: objectIds.map((id) => id.toString()),
             message: `Marked ${result.modifiedCount} activities as read`
         };
     } catch (error) {
@@ -275,10 +324,7 @@ export const markAllActivitiesAsRead = async (userId) => {
     try {
         const result = await Activity.updateMany(
             {
-                $or: [
-                    { userId },
-                    { mentionedUsers: userId }
-                ],
+                ...getUserActivityVisibilityQuery(userId),
                 isRead: false
             },
             { isRead: true }
@@ -313,10 +359,7 @@ export const markAllActivitiesAsRead = async (userId) => {
 export const getUnreadNotificationCount = async (userId) => {
     try {
         const count = await Activity.countDocuments({
-            $or: [
-                { userId },
-                { mentionedUsers: userId }
-            ],
+            ...getUserActivityVisibilityQuery(userId),
             isRead: false
         });
 
@@ -593,6 +636,7 @@ export const getActivityStatistics = async (userId) => {
 };
 
 export default {
+    setActivitySocketIO,
     createActivity,
     getUserActivityFeed,
     getGroupActivityFeed,

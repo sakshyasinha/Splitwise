@@ -26,9 +26,10 @@ import { isExpense as isExpenseTx } from '../../utils/transactionUtils.js';
 import { getPersonLabel } from '../../utils/personUtils.js';
 import { normalizeGroupName, dedupeValues, prettifyGroupType } from '../../utils/stringUtils.js';
 import { getUnreadNotificationCount } from '../../services/activity.service.js';
+import { initSocket } from '../../src/services/socket.service.js';
 
 const DashboardPage = ({ view = 'dashboard' }) => {
-  const { logout, user } = useAuth();
+  const { logout, token, user } = useAuth();
   const {
     expenses,
     groups,
@@ -66,7 +67,7 @@ const DashboardPage = ({ view = 'dashboard' }) => {
   const refreshNotificationCount = async () => {
     try {
       const data = await getUnreadNotificationCount();
-      setNotificationCount(Number(data?.count || 0));
+      setNotificationCount(Number(data?.count ?? 0));
     } catch (error) {
       console.error('Error loading unread notification count:', error);
     }
@@ -138,6 +139,28 @@ const DashboardPage = ({ view = 'dashboard' }) => {
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
+
+  useEffect(() => {
+    if (!token) {
+      return undefined;
+    }
+
+    const socket = initSocket(token);
+    if (!socket) {
+      return undefined;
+    }
+
+    const handleActivityCreated = () => {
+      refreshNotificationCount();
+      window.dispatchEvent(new Event('splitwise:notifications-updated'));
+    };
+
+    socket.on('activity-created', handleActivityCreated);
+
+    return () => {
+      socket.off('activity-created', handleActivityCreated);
+    };
+  }, [token]);
 
   useEffect(() => {
     if (!activeModal) {

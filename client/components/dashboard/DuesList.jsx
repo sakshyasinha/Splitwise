@@ -13,6 +13,7 @@ import { formatCurrency } from '../../utils/formatCurrency.js';
  * @param {boolean} props.grouped - Show dues grouped by group name
  */
 export default function DuesList({ dues, settlingExpenseId, onSettleDue, currentUserId = null, grouped = false }) {
+  const safeDues = Array.isArray(dues) ? dues : [];
   const getRowKey = (due) => String(due?.transactionId || due?.sourceExpenseId || due?.expenseId || due?._id || '');
   const getDisplayName = (party) => party?.displayName || party?.name || party?.email || 'Unknown User';
   const getAvatarInitial = (party) => getDisplayName(party).trim().charAt(0).toUpperCase() || '?';
@@ -30,29 +31,25 @@ export default function DuesList({ dues, settlingExpenseId, onSettleDue, current
   const groupedDues = useMemo(() => {
     const groups = new Map();
 
-    (dues || [])
-  .filter((due) => due.group?._id || due.group?.id || due.group?.name)
-  .forEach((due) => {
-      const groupId =
-  due.group?._id ||
-  due.group?.id ||
-  due.group?.name;
+    safeDues
+      .filter((due) => due?.group?._id || due?.group?.id || due?.group?.name)
+      .forEach((due) => {
+        const groupId = due.group?._id || due.group?.id || due.group?.name;
+        const groupName = due.group?.name || 'Ungrouped';
 
-const groupName = due.group?.name;
+        if (!groups.has(groupId)) {
+          groups.set(groupId, {
+            groupId,
+            groupName,
+            dues: [],
+          });
+        }
 
-      if (!groups.has(groupId)) {
-        groups.set(groupId, {
-          groupId,
-          groupName,
-          dues: [],
-        });
-      }
-
-      groups.get(groupId).dues.push(due);
-    });
+        groups.get(groupId).dues.push(due);
+      });
 
     return Array.from(groups.values()).sort((left, right) => left.groupName.localeCompare(right.groupName));
-  }, [dues]);
+  }, [safeDues]);
 
   return (
     <div id="my-dues-card">
@@ -63,13 +60,13 @@ const groupName = due.group?.name;
               <h2>My Dues</h2>
               <p>{grouped ? 'Grouped by group for faster settling' : 'Settle up directly from here'}</p>
             </div>
-            <span className={`badge ${dues.length === 0 ? 'badge-green' : 'badge-red'}`}>
-              {dues.length === 0 ? 'Settled' : `${dues.length} pending`}
+            <span className={`badge ${safeDues.length === 0 ? 'badge-green' : 'badge-red'}`}>
+              {safeDues.length === 0 ? 'Settled' : `${safeDues.length} pending`}
             </span>
           </div>
         </div>
         <div className="card-content">
-          {dues.length === 0 ? (
+          {safeDues.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">✅</div>
               You don't owe anyone right now.
@@ -91,7 +88,7 @@ const groupName = due.group?.name;
 
                     <ul className="expense-list">
                       {group.dues.map((due) => (
-                                <li key={getRowKey(due)} className="expense-item">
+                        <li key={getRowKey(due)} className="expense-item">
                           <div className="due-avatar" style={{ background: 'var(--danger-dim)', color: 'var(--danger)' }}>
                             {getAvatarInitial(due.paidTo)}
                           </div>
@@ -127,7 +124,7 @@ const groupName = due.group?.name;
             </div>
           ) : (
             <ul className="expense-list">
-              {dues.map((due) => (
+              {safeDues.map((due) => (
                 <li key={getRowKey(due)} className="expense-item">
                   <div className="due-avatar" style={{ background: 'var(--danger-dim)', color: 'var(--danger)' }}>
                     {getAvatarInitial(due.paidTo)}

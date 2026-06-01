@@ -24,15 +24,6 @@ export const sendNudgeEmail = async (req, res) => {
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
-    const nudgeLimit = rateLimiter.check(fromUserId, 'nudge');
-    if (!nudgeLimit.allowed) {
-      return res.status(429).json({
-        message: nudgeLimit.message,
-        remaining: nudgeLimit.remaining,
-        resetTime: nudgeLimit.resetTime
-      });
-    }
-
     // Validate amount
     const numericAmount = Number(amount);
     if (isNaN(numericAmount) || numericAmount <= 0) {
@@ -72,6 +63,16 @@ export const sendNudgeEmail = async (req, res) => {
     } catch (balanceError) {
       logger.error('Error verifying debt relationship:', balanceError);
       // Continue anyway - let the email service handle validation
+    }
+
+    const nudgeScope = [groupId, toUserId].map((value) => String(value || '').trim()).join(':');
+    const nudgeLimit = rateLimiter.check(fromUserId, 'nudge', nudgeScope);
+    if (!nudgeLimit.allowed) {
+      return res.status(429).json({
+        message: nudgeLimit.message,
+        remaining: nudgeLimit.remaining,
+        resetTime: nudgeLimit.resetTime
+      });
     }
 
     // Send the nudge email

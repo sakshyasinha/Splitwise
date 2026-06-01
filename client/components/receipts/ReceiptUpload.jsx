@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import Card from '../ui/Card.jsx';
 import Modal from '../ui/Modal.jsx';
 import Button from '../ui/Button.jsx';
+import API from '../../services/api.js';
 
 const ReceiptUpload = ({ expenseId, onUploadSuccess, existingReceipts = [] }) => {
   const [uploading, setUploading] = useState(false);
@@ -47,27 +48,16 @@ const ReceiptUpload = ({ expenseId, onUploadSuccess, existingReceipts = [] }) =>
   const uploadFile = async (file) => {
     try {
       setUploading(true);
-      const token = localStorage.getItem('token');
 
       const formData = new FormData();
       formData.append('receipt', file);
 
-      const response = await fetch(`/api/receipts/${expenseId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
+      const { data } = await API.post(`/receipts/${expenseId}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to upload receipt');
-      }
-
-      const result = await response.json();
-
       if (onUploadSuccess) {
-        onUploadSuccess(result);
+        onUploadSuccess(data);
       }
 
       setPreviewImage(null);
@@ -85,19 +75,7 @@ const ReceiptUpload = ({ expenseId, onUploadSuccess, existingReceipts = [] }) =>
     if (!confirm('Are you sure you want to delete this receipt?')) return;
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/receipts/${expenseId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ fileUrl })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete receipt');
-      }
+      await API.delete(`/receipts/${expenseId}`, { data: { fileUrl } });
 
       if (onUploadSuccess) {
         onUploadSuccess({ deleted: true, fileUrl });
@@ -109,19 +87,7 @@ const ReceiptUpload = ({ expenseId, onUploadSuccess, existingReceipts = [] }) =>
 
   const handleSetPrimary = async (fileUrl) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/receipts/${expenseId}/primary`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ fileUrl })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to set primary receipt');
-      }
+      await API.put(`/receipts/${expenseId}/primary`, { fileUrl });
 
       if (onUploadSuccess) {
         onUploadSuccess({ primarySet: true, fileUrl });

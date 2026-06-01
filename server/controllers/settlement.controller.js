@@ -414,7 +414,11 @@ export const sendPaymentReminder = async (req, res) => {
       return res.status(400).json({ message: 'Cannot send reminder to yourself' });
     }
 
-    const nudgeLimit = rateLimiter.check(fromUserId, 'nudge');
+    // Create reminder activity notification
+    const reminderMessage = message || `Hey, just reminding you that you owe ₹${amount}. Please settle when you can!`;
+
+    const nudgeScope = [groupId, toUserId].map((value) => String(value || '').trim()).join(':');
+    const nudgeLimit = rateLimiter.check(fromUserId, 'nudge', nudgeScope);
     if (!nudgeLimit.allowed) {
       return res.status(429).json({
         message: nudgeLimit.message,
@@ -422,9 +426,6 @@ export const sendPaymentReminder = async (req, res) => {
         resetTime: nudgeLimit.resetTime
       });
     }
-
-    // Create reminder activity notification
-    const reminderMessage = message || `Hey, just reminding you that you owe ₹${amount}. Please settle when you can!`;
     
     const activity = await createPaymentReminderActivity(
       fromUserId,

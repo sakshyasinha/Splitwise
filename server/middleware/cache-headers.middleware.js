@@ -24,14 +24,29 @@ const cacheHeadersMiddleware = (req, res, next) => {
       // Groups list changes occasionally - cache for 3 minutes
       res.set('Cache-Control', 'private, max-age=180');
     } else if (path.includes('/expenses') && req.method === 'GET') {
-      // Expenses list changes occasionally - cache for 2 minutes
-      res.set('Cache-Control', 'private, max-age=120');
+      if (
+        path.includes('/expenses/my') ||
+        path.includes('/expenses/lent') ||
+        path.includes('/expenses/breakdown') ||
+        path.includes('/expenses/friends')
+      ) {
+        // User-specific debt and balance views must update immediately after settle-up actions.
+        res.set('Cache-Control', 'no-store');
+      } else {
+        // Expenses list changes occasionally - cache for 2 minutes
+        res.set('Cache-Control', 'private, max-age=120');
+      }
     } else if (path.includes('/settlements') && req.method === 'GET') {
       // Settlement data changes occasionally - cache for 3 minutes
       res.set('Cache-Control', 'private, max-age=180');
     } else if (path.includes('/activity') && req.method === 'GET') {
-      // Activity data changes frequently - cache for 1 minute
-      res.set('Cache-Control', 'private, max-age=60');
+      if (path.includes('/activity/feed') || path.includes('/activity/unread-count')) {
+        // Notification state must refresh immediately after mark-as-read actions.
+        res.set('Cache-Control', 'no-store');
+      } else {
+        // Activity statistics can tolerate a short cache window.
+        res.set('Cache-Control', 'private, max-age=60');
+      }
     } else if (req.method === 'GET') {
       // Default for other GET requests - cache for 1 minute
       res.set('Cache-Control', 'private, max-age=60');

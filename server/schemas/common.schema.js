@@ -28,6 +28,6 @@ export const categories = [
   'Education',
   'Other',
 ];
-export const groupTypes = ['Trip', 'Roommates', 'Friends', 'Family', 'Project', 'Other'];
+export const groupTypes = ['trip', 'home', 'couple', 'office', 'friends', 'other'];
 
 export default commonSchemas;

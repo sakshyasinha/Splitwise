@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { login as loginService, register as registerService } from '../services/auth.service.js';
+import { login as loginService, loginWithGoogle as loginWithGoogleService, register as registerService } from '../services/auth.service.js';
 import useExpenseStore from './expense.store.js';
 
 function decodeTokenUser(token) {
@@ -84,6 +84,25 @@ const useAuthStore = create((set, get) => ({
             set({
                 loading: false,
                 error: error?.response?.data?.message || error.message || 'Register failed'
+            });
+            throw error;
+        }
+    },
+    loginWithGoogle: async (credential) => {
+        set({ loading: true, error: null });
+        try {
+            const data = await loginWithGoogleService({ credential });
+            if (!data.token) {
+                throw new Error('Token missing in Google login response');
+            }
+            persistSession({ token: data.token, user: data.user || null });
+            useExpenseStore.getState().resetState();
+            set({ token: data.token, user: data.user || decodeTokenUser(data.token), loading: false });
+            return data;
+        } catch (error) {
+            set({
+                loading: false,
+                error: error?.response?.data?.message || error.message || 'Google sign-in failed'
             });
             throw error;
         }

@@ -1,11 +1,17 @@
 import joi from 'joi';
-import { currencies, groupTypes } from './common.schema.js';
+import { commonSchemas, currencies, groupTypes } from './common.schema.js';
 
 export const createGroupSchema = joi.object({
   name: joi.string().required().min(2).max(100).trim(),
   type: joi.string().valid(...groupTypes).required(),
   description: joi.string().max(500).trim().optional(),
   currency: joi.string().valid(...currencies).default('INR'),
+  members: joi.array().items(
+    joi.alternatives().try(
+      commonSchemas.objectId,
+      joi.string().email().lowercase().trim()
+    )
+  ).default([]),
 });
 
 export const updateGroupSchema = joi.object({
@@ -16,11 +22,17 @@ export const updateGroupSchema = joi.object({
 });
 
 export const addGroupMemberSchema = joi.object({
-  userId: joi.string().regex(/^[0-9a-fA-F]{24}$/).required(),
+  memberId: joi.alternatives().try(
+    commonSchemas.objectId,
+    joi.string().email().lowercase().trim()
+  ).required(),
 });
 
 export const removeGroupMemberSchema = joi.object({
-  userId: joi.string().regex(/^[0-9a-fA-F]{24}$/).required(),
+  memberId: joi.alternatives().try(
+    commonSchemas.objectId,
+    joi.string().email().lowercase().trim()
+  ).required(),
 });
 
 export default {

@@ -14,9 +14,10 @@ import { getExpensePendingCount, isExpenseFullySettled } from '../../utils/expen
 const CATEGORIES = ['Food', 'Travel', 'Events', 'Utilities', 'Shopping', 'General', 'Rent', 'Transport', 'Entertainment', 'Healthcare', 'Education', 'Other'];
 const SPLIT_TYPES = ['equal', 'percentage', 'shares', 'itemized', 'adjustment', 'custom', 'payment'];
 
-export default function ExpenseList({ onEdit }) {
+export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
   const { user, token } = useAuth();
   const { expenses = [], loading, error, updateExpense, deleteExpense } = useExpenses();
+  const currentUserId = String(user?._id || user?.id || '');
   const toast = useToast();
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ description: '', amount: '' });
@@ -44,19 +45,26 @@ export default function ExpenseList({ onEdit }) {
     [form]
   );
 
+  const expenseRows = useMemo(
+    () => (expenses || []).filter((tx) => isExpenseTx(tx)),
+    [expenses]
+  );
+
+  const paymentRows = useMemo(
+    () => (expenses || []).filter((tx) => isPaymentTx(tx)),
+    [expenses]
+  );
+
   // Filter expenses based on search and filter criteria
   const filteredExpenses = useMemo(() => {
     // Choose base set: show true expenses by default, but allow payments when user requests that status
     const normalizedStatus = String(selectedStatus || '').toLowerCase();
-    let base = (expenses || []).filter((tx) => isExpenseTx(tx));
-    if (normalizedStatus === 'payment') {
-      base = (expenses || []).filter((tx) => isPaymentTx(tx));
-    }
+    const base = normalizedStatus === 'payment' ? paymentRows : expenseRows;
+    const query = (searchQuery || externalSearchQuery).trim().toLowerCase();
 
     return base.filter(expense => {
       // Search query filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
+      if (query) {
         const description = (expense.description || '').toLowerCase();
         const groupName = (expense.group?.name || '').toLowerCase();
         const paidByName = (expense.paidBy?.name || expense.paidBy?.email || '').toLowerCase();
@@ -121,7 +129,10 @@ export default function ExpenseList({ onEdit }) {
 
       return true;
     });
-  }, [expenses, searchQuery, selectedCategory, selectedSplitType, selectedStatus, amountRange, dateRange]);
+  }, [expenseRows, paymentRows, searchQuery, externalSearchQuery, selectedCategory, selectedSplitType, selectedStatus, amountRange, dateRange]);
+
+  const baseItemCount = selectedStatus === 'payment' ? paymentRows.length : expenseRows.length;
+  const itemLabel = selectedStatus === 'payment' ? 'payments' : 'expenses';
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -291,9 +302,7 @@ export default function ExpenseList({ onEdit }) {
 
   const removeExpense = async (expenseId) => {
     try {
-      console.log('Current expenses count:', expenses.length);
       await deleteExpense(expenseId);
-      console.log('Delete completed');
       toast.success('Expense deleted successfully');
       if (editingId === expenseId) cancelEdit();
       setConfirmDelete(null);
@@ -323,7 +332,7 @@ export default function ExpenseList({ onEdit }) {
             <h2>Recent Expenses</h2>
             <p>Add, edit, or delete your entries</p>
           </div>
-          <span className="badge badge-violet">{filteredExpenses.length} of {expenses.length} items</span>
+          <span className="badge badge-violet">{filteredExpenses.length} of {baseItemCount} {itemLabel}</span>
         </div>
       </div>
 
@@ -471,7 +480,7 @@ export default function ExpenseList({ onEdit }) {
         {error && <p className="banner error">{error}</p>}
 
         {/* ── EMPTY FILTERED RESULTS ── */}
-        {!loading && filteredExpenses.length === 0 && expenses.length > 0 && (
+        {!loading && filteredExpenses.length === 0 && baseItemCount > 0 && (
           <div className="empty-state">
             <div className="empty-icon">🔍</div>
             No expenses match your filters, try adjusting your search criteria.
@@ -479,7 +488,7 @@ export default function ExpenseList({ onEdit }) {
         )}
 
         {/* ── EMPTY ── */}
-        {!loading && expenses.length === 0 && (
+        {!loading && baseItemCount === 0 && (
           <div className="empty-state">
             <div className="empty-icon">🧾</div>
             No expenses yet, add your first one above.
@@ -488,10 +497,10 @@ export default function ExpenseList({ onEdit }) {
 
         {/* ── LIST ── */}
         {!loading && filteredExpenses.length > 0 && (
-          <ul className="expense-list">
+          <ul className="expense-list recent-expense-list">
             {filteredExpenses.map((expense) => {
               const paidById = expense.paidBy?._id || expense.paidBy;
-              const canManage = user?.id && String(paidById) === String(user.id);
+              const canManage = currentUserId && String(paidById) === currentUserId;
               const isEditing = editingId === expense._id;
               const isConfirming = confirmDelete === expense._id;
               const sharedGraph = expense.sharedGraph || {};
@@ -520,7 +529,7 @@ export default function ExpenseList({ onEdit }) {
 
                   {/* ICON */}
                   {!isEditing && (
-                    <div style={{ position: 'relative' }}>
+                    <div className="expense-leading" style={{ position: 'relative' }}>
                       <CategoryIcon category={expense.category} />
                       {expense.splitType === 'payment' && (
                         <div style={{
@@ -627,8 +636,8 @@ export default function ExpenseList({ onEdit }) {
                             </div>
                           </>
                         )}
-                        <div className="expense-meta" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div className="expense-meta expense-involved-row" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div className="expense-involved-people" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <strong style={{ fontWeight: 700 }}>Involved:</strong>
                             <span>{involvedPeople.join(' · ')}</span>
                           </div>
@@ -665,7 +674,7 @@ export default function ExpenseList({ onEdit }) {
                         {/* ACTION ROW */}
                         {canManage && !isSettled ? (
                           isConfirming ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                            <div className="expense-action-row" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
                               <span className="text-sm" style={{ color: 'var(--danger)' }}>Delete?</span>
                               <button
                                 type="button"
@@ -686,12 +695,12 @@ export default function ExpenseList({ onEdit }) {
                               </button>
                             </div>
                           ) : (
-                            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                            <div className="expense-action-row" style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                               <button
                                 type="button"
                                 className="btn btn-ghost"
                                 style={{ fontSize: 11, padding: '4px 10px' }}
-                                onClick={() => onEdit(expense)}
+                                onClick={() => (onEdit ? onEdit(expense) : handleEdit(expense))}
                               >
                                 Edit
                               </button>
@@ -717,7 +726,7 @@ export default function ExpenseList({ onEdit }) {
 
                   {/* AMOUNT — hidden in edit mode */}
                   {!isEditing && (
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div className="expense-summary">
                       {(() => {
                         // Show green for settled items or when the current user is the payer
                         const displayTone = (isSettled || canManage) ? 'var(--success)' : 'var(--danger)';
@@ -738,14 +747,14 @@ export default function ExpenseList({ onEdit }) {
                               </div>
                             )}
                             {/* small chat button below amount for easier access */}
-                            <div style={{ marginTop: 8, position: 'relative', display: 'inline-block' }}>
+                            <div className="expense-chat-action" style={{ marginTop: 8, position: 'relative', display: 'inline-block' }}>
                               <button
                                 className="btn btn-ghost"
                                 style={{ fontSize: 12, padding: '4px 8px' }}
                                 onClick={(event) => openChat(expense, event.currentTarget)}
                                 aria-label={`Open chat for ${expense.description || 'expense'}`}
                               >
-                                 Chat
+                                Chat
                               </button>
                               {unreadCount > 0 && (
                                 <span className="chat-badge" title={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}>

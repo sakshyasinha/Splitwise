@@ -19,6 +19,23 @@ export const loginUser=async(req,res)=>{
     }
 };
 
+export const getGoogleAuthConfig=async(_req,res)=>{
+    try {
+        res.json(authService.getGoogleAuthConfig());
+    } catch (error) {
+        res.status(error.statusCode || 500).json({ message: error.message });
+    }
+};
+
+export const googleLogin=async(req,res)=>{
+    try {
+        const data = await authService.loginWithGoogle(req.body);
+        res.json(data);
+    } catch (error) {
+        res.status(error.statusCode || 500).json({ message: error.message });
+    }
+};
+
 export const refreshToken=async(req,res)=>{
     try {
         const { refreshToken } = req.body;

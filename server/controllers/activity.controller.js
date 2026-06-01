@@ -10,7 +10,7 @@ export const getUserActivityFeed = async (req, res) => {
         const options = {
             limit: parseInt(req.query.limit) || 20,
             skip: parseInt(req.query.skip) || 0,
-            unreadOnly: req.query.unreadOnly === 'true',
+            unreadOnly: req.query.unreadOnly == null ? true : req.query.unreadOnly === 'true',
             type: req.query.type || null,
             groupId: req.query.groupId || null
         };

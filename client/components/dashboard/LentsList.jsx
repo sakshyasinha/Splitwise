@@ -31,7 +31,8 @@ export default function LentsList({ lents }) {
     }
 
     try {
-      setNudgingId(lent.expenseId);
+      const rowKey = getRowKey(lent);
+      setNudgingId(rowKey);
         await sendPaymentReminder(
           debtorId,
           lent.amount,
@@ -43,8 +44,9 @@ export default function LentsList({ lents }) {
         try { window.dispatchEvent(new Event('splitwise:notifications-updated')); } catch (e) { /* ignore */ }
     } catch (error) {
       console.error('Error sending nudge:', error);
+      const retryAfter = error?.response?.data?.retryAfter || error?.response?.data?.resetTime;
       const message = error?.response?.data?.message || error.message || 'Failed to send reminder';
-      toast.error(message);
+      toast.error(retryAfter ? `${message} Try again in ${retryAfter}s.` : message);
     } finally {
       setNudgingId(null);
     }
@@ -89,10 +91,10 @@ export default function LentsList({ lents }) {
                     type="button"
                     className="btn btn-ghost"
                     onClick={() => handleNudge(lent)}
-                    disabled={nudgingId === lent.expenseId}
+                    disabled={nudgingId === getRowKey(lent)}
                     style={{ fontSize: 11, padding: '4px 8px', minWidth: 'auto' }}
                   >
-                    {nudgingId === lent.expenseId ? 'Sending…' : ' Nudge'}
+                    {nudgingId === getRowKey(lent) ? 'Sending…' : ' Nudge'}
                   </button>
                 </div>
               </li>

@@ -274,6 +274,7 @@ const buildSharedExpenseGraph = (expense) => {
 const decorateLedgerExpense = (expense) => {
     const normalizedExpense = expense?.toObject ? expense.toObject() : { ...expense };
     const sharedGraph = buildSharedExpenseGraph(expense);
+    const transactionType = sharedGraph?.ledgerNode?.transactionType || (String(normalizedExpense.splitType || '').toLowerCase() === 'payment' ? 'settlement' : 'expense');
 
     return {
         ...normalizedExpense,
@@ -284,6 +285,8 @@ const decorateLedgerExpense = (expense) => {
         ledgerState: isExpenseFullySettled(expense) ? 'settled' : 'pending',
         isSettled: isExpenseFullySettled(expense),
         expenseKind: sharedGraph.expenseKind,
+        transactionType,
+        type: transactionType,
         sharedGraph,
         ledgerNode: sharedGraph.ledgerNode || sharedGraph
     };
@@ -1053,7 +1056,14 @@ export const settleDue = async (userId, expenseId) => {
 
     setImmediate(async () => {
         try {
-            await createExpenseActivity('expense_settled', expense, userId, [userId]);
+            const mentionedUsers = Array.from(new Set([
+                expense.paidBy?._id || expense.paidBy || null,
+                expense.createdBy?._id || expense.createdBy || null,
+                ...(expense.payers || []).map((payer) => payer?.userId?._id || payer?.userId || null),
+                ...(expense.participants || []).map((participant) => participant?.userId?._id || participant?.userId || null)
+            ].map((value) => String(value || '').trim()).filter((value) => value && value !== String(userId))));
+
+            await createExpenseActivity('expense_settled', expense, userId, mentionedUsers);
         } catch (error) {
             console.error('Failed to create expense settled activity:', error);
         }

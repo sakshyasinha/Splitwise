@@ -120,6 +120,8 @@ export default function NotificationsPanel({ onClose, onUnreadCountChange }) {
     try {
       await markAllActivitiesAsRead();
       toast.success('Notifications marked as read');
+      setActivities([]);
+      onUnreadCountChange?.(0);
       const unread = await loadNotifications({ silent: true });
       onUnreadCountChange?.((unread && unread.length) || 0);
     } catch (notificationError) {
@@ -132,8 +134,11 @@ export default function NotificationsPanel({ onClose, onUnreadCountChange }) {
     try {
       await markActivitiesAsRead([activityId]);
       toast.success('Notification marked as read');
-      const unread = await loadNotifications({ silent: true });
-      onUnreadCountChange?.((unread && unread.length) || 0);
+      setActivities((currentActivities) => {
+        const nextActivities = currentActivities.filter((activity) => String(activity._id) !== String(activityId));
+        onUnreadCountChange?.(nextActivities.filter((activity) => !activity.isRead).length);
+        return nextActivities;
+      });
     } catch (notificationError) {
       const message = notificationError?.response?.data?.message || notificationError.message || 'Failed to mark notification as read';
       toast.error(message);

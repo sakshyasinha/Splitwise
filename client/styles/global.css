@@ -305,6 +305,60 @@ textarea:focus-visible {
   justify-self: end;
 }
 
+.google-auth-slot {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.google-auth-slot[hidden] {
+  display: none;
+}
+
+.google-auth-button {
+  width: 100%;
+  max-width: 360px;
+  min-height: 44px;
+  display: flex;
+  justify-content: center;
+}
+
+.google-auth-button iframe {
+  max-width: 100%;
+}
+
+.google-auth-placeholder {
+  width: 100%;
+  max-width: 360px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted2);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border2);
+}
+
 .dashboard-layout {
   position: relative;
   z-index: 1;
@@ -1094,6 +1148,93 @@ select.input option {
   color: var(--muted);
   text-align: right;
   margin-top: 4px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.expense-summary {
+  text-align: right;
+  flex: 1 1 200px;
+  min-width: 0;
+  max-width: min(100%, 260px);
+}
+
+.expense-summary .expense-share {
+  margin-left: auto;
+}
+
+.recent-expense-list {
+  container-type: inline-size;
+}
+
+.recent-expense-list > .expense-item {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) max-content;
+  grid-template-areas: 'icon info summary';
+  align-items: start;
+  gap: 12px 16px;
+}
+
+.recent-expense-list > .expense-item > .expense-leading {
+  grid-area: icon;
+}
+
+.recent-expense-list > .expense-item > .expense-info {
+  grid-area: info;
+  min-width: 0;
+}
+
+.recent-expense-list > .expense-item > .expense-summary {
+  grid-area: summary;
+  justify-self: end;
+  flex: none;
+  width: max-content;
+  max-width: 180px;
+  text-align: right;
+}
+
+.recent-expense-list .expense-title,
+.recent-expense-list .expense-meta,
+.recent-expense-list .expense-share {
+  letter-spacing: 0;
+}
+
+.recent-expense-list .expense-involved-row,
+.recent-expense-list .expense-involved-people,
+.recent-expense-list .expense-action-row {
+  flex-wrap: wrap;
+}
+
+.recent-expense-list .expense-involved-people {
+  min-width: 0;
+}
+
+.recent-expense-list .expense-involved-people span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.recent-expense-list > .expense-item .expense-summary .expense-share {
+  margin-left: 0;
+  max-width: 180px;
+}
+
+.recent-expense-list > .expense-item .expense-summary .btn {
+  min-width: 0;
+}
+
+@container (max-width: 520px) {
+  .recent-expense-list > .expense-item {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'icon summary'
+      'info info';
+    gap: 12px;
+  }
+
+  .recent-expense-list > .expense-item > .expense-summary {
+    max-width: min(100%, 190px);
+  }
 }
 
 .chips {

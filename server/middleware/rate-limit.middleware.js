@@ -88,6 +88,11 @@ export const settlementsEndpointsLimiter = createRateLimiter({
 export const nudgeEndpointsLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   maxRequests: 5,
-  keyGenerator: (req) => req.user?.id,
+  keyGenerator: (req) => [
+    req.user?.id || req.ip,
+    'nudge',
+    req.body?.groupId || 'global',
+    req.body?.toUserId || req.body?.toEmail || 'unknown'
+  ].join(':'),
   message: 'Too many nudges sent. Please try again later',
 });

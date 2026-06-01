@@ -25,6 +25,7 @@ import analyticsRoutes from './routes/analytics.routes.js';
 import messageRoutes from './routes/message.routes.js';
 import unreadRoutes from './routes/unread.routes.js';
 import { initUnreadQueue } from './queues/unread.queue.js';
+import { setActivitySocketIO } from './services/activity.service.js';
 import cacheHeadersMiddleware from './middleware/cache-headers.middleware.js';
 import requestIdMiddleware from './middleware/request-id.middleware.js';
 import securityHeadersMiddleware from './middleware/security-headers.middleware.js';
@@ -99,6 +100,7 @@ app.use("/api/recurring-expenses", recurringExpenseRoutes);
 
 app.use("/api/receipts", receiptRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/unreads', unreadRoutes);
 
 app.use("/api/analytics", analyticsRoutes);
 
@@ -119,6 +121,7 @@ export const startServer = async () => {
         // Import and setup socket handlers
         const { setupMessageSocket } = await import('./sockets/message.socket.js');
         setupMessageSocket(io);
+        setActivitySocketIO(io);
 
                 // Initialize unread queue (in-process worker)
                 try {
@@ -190,8 +193,6 @@ export const startServer = async () => {
 
         // Store io instance for use in controllers
         app.locals.io = io;
-        // Unread API
-        app.use('/api/unreads', unreadRoutes);
     } catch (error) {
         logger.error('DB connection failed:', error);
         process.exit(1);

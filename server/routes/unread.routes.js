@@ -1,10 +1,29 @@
 import express from 'express';
 import Redis from 'ioredis';
-import Expense from '../models/expense.model.js';
+import { protect } from '../middleware/auth.middleware.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 const REDIS_URL = process.env.REDIS_URL || process.env.REDIS_URI || 'redis://127.0.0.1:6379';
-const redis = new Redis(REDIS_URL);
+let redisClient;
+
+const getRedisClient = () => {
+  if (!redisClient) {
+    redisClient = new Redis(REDIS_URL, {
+      enableOfflineQueue: false,
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+    });
+
+    redisClient.on('error', (error) => {
+      logger.warn(`Redis unavailable for unread counts: ${error.message}`);
+    });
+  }
+
+  return redisClient;
+};
+
+router.use(protect);
 
 // Get unread counts for current user across expenses
 router.get('/', async (req, res) => {
@@ -12,6 +31,7 @@ router.get('/', async (req, res) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) return res.status(401).json({ message: 'Unauthenticated' });
 
+    const redis = getRedisClient();
     const pattern = `unread:user:${userId}:expense:*`;
     const keys = await redis.keys(pattern);
     const result = {};
@@ -25,7 +45,7 @@ router.get('/', async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    console.error('Unread GET error', err);
+    logger.error('Unread GET error', err);
     res.status(500).json({ message: 'Failed to fetch unreads' });
   }
 });
@@ -38,6 +58,7 @@ router.post('/clear/:expenseId', async (req, res) => {
     const { expenseId } = req.params;
     if (!expenseId) return res.status(400).json({ message: 'Missing expenseId' });
 
+    const redis = getRedisClient();
     const key = `unread:user:${userId}:expense:${expenseId}`;
     await redis.del(key);
 
@@ -45,16 +66,20 @@ router.post('/clear/:expenseId', async (req, res) => {
     try {
       const io = req.app?.locals?.io;
       if (io) {
-        // notify that this user's unread for the expense is now zero
-        io.of('/messages').emit('unread-updated', { expenseId, unreadByUser: { [String(userId)]: 0 } });
+        // notify specifically to this user's room that their unread is cleared
+        try {
+          io.of('/messages').to(`user:${String(userId)}`).emit('unread-updated', { expenseId, unreadByUser: { [String(userId)]: 0 } });
+        } catch (err) {
+          logger.warn('Failed to emit unread clear to user room', { expenseId, userId, error: err.message });
+        }
       }
     } catch (err) {
-      console.error('Failed to emit unread clear update', err);
+      logger.error('Failed to emit unread clear update', err);
     }
 
     res.json({ success: true });
   } catch (err) {
-    console.error('Unread clear error', err);
+    logger.error('Unread clear error', err);
     res.status(500).json({ message: 'Failed to clear unreads' });
   }
 });

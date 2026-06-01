@@ -29,9 +29,33 @@ const resolveMemberUsers = async (members = []) => {
 
     if (user) {
       users.push(user);
-    } else {
-      missing.push(identifier);
+      continue;
     }
+
+    if (String(identifier).includes('@')) {
+      try {
+        user = await User.create({
+          name: identifier.split('@')[0],
+          email: identifier.toLowerCase(),
+          password: 'temp_password_' + Date.now(),
+          isTemporary: true
+        });
+        users.push(user);
+      } catch (createError) {
+        if (createError.code === 11000) {
+          user = await User.findOne({ email: identifier.toLowerCase() });
+          if (user) {
+            users.push(user);
+            continue;
+          }
+        }
+
+        throw createError;
+      }
+      continue;
+    }
+
+    missing.push(identifier);
   }
 
   if (missing.length > 0) {

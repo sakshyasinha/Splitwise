@@ -7,6 +7,7 @@ export default function useAuth() {
 	const error = useAuthStore((state) => state.error);
 	const login = useAuthStore((state) => state.login);
 	const register = useAuthStore((state) => state.register);
+	const loginWithGoogle = useAuthStore((state) => state.loginWithGoogle);
 	const logout = useAuthStore((state) => state.logout);
 	const clearError = useAuthStore((state) => state.clearError);
 
@@ -17,6 +18,7 @@ export default function useAuth() {
 		error,
 		login,
 		register,
+		loginWithGoogle,
 		logout,
 		clearError
 	};

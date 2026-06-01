@@ -16,8 +16,13 @@ export const refreshTokenSchema = joi.object({
   refreshToken: joi.string().required(),
 });
 
+export const googleLoginSchema = joi.object({
+  credential: joi.string().required(),
+});
+
 export default {
   registerSchema,
   loginSchema,
   refreshTokenSchema,
+  googleLoginSchema,
 };

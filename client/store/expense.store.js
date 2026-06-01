@@ -12,11 +12,16 @@ import {
 } from "../services/expense.service.js";
 
 import { getUserNetBalance as getUserNetBalanceService } from "../services/debt.service.js";
+import { getApiErrorMessage } from "../utils/apiError.js";
 
 import {
+  addGroupMember as addGroupMemberService,
   createGroup as createGroupService,
+  deleteGroup as deleteGroupService,
   getGroups as getGroupsService,
   getGroupBalance as getGroupBalanceService,
+  removeGroupMember as removeGroupMemberService,
+  updateGroup as updateGroupService,
 } from "../services/group.service.js";
 
 const getGroupKey = (group) => {
@@ -151,9 +156,7 @@ const useExpenseStore = create((set, get) => ({
     } catch (err) {
       set({
         error:
-          err?.response?.data?.message ||
-          err.message ||
-          "Failed to fetch groups",
+          getApiErrorMessage(err, "Failed to fetch groups"),
         loading: false,
       });
       throw err;
@@ -176,9 +179,7 @@ const useExpenseStore = create((set, get) => ({
       set({
         loading: false,
         error:
-          error?.response?.data?.message ||
-          error.message ||
-          'Failed to fetch balance snapshot',
+          getApiErrorMessage(error, 'Failed to fetch balance snapshot'),
       });
       throw error;
     }
@@ -200,9 +201,7 @@ const useExpenseStore = create((set, get) => ({
       set({
         loading: false,
         error:
-          error?.response?.data?.message ||
-          error.message ||
-          "Failed to create group",
+          getApiErrorMessage(error, "Failed to create group"),
       });
       throw error;
     }
@@ -225,9 +224,7 @@ const useExpenseStore = create((set, get) => ({
       set({
         loading: false,
         error:
-          error?.response?.data?.message ||
-          error.message ||
-          "Failed to fetch expenses",
+          getApiErrorMessage(error, "Failed to fetch expenses"),
       });
       throw error;
     }
@@ -257,9 +254,7 @@ const useExpenseStore = create((set, get) => ({
       set({
         loading: false,
         error:
-          error?.response?.data?.message ||
-          error.message ||
-          "Failed to add expense",
+          getApiErrorMessage(error, "Failed to add expense"),
       });
       throw error;
     }
@@ -287,9 +282,7 @@ const useExpenseStore = create((set, get) => ({
       set({
         loading: false,
         error:
-          error?.response?.data?.message ||
-          error.message ||
-          "Failed to update expense",
+          getApiErrorMessage(error, "Failed to update expense"),
       });
       throw error;
     }
@@ -429,8 +422,7 @@ const useExpenseStore = create((set, get) => ({
   updateGroup: async (groupId, payload) => {
     set({ loading: true, error: null });
     try {
-      const { updateGroup } = await import('../services/group.service.js');
-      await updateGroup(groupId, payload);
+      await updateGroupService(groupId, payload);
       await get().fetchGroups();
       set({ loading: false });
     } catch (error) {
@@ -448,8 +440,7 @@ const useExpenseStore = create((set, get) => ({
   deleteGroup: async (groupId) => {
     set({ loading: true, error: null });
     try {
-      const { deleteGroup } = await import('../services/group.service.js');
-      await deleteGroup(groupId);
+      await deleteGroupService(groupId);
       await get().fetchGroups();
       set({ loading: false });
     } catch (error) {
@@ -467,8 +458,7 @@ const useExpenseStore = create((set, get) => ({
   addGroupMember: async (groupId, memberId) => {
     set({ loading: true, error: null });
     try {
-      const { addGroupMember } = await import('../services/group.service.js');
-      await addGroupMember(groupId, memberId);
+      await addGroupMemberService(groupId, memberId);
       await get().fetchGroups();
       set({ loading: false });
     } catch (error) {
@@ -486,8 +476,7 @@ const useExpenseStore = create((set, get) => ({
   removeGroupMember: async (groupId, memberId) => {
     set({ loading: true, error: null });
     try {
-      const { removeGroupMember } = await import('../services/group.service.js');
-      await removeGroupMember(groupId, memberId);
+      await removeGroupMemberService(groupId, memberId);
       await get().fetchGroups();
       set({ loading: false });
     } catch (error) {

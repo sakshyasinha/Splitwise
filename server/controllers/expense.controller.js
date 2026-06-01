@@ -19,6 +19,9 @@ const normalizeExpense = (expense) => {
     normalized.paidBy = normalized.payers[0].userId;
   }
 
+    normalized.transactionType = String(normalized.splitType || '').toLowerCase() === 'payment' ? 'settlement' : 'expense';
+    normalized.type = normalized.transactionType;
+
   // Normalize participant amounts
   if (normalized.participants) {
     normalized.participants = normalized.participants.map(participant => ({
@@ -153,7 +156,11 @@ export const settleDue = async (req, res) => {
         }
 
         // Return response only after cache is cleared
-        res.json({ settled: data.settled });
+        res.json({
+            settled: data.settled,
+            alreadyPaid: Boolean(data.alreadyPaid),
+            expense: normalizeExpense(data.expense)
+        });
     } catch (error) {
         res.status(error.statusCode || 500).json({ message: error.message });
     }

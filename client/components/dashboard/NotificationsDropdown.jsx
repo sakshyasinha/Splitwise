@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo, useState } from 'react';
-import { getActivityFeed, markActivitiesAsRead, markAllActivitiesAsRead, getUnreadNotificationCount } from '../../services/activity.service.js';
+import { getActivityFeed, markActivitiesAsRead, markAllActivitiesAsRead } from '../../services/activity.service.js';
 import useToast from '../../hooks/useToast.js';
 import Button from '../ui/Button.jsx';
 
@@ -90,14 +90,7 @@ export default function NotificationsDropdown({ onClose, onUnreadCountChange }) 
       const data = await getActivityFeed({ limit: 12, unreadOnly: true });
       const items = Array.isArray(data?.activities) ? data.activities : [];
       setActivities(items);
-      // Use the dedicated unread-count endpoint to avoid mismatches
-      try {
-        const unreadData = await getUnreadNotificationCount();
-        onUnreadCountChange?.(Number(unreadData?.count ?? data?.total ?? items.length ?? 0));
-      } catch (countErr) {
-        // Fallback to feed total if unread-count endpoint fails
-        onUnreadCountChange?.(Number(data?.total ?? items.length ?? 0));
-      }
+      onUnreadCountChange?.(Number(data?.total ?? items.length ?? 0));
     } catch (notificationError) {
       toast.error(notificationError?.response?.data?.message || 'Failed to load notifications');
     } finally {
@@ -149,6 +142,7 @@ export default function NotificationsDropdown({ onClose, onUnreadCountChange }) 
     try {
       await markAllActivitiesAsRead();
       toast.success('Notifications marked as read');
+      setActivities([]);
       onUnreadCountChange?.(0);
       await loadNotifications({ silent: true });
     } catch (notificationError) {
@@ -160,10 +154,11 @@ export default function NotificationsDropdown({ onClose, onUnreadCountChange }) 
     try {
       await markActivitiesAsRead([activityId]);
       toast.success('Notification marked as read');
-      // Immediately remove the notification from the list
-      setActivities(activities.filter(activity => activity._id !== activityId));
-      onUnreadCountChange?.(Math.max(unreadNotifications.length - 1, 0));
-      window.dispatchEvent(new Event('splitwise:notifications-updated'));
+      setActivities((currentActivities) => {
+        const nextActivities = currentActivities.filter((activity) => String(activity._id) !== String(activityId));
+        onUnreadCountChange?.(nextActivities.filter((activity) => !activity.isRead).length);
+        return nextActivities;
+      });
     } catch (notificationError) {
       toast.error(notificationError?.response?.data?.message || 'Failed to mark notification as read');
     }

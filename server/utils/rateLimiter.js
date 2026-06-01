@@ -14,10 +14,11 @@ class RateLimiter {
    * Check if a user has exceeded the rate limit
    * @param {string} userId - User ID
    * @param {string} action - Action type (e.g., 'nudge')
+   * @param {string} scope - Optional request scope to keep separate quotas per target
    * @returns {Object} { allowed: boolean, remaining: number, resetTime: Date }
    */
-  check(userId, action = 'default') {
-    const key = `${userId}:${action}`;
+  check(userId, action = 'default', scope = '') {
+    const key = [userId, action, scope].map((value) => String(value || '').trim()).join(':');
     const now = Date.now();
     const windowStart = now - this.windowMs;
 
@@ -61,8 +62,8 @@ class RateLimiter {
    * @param {string} userId - User ID
    * @param {string} action - Action type
    */
-  reset(userId, action = 'default') {
-    const key = `${userId}:${action}`;
+  reset(userId, action = 'default', scope = '') {
+    const key = [userId, action, scope].map((value) => String(value || '').trim()).join(':');
     this.requests.delete(key);
   }
 
