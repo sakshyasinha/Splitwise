@@ -49,12 +49,10 @@ export default function GroupCard({ group, isSelected, currentUserId, onClick, o
         <div className="text-sm font-syne">
           {outstandingAmount > 0 ? (
             <div>
-              <span style={{ color: 'var(--danger)' }}>Outstanding {formatCurrency(outstandingAmount)}</span>
-              {(Number(group.borrowedAmount || 0) > 0 || Number(group.lentAmount || 0) > 0) && (
-                <div style={{ marginTop: 4, fontSize: 12, color: 'green' }}>
-                  {Number(group.borrowedAmount || 0) > 0
-                    ? `You borrowed ${formatCurrency(Number(group.borrowedAmount || 0))}`
-                    : `You lent ${formatCurrency(Number(group.lentAmount || 0))}`}
+              <span style={{ color: 'var(--danger)' }}>You owe {formatCurrency(outstandingAmount)}</span>
+              {Number(group.lentAmount || 0) > 0 && (
+                <div style={{ marginTop: 4, fontSize: 12, color: 'var(--muted2)' }}>
+                  Others owe you {formatCurrency(Number(group.lentAmount || 0))}
                 </div>
               )}
             </div>
