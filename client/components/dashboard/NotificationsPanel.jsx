@@ -114,6 +114,7 @@ export default function NotificationsPanel({ onClose, onUnreadCountChange }) {
   const handleMarkAllRead = async () => {
     if (unreadNotifications.length === 0) {
       onUnreadCountChange?.(0);
+      window.dispatchEvent(new CustomEvent('splitwise:notifications-count-changed', { detail: { count: 0 } }));
       return;
     }
 
@@ -122,8 +123,7 @@ export default function NotificationsPanel({ onClose, onUnreadCountChange }) {
       toast.success('Notifications marked as read');
       setActivities([]);
       onUnreadCountChange?.(0);
-      const unread = await loadNotifications({ silent: true });
-      onUnreadCountChange?.((unread && unread.length) || 0);
+      window.dispatchEvent(new CustomEvent('splitwise:notifications-count-changed', { detail: { count: 0 } }));
     } catch (notificationError) {
       const message = notificationError?.response?.data?.message || notificationError.message || 'Failed to mark notifications as read';
       toast.error(message);
@@ -136,7 +136,9 @@ export default function NotificationsPanel({ onClose, onUnreadCountChange }) {
       toast.success('Notification marked as read');
       setActivities((currentActivities) => {
         const nextActivities = currentActivities.filter((activity) => String(activity._id) !== String(activityId));
-        onUnreadCountChange?.(nextActivities.filter((activity) => !activity.isRead).length);
+        const nextCount = nextActivities.filter((activity) => !activity.isRead).length;
+        onUnreadCountChange?.(nextCount);
+        window.dispatchEvent(new CustomEvent('splitwise:notifications-count-changed', { detail: { count: nextCount } }));
         return nextActivities;
       });
     } catch (notificationError) {

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import ThemeToggle from '../ui/ThemeToggle.jsx';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 
@@ -20,6 +21,8 @@ export default function DashboardHeader({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const avatarUrl = String(user?.avatarUrl || user?.avatar || '').trim();
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const userEmail = String(user?.email || '').trim();
   const profileName = String(user?.name || '').trim() || userEmail.split('@')[0] || 'User';
   const profileInitials = profileName
@@ -29,6 +32,11 @@ export default function DashboardHeader({
     .join('')
     .slice(0, 2)
     .toUpperCase() || profileName.slice(0, 2).toUpperCase();
+  const showAvatarImage = Boolean(avatarUrl) && !avatarLoadFailed;
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [avatarUrl]);
 
   return (
     <header className="topbar">
@@ -76,8 +84,14 @@ export default function DashboardHeader({
         </div>
         <div className="profile-picture" aria-label="User menu" role="button" tabIndex={0}>
           <span className="profile-avatar-chip">
-            {user?.avatarUrl ? (
-              <img className="profile-avatar-image" src={user.avatarUrl} alt="" aria-hidden="true" />
+            {showAvatarImage ? (
+              <img
+                className="profile-avatar-image"
+                src={avatarUrl}
+                alt=""
+                aria-hidden="true"
+                onError={() => setAvatarLoadFailed(true)}
+              />
             ) : (
               <span className="profile-initials">{profileInitials}</span>
             )}

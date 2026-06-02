@@ -36,6 +36,15 @@ export const googleLogin=async(req,res)=>{
     }
 };
 
+export const getCurrentUser=async(req,res)=>{
+    try {
+        const user = await authService.getCurrentUser(req.user.id);
+        res.json(user);
+    } catch (error) {
+        res.status(error.statusCode || 500).json({ message: error.message });
+    }
+};
+
 export const refreshToken=async(req,res)=>{
     try {
         const { refreshToken } = req.body;

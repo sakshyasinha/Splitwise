@@ -23,11 +23,14 @@ function handleSocketAuthError(error) {
 export function initSocket(token) {
   if (socket) return socket;
 
-  // Prefer explicit Vite env var when provided (for CI / Pages). If not set,
-  // we fall back to current origin. However, when the app is hosted on a
-  // static site (like GitHub Pages) without a backend, connecting will
-  // cause 404s. In that case avoid attempting socket connections.
-  const apiOrigin = import.meta.env.VITE_API_ORIGIN || (typeof window !== 'undefined' ? window.location.origin : '');
+  // Prefer an explicit socket origin, then derive from the API base URL, and
+  // only then fall back to the current page origin.
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+  const derivedApiOrigin = apiBaseUrl ? apiBaseUrl.replace(/\/api\/?$/, '') : '';
+  const apiOrigin =
+    import.meta.env.VITE_API_ORIGIN ||
+    derivedApiOrigin ||
+    (typeof window !== 'undefined' ? window.location.origin : '');
 
   // If running from GitHub Pages (or another static host) and no explicit
   // API origin is configured, skip socket initialization to prevent 404s.

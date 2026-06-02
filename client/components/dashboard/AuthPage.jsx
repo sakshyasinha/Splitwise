@@ -34,7 +34,7 @@ function loadGoogleScript() {
 
 export default function AuthPage() {
   const navigate = useNavigate();
-  const { login, register, loginWithGoogle, loading, error, clearError } = useAuth();
+  const { token, login, register, loginWithGoogle, loading, error, clearError } = useAuth();
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [googleAuth, setGoogleAuth] = useState({ loading: true, enabled: false, clientId: null, error: null });
@@ -52,10 +52,16 @@ export default function AuthPage() {
         await register(form);
       }
       await login(form.email, form.password);
-      navigate('/');
+      navigate('/dashboard', { replace: true });
     } catch (_error) {
     }
   };
+
+  useEffect(() => {
+    if (token) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [navigate, token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +85,7 @@ export default function AuthPage() {
             try {
               clearError();
               await loginWithGoogle(response.credential);
-              navigate('/');
+              navigate('/dashboard', { replace: true });
             } catch (_error) {
               // Error is handled in store state.
             }

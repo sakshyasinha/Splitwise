@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { login as loginService, loginWithGoogle as loginWithGoogleService, register as registerService } from '../services/auth.service.js';
+import {
+    getCurrentUser as getCurrentUserService,
+    login as loginService,
+    loginWithGoogle as loginWithGoogleService,
+    register as registerService
+} from '../services/auth.service.js';
 import useExpenseStore from './expense.store.js';
 
 function decodeTokenUser(token) {
@@ -32,7 +37,9 @@ localStorage.removeItem('token');
 const persistedUser = readPersistedUser();
 
 function persistSession({ token, user }) {
-    sessionStorage.setItem('token', token);
+    if (token) {
+        sessionStorage.setItem('token', token);
+    }
     if (user) {
         sessionStorage.setItem('user', JSON.stringify(user));
         if (user.email) {
@@ -55,6 +62,16 @@ const useAuthStore = create((set, get) => ({
     loading: false,
     error: null,
     clearError: () => set({ error: null }),
+    refreshUser: async () => {
+        if (!get().token) {
+            return null;
+        }
+
+        const user = await getCurrentUserService();
+        persistSession({ token: get().token, user });
+        set({ user });
+        return user;
+    },
     login: async (email, password) => {
         set({ loading: true, error: null });
         try {
@@ -124,6 +141,10 @@ if (typeof window !== 'undefined') {
     window.addEventListener('splitwise:auth-expired', () => {
         useAuthStore.getState().handleAuthExpired();
     });
+
+    if (persistedToken) {
+        useAuthStore.getState().refreshUser().catch(() => {});
+    }
 }
 
 export default useAuthStore;

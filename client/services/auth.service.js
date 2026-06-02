@@ -15,6 +15,11 @@ export async function getGoogleAuthConfig() {
   return response.data;
 }
 
+export async function getCurrentUser() {
+  const response = await API.get('/auth/me');
+  return response.data;
+}
+
 export async function loginWithGoogle(payload) {
   const response = await API.post('/auth/google', payload);
   return response.data;

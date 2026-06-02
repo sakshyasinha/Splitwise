@@ -120,8 +120,15 @@ const DashboardPage = ({ view = 'dashboard' }) => {
   useEffect(() => {
     const refresh = () => refreshNotificationCount();
     const intervalId = window.setInterval(refresh, 15000);
+    const handleCountChanged = (event) => {
+      const nextCount = Number(event?.detail?.count);
+      if (Number.isFinite(nextCount)) {
+        setNotificationCount(Math.max(0, nextCount));
+      }
+    };
 
     window.addEventListener('splitwise:notifications-updated', refresh);
+    window.addEventListener('splitwise:notifications-count-changed', handleCountChanged);
     window.addEventListener('focus', refresh);
 
     const handleVisibility = () => {
@@ -135,6 +142,7 @@ const DashboardPage = ({ view = 'dashboard' }) => {
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener('splitwise:notifications-updated', refresh);
+      window.removeEventListener('splitwise:notifications-count-changed', handleCountChanged);
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', handleVisibility);
     };

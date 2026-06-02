@@ -1,6 +1,6 @@
-# SplitSense – Full Stack Expense Sharing Platform
+# SplitSense - Full Stack Expense Sharing Platform
 
-A **production-ready** full-stack web application for managing shared expenses across groups with advanced splitting logic, real-time analytics, and comprehensive financial tracking.
+SplitSense is a full-stack web app for managing shared expenses, group balances, settlements, activity, notifications, receipts, recurring bills, and analytics.
 
 **Live Demo:** https://sakshyasinha.github.io/splitwise/
 
@@ -8,260 +8,227 @@ A **production-ready** full-stack web application for managing shared expenses a
 
 ## Overview
 
-SplitSense solves the complexity of shared finances—tracking who paid, who owes, and how much with precision. It goes beyond simple equal splits with support for multiple split algorithms, detailed settlement tracking, activity logs, and intelligent settlement suggestions.
+SplitSense helps groups track who paid, who participated, who owes money, and what still needs to be settled. It supports advanced split methods, group dashboards, real-time activity, payment-style settlement entries, and analytics for understanding shared spending.
 
-Perfect for:
-- **Roommates** managing shared rent & utilities
-- **Travel groups** splitting trip expenses
-- **Friends** tracking dinner bills
-- **Teams** managing project expenses
-- **Families** coordinating shared costs
+Useful for:
+- Roommates splitting rent, utilities, and recurring bills
+- Travel groups tracking trip expenses
+- Friends splitting food, events, and shared purchases
+- Teams or families coordinating shared costs
 
 ---
 
-## Features
+## Current Features
 
-### 🔐 Authentication & User Management
-- JWT-based authentication with secure password hashing (bcrypt)
-- User registration and login
-- Support for temporary users (join expenses without signup)
-- User profiles and email management
+### Authentication & Sessions
+- Email/password registration and login
+- Google sign-in support
+- Google profile avatar support
+- JWT access tokens and refresh-token infrastructure
+- Current-user session refresh via `/api/auth/me`
+- Protected frontend routes for dashboard, groups, activity, analytics, profile, and settings
+- Session cleanup on auth expiry
 
-### 👥 Group Management
-- Create and manage expense groups
-- Add/remove group members dynamically
-- Group types (Trip, Roommates, Friends, etc.)
-- Group-specific analytics and history
-- Archive inactive groups
+### Dashboard
+- Responsive dashboard with summary cards for spend, owed, lent, and group count
+- Top navigation for Dashboard, Groups, Activity, Analytics, Profile, and Settings
+- Profile menu with avatar or initials fallback
+- Dashboard search for expenses and groups
+- Quick actions for creating groups, adding expenses, and managing recurring bills
+- Dark/light theme toggle
+- Toast feedback and loading skeletons
 
-### 💰 Expense Tracking
-- Add expenses with title, amount, date, and category
-- Assign payer and multiple participants
-- Support for **7 different split types:**
-  - **Equal** - Divide evenly among all participants
-  - **Exact Amount** - Specify exact amount each person owes
-  - **Percentage** - Split by percentage distribution
-  - **Shares/Ratios** - Split by share counts
-  - **Itemized** - Split by individual items and their assignees
-  - **Adjustment** - Base equal split with adjustments
-  - **Payment** - Direct payment from one user to another
-- Multiple currency support (INR, USD, EUR, GBP, JPY, CAD, AUD, SGD, AED, CNY)
-- **12 expense categories** (Food, Travel, Events, Utilities, Shopping, General, Rent, Transport, Entertainment, Healthcare, Education, Other)
-- Edit and delete expenses with audit trail
-- Add notes, tags, and location data to expenses
-- Receipt upload support
+### Group Management
+- Create, edit, and delete groups
+- Add and remove group members
+- Group types such as trip, home, couple, project, and other
+- Group detail modal with members, spending, outstanding balances, and related expenses
+- Deduped group summaries for repeated/group-like records
 
-### 📊 Advanced Analytics Dashboard
-- **Overview Statistics**
-  - Total spending breakdown (personal vs shared)
-  - Amount owed to you vs amount you owe
-  - Net balance calculation
-  
-- **Spending Trends**
-  - Monthly spending visualization (line chart)
-  - Spending trend analysis (increasing, decreasing, stable)
-  - Monthly average and year-over-year comparison
+### Expense Tracking
+- Add, edit, delete, and view expenses
+- Assign payer and participants
+- Support for multiple split types:
+  - Equal
+  - Exact/custom amount
+  - Percentage
+  - Shares
+  - Itemized
+  - Adjustment
+  - Payment/direct settlement-style entries
+- Expense categories such as food, travel, utilities, shopping, rent, entertainment, healthcare, education, and other
+- Expense notes, tags, date, and optional receipt attachment fields
+- Audit logs for expense changes
+- Per-expense chat entry point and unread indicators
 
-- **Category Breakdown**
-  - Expenses grouped by category with percentages
-  - Top spending categories identified
-  - Category-wise expense count and averages
+### Debt & Settlements
+- My Dues view for money the signed-in user owes
+- My Lents view for money owed to the signed-in user
+- Direct settle action for dues
+- Settlement history endpoints
+- Friend balance summaries
+- Smart settlement services for group settlement suggestions, alternative payments, and settlement analysis
 
-- **Group Analytics**
-  - Per-group spending analysis
-  - Member-wise contribution tracking
-  - Group-specific trends
+### Activity & Notifications
+- Activity feed for user and group activity
+- Unread notification count
+- Notification dropdown
+- Mark selected activities or all activities as read
+- Real-time notification updates through Socket.IO events
+- Email workflows for expense, settlement, invite, and payment reminder notifications
 
-- **Relationship Analytics**
-  - Person-to-person balance tracking
-  - Who owes you vs who you owe
-  - Relationship history and expense count
+### Real-Time Messaging
+- Expense-level message routes
+- Socket.IO client/server support
+- Unread message count handling
+- Chat modal connected to expense rows
 
-- **Time Distribution**
-  - Spending by hour of day
-  - Spending by day of week
-  - Peak spending times identified
+### Recurring Expenses
+- Create recurring expenses
+- Daily, weekly, monthly, and yearly recurrence support
+- Pause and resume recurring expenses
+- Generate an expense immediately from a recurring rule
+- Process due recurring expenses
+- Recurring expense stats
 
-- **Customizable Time Ranges** (7 days, 30 days, 90 days, 1 year)
+### Analytics
+- User analytics overview
+- Group analytics
+- System analytics endpoint
+- Spending, category, group, relationship, trend, and time-distribution calculations
+- Analytics dashboard view with summary and breakdown components
 
-### 🏦 Settlement & Debt Management
-- **Real-time Balance Calculation**
-  - View who owes whom instantly
-  - Settlement status tracking (pending, partial, settled)
-  - Net balance computation
+### Receipt Management
+- Upload one or multiple receipts for an expense
+- View receipts linked to an expense
+- Set a primary receipt
+- Delete receipts
+- Admin-style cleanup and storage stats endpoints
 
-- **Settlement Tracking**
-  - Record payments made to settle debts
-  - Settlement history with dates and amounts
-  - Payment method tracking (cash, card, UPI, bank transfer)
+### AI Assistant
+- Dashboard AI chat panel
+- Intent-aware replies for settlement planning, overspending, savings, and general finance questions
+- Local document retrieval helper for contextual answers
 
-- **Smart Settlement Suggestions**
-  - AI-powered settlement optimization
-  - Minimize transaction count
-  - Suggest optimal payment routes
-
-- **Multiple Settlement Views**
-  - My Dues (what I owe)
-  - My Lents (what others owe me)
-  - Friends list with net balances
-
-### 📋 Activity & Audit Trail
-- Complete transaction history
-- Audit logs tracking all changes (who, what, when, why)
-- Soft delete with deletion history
-- Activity feed showing recent transactions
-- Reason tracking for modifications
-
-### 🔄 Recurring Expenses
-- Set up recurring expenses for regular costs
-- Configure frequency (daily, weekly, monthly, yearly)
-- Auto-generate expenses on schedule
-- Modify or cancel recurring expense series
-
-### 📸 Receipt Management
-- Upload receipt images for expenses
-- OCR support for automatic amount extraction
-- Receipt storage and retrieval
-- Receipt linking to multiple expenses
-
-### 📧 Notifications
-- Email alerts when expenses are added to groups
-- Expense notification to all participants
-- Settlement confirmation emails
-- Customizable notification preferences
-
-### 🎯 UI/UX Features
-- **Responsive Design** - Works on mobile, tablet, desktop
-- **Dark Mode** - Toggle between light and dark themes
-- **Toast Notifications** - Real-time feedback for all actions
-- **Loading States** - Skeleton loaders for better perceived performance
-- **Modal Forms** - Modal-based expense and group creation
-- **Form Validation** - Client-side and server-side validation
-- **Error Handling** - User-friendly error messages
-
-### 🔧 Data Management
-- **Export to CSV**
-  - Export expenses as CSV
-  - Export settlement history
-  - Export analytics reports
-  
-- **Search & Filter**
-  - Search expenses by description
-  - Filter by group, category, date range
-  - Filter by participant or amount
-
-### 🚀 Advanced Features
-- **Decimal Precision** - Handles floating-point precision correctly
-- **Timezone Support** - Date handling across timezones
-- **Batch Operations** - Bulk settle or export
-- **Performance Optimization** - Database indexes and query optimization
-- **Rate Limiting** - Protection against abuse
+### Security, Reliability, And Performance
+- Password hashing with bcrypt
+- JWT auth middleware
+- Joi validation middleware
+- Rate limiting for auth and expense routes
+- Helmet/security headers
+- CORS configuration
+- Redis-backed caching helpers
+- Socket authentication support
+- Winston logging and Sentry integration
+- Soft-delete and audit-oriented expense handling
 
 ---
 
 ## Tech Stack
 
 ### Frontend
-- **Framework:** React.js (Vite)
-- **State Management:** Zustand
-- **Styling:** Custom CSS with CSS variables (dark mode support)
-- **UI Components:** Custom reusable components
-- **Build Tool:** Vite
-- **Package Manager:** npm
+- React 18 with Vite
+- React Router
+- Zustand state management
+- Axios API client
+- Socket.IO client
+- Custom CSS with CSS variables and dark mode
 
 ### Backend
-- **Runtime:** Node.js
-- **Framework:** Express.js
-- **Database:** MongoDB (Mongoose ODM)
-- **Authentication:** JWT (jsonwebtoken)
-- **Security:** bcryptjs for password hashing
-- **Logging:** Winston logger + Sentry integration
-- **Email:** Nodemailer
+- Node.js and Express
+- MongoDB with Mongoose
+- JWT authentication
+- bcryptjs password hashing
+- Joi validation
+- Redis/ioredis caching
+- Socket.IO
+- Nodemailer email service
+- Multer receipt uploads
+- Winston and Sentry
 
-### DevOps & Deployment
-- **Containerization:** Docker & Docker Compose
-- **Process Manager:** PM2
-- **Error Tracking:** Sentry
-- **CI/CD:** GitHub Actions
-- **Hosting:** 
-  - Frontend: GitHub Pages
-  - Backend: Render.com
-- **Environment:** Node.js 18+, MongoDB 5+
-
-### Testing & Quality
-- **Testing Framework:** Mocha
-- **Test Runner:** Supertest
-- **Code Coverage:** NYC
+### Tooling & Deployment
+- Docker and Docker Compose
+- PM2 production runtime
+- GitHub Actions
+- GitHub Pages frontend deployment
+- Render backend deployment
+- Mocha, Supertest, and NYC for backend tests
 
 ---
 
 ## Architecture
 
-```
+```text
 splitwise/
-├── client/                 # Frontend (React + Vite)
-│   ├── components/         # Reusable UI components
-│   ├── hooks/              # Custom React hooks (useExpenses, useAuth, etc.)
+├── client/
+│   ├── app/                # Main React app and routes
+│   ├── components/         # Dashboard, expense, group, analytics, chat, UI components
+│   ├── hooks/              # useAuth, useExpenses, and shared hooks
 │   ├── services/           # API service clients
+│   ├── src/services/       # Socket service
 │   ├── store/              # Zustand stores
-│   ├── utils/              # Utility functions
-│   ├── styles/             # Global and component CSS
-│   └── app/                # Main App component
+│   ├── styles/             # Global CSS
+│   └── utils/              # Formatting and transaction helpers
 │
-├── server/                 # Backend (Express.js)
-│   ├── controllers/        # Route handlers
-│   ├── services/           # Business logic
-│   ├── models/             # MongoDB schemas
-│   ├── routes/             # API route definitions
-│   ├── middleware/         # Express middleware
-│   ├── utils/              # Helper utilities
-│   ├── config/             # Configuration files
-│   └── tests/              # Test suites
+├── server/
+│   ├── controllers/        # Express route handlers
+│   ├── middleware/         # Auth, validation, rate limiting, upload, security
+│   ├── models/             # Mongoose schemas
+│   ├── routes/             # API routes
+│   ├── schemas/            # Joi request schemas
+│   ├── services/           # Business logic, analytics, activity, email, cache
+│   ├── tests/              # Backend tests
+│   └── utils/              # Logging and helpers
 │
-├── docs/                   # Static documentation
-├── public/                 # Static assets
-└── docker-compose.yml      # Local development setup
+├── docs/
+├── uploads/
+└── docker-compose.yml
 ```
 
 ---
 
 ## How It Works
 
-### Basic Flow
-1. **User Registration** - Create account or join as temporary user
-2. **Create Group** - Set up a group (Trip, Roommates, etc.)
-3. **Add Expenses** - Record who paid and how to split
-4. **System Calculates** - Backend computes balances using selected split algorithm
-5. **Track Balances** - View real-time who owes whom
-6. **Settle** - Record payments to mark debts as settled
-7. **Analytics** - View spending trends and patterns
+1. A user signs in with email/password or Google.
+2. The user creates or joins groups.
+3. Expenses are added with payer, participants, category, date, and split method.
+4. The backend calculates participant balances and ledger rows.
+5. Dashboard views show total spend, dues, lents, group summaries, and recent activity.
+6. Users can settle dues, record payment-style entries, upload receipts, and discuss expenses in chat.
+7. Analytics and AI assistant views help explain spending and settlement patterns.
 
-### Split Algorithm Example
-**Expense: ₹3000 for dinner**
-- Payer: Alice
-- Participants: Alice, Bob, Charlie
+### Split Example
 
-**Equal Split:**
-- Alice: ₹1000 (paid ₹3000, owes ₹1000) → **Owed ₹1000**
-- Bob: ₹1000 (paid ₹0, owes ₹1000) → **Owes ₹1000**
-- Charlie: ₹1000 (paid ₹0, owes ₹1000) → **Owes ₹1000**
+Expense: `3000` for dinner
 
-**Custom Split (₹2000, ₹500, ₹500):**
-- Alice: ₹2000 → **Owed ₹1000**
-- Bob: ₹500 → **Owes ₹500**
-- Charlie: ₹500 → **Owes ₹500**
+Payer: Alice  
+Participants: Alice, Bob, Charlie
+
+Equal split:
+- Alice paid `3000`, owes `1000`, and is owed `2000`
+- Bob owes `1000`
+- Charlie owes `1000`
+
+Custom split:
+- Alice share: `2000`
+- Bob share: `500`
+- Charlie share: `500`
 
 ---
 
 ## API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - User login
-- `GET /api/auth/me` - Get current user
+- `POST /api/auth/register` - Register a user
+- `POST /api/auth/login` - Login with email/password
+- `GET /api/auth/google/config` - Get Google auth client config
+- `POST /api/auth/google` - Login with Google credential
+- `GET /api/auth/me` - Get current authenticated user
+- `POST /api/auth/refresh` - Refresh access token
+- `POST /api/auth/logout` - Revoke refresh token
 
 ### Groups
-- `GET /api/groups` - List user's groups
+- `GET /api/groups` - List groups
 - `POST /api/groups` - Create group
 - `GET /api/groups/:id` - Get group details
 - `PUT /api/groups/:id` - Update group
@@ -270,257 +237,224 @@ splitwise/
 - `PATCH /api/groups/:id/members/remove` - Remove member
 
 ### Expenses
-- `GET /api/expenses` - List visible expenses
-- `POST /api/expenses` - Create expense
-- `GET /api/expenses/:id` - Get expense details
+- `GET /api/expenses` - List expenses
+- `POST /api/expenses/add` - Add expense
+- `GET /api/expenses/my` - Get my dues
+- `GET /api/expenses/lent` - Get my lents
+- `GET /api/expenses/breakdown` - Get expense breakdown
+- `GET /api/expenses/friends` - Get friend balances
+- `GET /api/expenses/:id` - Get expense by ID
 - `PUT /api/expenses/:id` - Update expense
 - `DELETE /api/expenses/:id` - Delete expense
+- `PATCH /api/expenses/:id/settle` - Settle a due
 - `GET /api/expenses/group/:groupId` - Get group expenses
+- `POST /api/expenses/:id/payers` - Add payer
+- `GET /api/expenses/:id/audit` - Get expense audit log
 
-### Settlement & Debt
-- `GET /api/debt/my-dues` - Get my outstanding dues
-- `GET /api/debt/my-lents` - Get money owed to me
-- `POST /api/settlements` - Record settlement
-- `GET /api/settlements/history` - Settlement history
-- `GET /api/smart-settlements/suggest` - Get settlement suggestions
+### Settlements & Smart Settlement
+- `POST /api/settlements` - Create settlement/payment record
+- `GET /api/settlements/history` - Get settlement history
+- `GET /api/settlements/group/:groupId` - Get settlements for a group
+- `POST /api/settlements/nudge` - Send payment reminder
+- `GET /api/groups/:groupId/smart-settlements` - Smart settlement suggestions
+- `GET /api/groups/:groupId/alternative-payments` - Alternative payment options
+- `GET /api/groups/:groupId/settlement-analysis` - Settlement analysis
+
+### Activity & Notifications
+- `GET /api/activity/feed` - Current user's activity feed
+- `GET /api/activity/group/:groupId` - Group activity feed
+- `GET /api/activity/unread-count` - Unread notification count
+- `PUT /api/activity/read` - Mark activities as read
+- `PUT /api/activity/read-all` - Mark all activities as read
+- `GET /api/activity/statistics` - Activity statistics
+- `POST /api/activity` - Create activity
+
+### Messages
+- `GET /api/messages/:expenseId` - Get expense messages
+- `POST /api/messages/:expenseId` - Post expense message
 
 ### Analytics
-- `GET /api/analytics/user` - User analytics (with time range)
+- `GET /api/analytics/user` - User analytics
 - `GET /api/analytics/group/:groupId` - Group analytics
-- `GET /api/analytics/system` - System-wide analytics (admin)
+- `GET /api/analytics/system` - System analytics
 
-### Activity
-- `GET /api/activity` - User activity feed
-- `GET /api/activity/expense/:expenseId` - Expense activity trail
+### Recurring Expenses
+- `POST /api/recurring-expenses` - Create recurring expense
+- `GET /api/recurring-expenses` - List recurring expenses
+- `GET /api/recurring-expenses/stats` - Recurring expense stats
+- `POST /api/recurring-expenses/process-due` - Process due recurring expenses
+- `GET /api/recurring-expenses/:id` - Get recurring expense
+- `PUT /api/recurring-expenses/:id` - Update recurring expense
+- `POST /api/recurring-expenses/:id/pause` - Pause recurring expense
+- `POST /api/recurring-expenses/:id/resume` - Resume recurring expense
+- `POST /api/recurring-expenses/:id/generate` - Generate expense now
+- `DELETE /api/recurring-expenses/:id` - Delete recurring expense
+
+### Receipts
+- `POST /api/receipts/:expenseId` - Upload receipt
+- `POST /api/receipts/:expenseId/multiple` - Upload multiple receipts
+- `GET /api/receipts/:expenseId` - List receipts for expense
+- `PUT /api/receipts/:expenseId/primary` - Set primary receipt
+- `DELETE /api/receipts/:expenseId` - Delete receipt
+- `POST /api/receipts/cleanup` - Clean up orphaned files
+- `GET /api/receipts/stats/storage` - Storage stats
+
+### AI
+- `POST /api/ai/chat` - Ask the AI assistant
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ and npm
+- Node.js 18+
+- npm
 - MongoDB 5+
-- Git
+- Redis, recommended for cache/session features
 
-### Local Development Setup
+### Backend
 
-**1. Clone the repository**
-```bash
-git clone https://github.com/sakshyasinha/splitwise.git
-cd splitwise
-```
-
-**2. Setup Backend**
 ```bash
 cd server
 npm install
 cp .env.example .env
-# Edit .env with your MongoDB URI and JWT secret
 npm start
 ```
 
-**3. Setup Frontend**
+### Frontend
+
 ```bash
 cd client
 npm install
 cp .env.example .env
-# Edit .env with backend API URL
 npm run dev
 ```
 
-**4. Access the application**
+Default local URLs:
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:5000
 
-### Using Docker Compose
+### Docker Compose
+
 ```bash
 docker-compose up
-# Frontend: http://localhost:3000
-# Backend: http://localhost:5000
 ```
 
 ---
 
 ## Environment Variables
 
-### Backend (.env)
-```
+### Backend
+
+```env
 PORT=5000
 NODE_ENV=development
 MONGODB_URI=mongodb://localhost:27017/splitwise
 JWT_SECRET=your-secret-key
 CORS_ORIGIN=http://localhost:5173
+GOOGLE_CLIENT_ID=your-google-client-id
 SENTRY_DSN=optional-sentry-dsn
 ```
 
-### Frontend (.env)
-```
+Depending on your local setup, Redis and email variables may also be required for caching, notifications, and outgoing email.
+
+### Frontend
+
+```env
 VITE_API_BASE_URL=http://localhost:5000/api
-```
-
----
-
-## Deployment
-
-### Frontend (GitHub Pages)
-- Automatic deployment via GitHub Actions on push to `master`
-- Built with Vite and served as static site
-
-### Backend (Render.com)
-- Deploy directly from GitHub repository
-- Set environment variables in Render dashboard
-- Uses PM2 for process management
-
-### Docker Deployment
-```bash
-# Build images
-docker build -t splitwise-client client/
-docker build -t splitwise-server server/
-
-# Run with docker-compose
-docker-compose up -d
 ```
 
 ---
 
 ## Testing
 
-### Run Backend Tests
 ```bash
 cd server
-npm test                 # Run all tests
-npm run coverage         # Generate coverage report
+npm test
+npm run coverage
 ```
 
-### Manual Testing Checklist
-1. Create expense with each split type
-2. Verify analytics dashboard calculations
-3. Test settlement recording and history
-4. Check category breakdown in analytics
-5. Verify email notifications
-6. Test on mobile devices (responsive design)
-7. Test dark mode toggle
-8. Verify CSV export functionality
+Suggested manual checks:
+- Login with email/password and Google
+- Verify avatar display after Google login and page refresh
+- Create a group and add/remove members
+- Add expenses with each split type
+- Settle a due and verify dues/lents refresh
+- Open activity and notification dropdown
+- Send an expense chat message
+- Upload and view a receipt
+- Create, pause, resume, and generate a recurring expense
+- Review analytics after creating expenses
+- Toggle dark mode and test responsive layouts
 
 ---
 
-## Performance
+## Deployment
 
-### Optimization Strategies
-- Database indexing on frequently queried fields
-- Pagination for large datasets
-- Decimal128 for precise financial calculations
-- Connection pooling for MongoDB
-- Gzip compression on API responses
-- Lazy loading in frontend
+### Frontend
+- Vite static build
+- GitHub Pages deployment
 
-### Current Metrics
-- Average API response time: <100ms
-- Analytics calculation: <500ms
-- Page load time: <2s
+### Backend
+- Render deployment
+- PM2 runtime available through `npm run start:prod`
 
----
+### Docker
 
-## Security
-
-### Implemented
-- ✅ JWT authentication with expiration
-- ✅ Password hashing with bcrypt (10 rounds)
-- ✅ CORS configuration
-- ✅ Input validation & sanitization
-- ✅ Error handling without leaking sensitive info
-- ✅ Soft delete (no permanent data loss)
-- ✅ Audit logging for compliance
-
-### Recommended for Production
-- 🔄 Rate limiting (currently not implemented)
-- 🔄 Two-factor authentication (2FA)
-- 🔄 API key management
-- 🔄 HTTPS enforcement
-- 🔄 Content Security Policy headers
+```bash
+docker build -t splitwise-client client/
+docker build -t splitwise-server server/
+docker-compose up -d
+```
 
 ---
 
-## Future Roadmap
+## Project Notes
 
-### Phase 1 (Current)
-- ✅ Core expense & settlement tracking
-- ✅ Multiple split types
-- ✅ Analytics dashboard
-- ✅ Activity logging
-
-### Phase 2 (Planned)
-- 🚧 Real-time updates (WebSockets)
-- 🚧 Mobile app (React Native)
-- 🚧 Payment processing integration (Stripe/PayPal)
-- 🚧 Advanced reporting & PDF export
-
-### Phase 3 (Future)
-- 🚫 Offline mode with sync
-- 🚫 Expense forecasting & budgeting
-- 🚫 Multi-currency conversion with live rates
-- 🚫 Gamification & achievements
+- The app uses `sessionStorage` for the active browser session and clears stale auth state on `401`.
+- Google avatars are stored as `avatarUrl`; the header falls back to initials if no image is available or loading fails.
+- Expense and balance logic distinguishes normal expenses from payment-style settlement entries.
+- Activity, unread counts, messages, and notification refreshes use a mix of API calls, browser events, and Socket.IO.
+- Some admin-labeled endpoints are route-protected but do not yet include a dedicated admin role check.
 
 ---
 
-## Contributing
+## Roadmap
 
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- Stronger role-based access control for admin-only endpoints
+- More complete profile/settings editing
+- Better receipt metadata extraction
+- Export/reporting workflows
+- Mobile-first polish for dense dashboard views
+- Optional payment provider integration
+- Offline support with sync
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
+**MongoDB connection failed**  
+Check `MONGODB_URI` and confirm MongoDB is running.
 
-**Q: "MongoDB connection failed"**
-- A: Ensure MongoDB is running and connection string is correct in .env
+**Google sign-in does not show**  
+Set `GOOGLE_CLIENT_ID` on the backend and ensure the frontend origin is allowed in Google Cloud Console.
 
-**Q: "Category not showing in analytics"**
-- A: New expenses need category set. Check database for null values.
+**Avatar still shows initials**  
+Sign in again or refresh the session. The current user response should include `avatarUrl`.
 
-**Q: "Payments not being recorded"**
-- A: Verify user is participant in the expense and settlement endpoint returns 200
+**CORS errors**  
+Set `CORS_ORIGIN` to the frontend URL, usually `http://localhost:5173` in development.
 
-**Q: "CORS errors in frontend"**
-- A: Check CORS_ORIGIN in server .env matches frontend URL
-
----
-
-## Support
-
-For issues, questions, or suggestions:
-- Open an issue on GitHub
-- Check existing documentation
-- Review API response status codes
-
----
-
-## License
-
-This project is open source and available under the MIT License.
+**Notifications or chat do not update live**  
+Confirm the backend Socket.IO server is running and the client has a valid token.
 
 ---
 
 ## Author
 
-Developed by **Sakshya Sinha** as a full-stack project focused on building real-world financial tracking systems with proper splitting logic, analytics, and scalability.
+Developed by **Sakshya Sinha** as a full-stack project focused on real-world shared-finance workflows, splitting logic, settlements, analytics, and scalable backend architecture.
 
 ---
 
-## Acknowledgments
-
-- React.js for the frontend framework
-- Express.js for the backend
-- MongoDB for reliable data storage
-- All contributors and users providing feedback
-
----
-
-**Last Updated:** May 2026  
+**Last Updated:** June 2026  
 **Version:** 1.0.0

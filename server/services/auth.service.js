@@ -30,6 +30,18 @@ function issueSessionForUser(user) {
     }));
 }
 
+export const getCurrentUser = async (userId) => {
+    const user = await User.findById(userId);
+
+    if (!user) {
+        const error = new Error('User not found');
+        error.statusCode = 404;
+        throw error;
+    }
+
+    return toPublicUser(user);
+};
+
 async function verifyGoogleCredential(credential) {
     const clientId = getGoogleClientId();
     if (!clientId) {
