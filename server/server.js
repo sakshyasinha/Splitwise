@@ -29,6 +29,7 @@ import { setActivitySocketIO } from './services/activity.service.js';
 import cacheHeadersMiddleware from './middleware/cache-headers.middleware.js';
 import requestIdMiddleware from './middleware/request-id.middleware.js';
 import securityHeadersMiddleware from './middleware/security-headers.middleware.js';
+// import receiptRoutes from "./routes/receipt.route.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,7 +65,20 @@ app.use(expressWinston.logger({
     colorize: false,
 }));
 
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+app.use(cors({
+    origin: CORS_ORIGIN,
+    credentials: true,
+    methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
+    allowedHeaders: ['Authorization','Content-Type'],
+}));
+
+// Ensure CORS preflight is handled for all routes before any other middleware.
+app.options('*', cors({
+    origin: CORS_ORIGIN,
+    credentials: true,
+    methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
+    allowedHeaders: ['Authorization','Content-Type'],
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -97,6 +111,7 @@ app.use("/api/smart-settlements", smartSettlementRoutes);
 
 app.use("/api/recurring-bills", recurringExpenseRoutes);
 app.use("/api/recurring-expenses", recurringExpenseRoutes);
+app.use("/api/receipts", receiptRoutes);
 
 app.use("/api/receipts", receiptRoutes);
 app.use('/api/messages', messageRoutes);
