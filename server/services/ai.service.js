@@ -213,9 +213,34 @@ I can help you with:
    MAIN FUNCTION
 ========================= */
 
-export const generateAIReply = async ({ prompt, context = {} }) => {
-  const intent = classifyIntent(prompt);
+import { ollamaGenerate } from './ollama.client.js';
 
+const buildRagPrompt = ({ prompt, context, retrieved }) => {
+  const docs = asArray(retrieved)
+    .map((d, idx) => `[#${idx + 1}] ${d.text}`)
+    .join('\n\n');
+
+  const contextBlock = context && typeof context === 'object' ? JSON.stringify(context, null, 2) : '';
+
+  // Keep it simple: give model the retrieved docs + your app context.
+  return [
+    'You are a helpful Splitwise assistant that answers using the provided context and retrieved documents.',
+    'If the documents do not contain enough information, say what you need and suggest a reasonable next step.',
+    '',
+    '=== Retrieved documents ===',
+    docs || '(none)',
+    '',
+    '=== App context (JSON) ===',
+    contextBlock || '(none)',
+    '',
+    '=== User prompt ===',
+    prompt,
+    '',
+    'Answer in a clear, concise manner.'
+  ].join('\n');
+};
+
+export const generateAIReply = async ({ prompt, context = {} }) => {
   let retrieved = [];
   try {
     retrieved = retrieveRelevantDocs(prompt, { topK: 3 });
@@ -223,17 +248,25 @@ export const generateAIReply = async ({ prompt, context = {} }) => {
     retrieved = [];
   }
 
-  if (intent === 'SETTLEMENT') {
-    return buildSettlementReply({ prompt, context, retrieved });
-  }
+  const ragPrompt = buildRagPrompt({ prompt, context, retrieved });
 
-  if (intent === 'OVERVIEW') {
-    return buildOverspendReply({ prompt, context, retrieved });
-  }
+  try {
+    const reply = await ollamaGenerate({ prompt: ragPrompt });
+    return String(reply || '').trim();
+  } catch (err) {
+    // Fallback to the existing deterministic replies if Ollama fails.
+    const intent = classifyIntent(prompt);
 
-  if (intent === 'SAVINGS') {
-    return buildSavingsReply({ prompt, context, retrieved });
-  }
+    if (intent === 'SETTLEMENT') {
+      return buildSettlementReply({ prompt, context, retrieved });
+    }
+    if (intent === 'OVERVIEW') {
+      return buildOverspendReply({ prompt, context, retrieved });
+    }
+    if (intent === 'SAVINGS') {
+      return buildSavingsReply({ prompt, context, retrieved });
+    }
 
-  return buildGenericReply({ prompt, retrieved });
+    return buildGenericReply({ prompt, retrieved });
+  }
 };

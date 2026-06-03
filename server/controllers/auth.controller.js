@@ -38,12 +38,20 @@ export const googleLogin=async(req,res)=>{
 
 export const getCurrentUser=async(req,res)=>{
     try {
+        // Identity responses must never be cached (GitHub Pages/CDN/browser quirks).
+        res.set({
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        });
+
         const user = await authService.getCurrentUser(req.user.id);
         res.json(user);
     } catch (error) {
         res.status(error.statusCode || 500).json({ message: error.message });
     }
 };
+
 
 export const refreshToken=async(req,res)=>{
     try {

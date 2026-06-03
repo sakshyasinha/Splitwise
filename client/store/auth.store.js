@@ -28,13 +28,24 @@ function readPersistedUser() {
     }
 }
 
-const persistedToken = sessionStorage.getItem('token') || localStorage.getItem('token') || null;
-if (!sessionStorage.getItem('token') && localStorage.getItem('token')) {
-    sessionStorage.setItem('token', localStorage.getItem('token'));
-}
-localStorage.removeItem('token');
+const getPersistedToken = () => {
+    try {
+        return sessionStorage.getItem('token') || null;
+    } catch (_e) {
+        return null;
+    }
+};
 
-const persistedUser = readPersistedUser();
+const getPersistedUser = () => readPersistedUser();
+
+
+// NOTE: tokens are intentionally kept only in sessionStorage to ensure browser session independence.
+
+// Lazily read sessionStorage on store creation to avoid module-evaluation timing issues.
+const persistedToken = getPersistedToken();
+const persistedUser = getPersistedUser();
+
+
 
 function persistSession({ token, user }) {
     if (token) {
@@ -53,8 +64,8 @@ function clearSession() {
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
     sessionStorage.removeItem('email');
-    localStorage.removeItem('token');
 }
+
 
 const useAuthStore = create((set, get) => ({
     token: persistedToken,
@@ -142,9 +153,7 @@ if (typeof window !== 'undefined') {
         useAuthStore.getState().handleAuthExpired();
     });
 
-    if (persistedToken) {
-        useAuthStore.getState().refreshUser().catch(() => {});
-    }
+
 }
 
 export default useAuthStore;

@@ -1,90 +1,169 @@
 import fs from 'fs';
 import path from 'path';
 
+const STOP_WORDS = new Set([
+  'a', 'an', 'the', 'is', 'are', 'was', 'were',
+  'to', 'of', 'for', 'in', 'on', 'at', 'with',
+  'and', 'or', 'but', 'this', 'that', 'these',
+  'those', 'i', 'me', 'my', 'you', 'your',
+  'give', 'tell', 'show', 'how', 'what', 'why'
+]);
+
 const readFileText = (filePath) => {
   try {
     const raw = fs.readFileSync(filePath, 'utf8');
-    // strip basic HTML if present
-    return raw.replace(/<[^>]+>/g, ' ');
-  } catch (e) {
+
+    return raw
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  } catch {
     return '';
   }
 };
 
 const listTextFiles = (rootDir) => {
-  const results = [];
+  const files = [];
+
   const walk = (dir) => {
     if (!fs.existsSync(dir)) return;
-    const items = fs.readdirSync(dir);
-    for (const item of items) {
-      const p = path.join(dir, item);
-      const stat = fs.statSync(p);
+
+    for (const item of fs.readdirSync(dir)) {
+      const fullPath = path.join(dir, item);
+      const stat = fs.statSync(fullPath);
+
       if (stat.isDirectory()) {
-        walk(p);
-      } else {
-        const ext = path.extname(p).toLowerCase();
-        if (['.md', '.txt', '.html', '.htm'].includes(ext) || /readme/i.test(path.basename(p))) {
-          results.push(p);
-        }
+        walk(fullPath);
+        continue;
+      }
+
+      const ext = path.extname(fullPath).toLowerCase();
+
+      if (
+        ['.md', '.txt', '.html', '.htm'].includes(ext) ||
+        /readme/i.test(path.basename(fullPath))
+      ) {
+        files.push(fullPath);
       }
     }
   };
+
   walk(rootDir);
-  return results;
+
+  return files;
 };
 
-const chunkText = (text, size = 800) => {
+const chunkText = (text, chunkSize = 1000, overlap = 150) => {
   const chunks = [];
-  let i = 0;
-  while (i < text.length) {
-    const slice = text.slice(i, i + size);
-    chunks.push(slice);
-    i += size;
+
+  let start = 0;
+
+  while (start < text.length) {
+    const end = start + chunkSize;
+
+    chunks.push(text.slice(start, end));
+
+    start += chunkSize - overlap;
   }
+
   return chunks;
 };
 
-const scoreChunk = (chunk, tokens) => {
-  const lower = chunk.toLowerCase();
-  let score = 0;
-  for (const t of tokens) {
-    if (!t) continue;
-    const regex = new RegExp(escapeRegExp(t), 'g');
-    const matches = lower.match(regex);
-    if (matches) score += matches.length;
+const tokenize = (text) => {
+  return String(text || '')
+    .toLowerCase()
+    .split(/\W+/)
+    .filter(Boolean)
+    .filter((token) => !STOP_WORDS.has(token));
+};
+
+const scoreChunk = (chunk, queryTokens) => {
+  const chunkTokens = tokenize(chunk);
+
+  if (!chunkTokens.length) {
+    return 0;
   }
+
+  const tokenSet = new Set(chunkTokens);
+
+  let score = 0;
+
+  for (const token of queryTokens) {
+    if (tokenSet.has(token)) {
+      score += 10;
+    }
+
+    const occurrences = chunkTokens.filter(
+      (t) => t === token
+    ).length;
+
+    score += occurrences;
+  }
+
   return score;
 };
 
-function escapeRegExp(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+export const retrieveRelevantDocs = (
+  prompt,
+  opts = {}
+) => {
+  const docsDir = path.resolve(
+    process.cwd(),
+    'docs'
+  );
 
-export const retrieveRelevantDocs = (prompt, opts = {}) => {
-  const root = path.resolve(process.cwd(), 'docs');
-  const uploadRoot = path.resolve(process.cwd(), 'uploads');
-  const files = [...listTextFiles(root)];
-  // also check uploads (receipts) if present
-  if (fs.existsSync(uploadRoot)) {
-    files.push(...listTextFiles(uploadRoot));
-  }
+  const uploadsDir = path.resolve(
+    process.cwd(),
+    'uploads'
+  );
 
-  const tokens = (prompt || '').toLowerCase().split(/\W+/).filter(Boolean);
-  const scored = [];
+  const files = [
+    ...listTextFiles(docsDir),
+    ...(fs.existsSync(uploadsDir)
+      ? listTextFiles(uploadsDir)
+      : [])
+  ];
 
-  for (const f of files) {
-    const text = readFileText(f);
+  const queryTokens = tokenize(prompt);
+
+  const scoredChunks = [];
+
+  for (const file of files) {
+    const text = readFileText(file);
+
     if (!text) continue;
-    const chunks = chunkText(text, opts.chunkSize || 800);
-    for (const c of chunks) {
-      const s = scoreChunk(c, tokens);
-      if (s > 0) {
-        scored.push({ score: s, text: c.trim(), source: path.relative(process.cwd(), f) });
+
+    const chunks = chunkText(
+      text,
+      opts.chunkSize || 1000,
+      opts.overlap || 150
+    );
+
+    for (const chunk of chunks) {
+      const score = scoreChunk(
+        chunk,
+        queryTokens
+      );
+
+      if (score > 0) {
+        scoredChunks.push({
+          score,
+          text: chunk.trim(),
+          source: path.relative(
+            process.cwd(),
+            file
+          )
+        });
       }
     }
   }
 
-  scored.sort((a, b) => b.score - a.score);
-  const topK = Number(opts.topK || 3);
-  return scored.slice(0, topK);
+  scoredChunks.sort(
+    (a, b) => b.score - a.score
+  );
+
+  return scoredChunks.slice(
+    0,
+    Number(opts.topK || 5)
+  );
 };

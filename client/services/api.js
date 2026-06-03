@@ -1,4 +1,5 @@
 import axios from 'axios';
+import useAuthStore from '../store/auth.store.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
@@ -10,14 +11,16 @@ const clearAuthSession = () => {
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
     sessionStorage.removeItem('email');
-    localStorage.removeItem('token');
 };
 
+
 API.interceptors.request.use((req)=>{
-    const token=sessionStorage.getItem('token');
+    // Prefer the in-memory auth store token to avoid any boot-timing / persistence edge-cases.
+    const token = useAuthStore.getState().token || sessionStorage.getItem('token');
     if(token) req.headers.Authorization='Bearer '+token;
     return req;
 });
+
 
 API.interceptors.response.use(
     (response) => response,
