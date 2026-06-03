@@ -6,7 +6,8 @@ const githubBase = repoName ? `/${repoName}/` : '/';
 
 export default defineConfig({
   // GitHub Pages serves the app from /<repo>/.
-  // Always derive base from GITHUB_REPOSITORY so gh-pages deployments don't 404 on assets.
+  // Always derive base from GITHUB_REPOSITORY.
+  // Additionally, force absolute asset URLs so routes like /<repo>/auth don't 404.
   base: githubBase,
   plugins: [react()],
   build: {
