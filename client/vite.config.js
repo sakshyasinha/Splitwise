@@ -5,8 +5,9 @@ const repoName = process.env.GITHUB_REPOSITORY?.split('/')[1];
 const githubBase = repoName ? `/${repoName}/` : '/';
 
 export default defineConfig({
-  // Derive the Pages base from the repository slug in CI, so renames don't break asset paths.
-  base: process.env.GITHUB_ACTIONS ? githubBase : '/',
+  // GitHub Pages serves the app from /<repo>/.
+  // Always derive base from GITHUB_REPOSITORY so gh-pages deployments don't 404 on assets.
+  base: githubBase,
   plugins: [react()],
   build: {
     rollupOptions: {
