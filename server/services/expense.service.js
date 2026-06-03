@@ -187,7 +187,13 @@ const getExpenseParticipant = (expense, userId) => {
 
 const isParticipantSettled = (participant) => {
     const status = String(participant?.status || 'pending').toLowerCase();
-    return status === 'settled' || status === 'paid';
+    if (status === 'settled' || status === 'paid') return true;
+
+    // Some flows store settled state on separate fields.
+    if (participant?.settled === true) return true;
+    if (participant?.settledAt) return true;
+
+    return false;
 };
 
 const calculateParticipantBalance = (expense, participant, userId = null) => {

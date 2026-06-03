@@ -516,7 +516,19 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
               const isPayment = sharedGraph.expenseKind === 'payment' || expense.splitType === 'payment';
               const isSettled = isPayment || String(sharedGraph.settlementState || (isExpenseFullySettled(expense) ? 'settled' : 'pending')) === 'settled';
               const settlementStatusLabel = isPayment ? 'Completed' : (isSettled ? 'Settled' : `${pendingCount} pending`);
-              const displayAmount = Number(sharedGraph.amount || expense.amount || 0);
+              const userId = String(user?._id || user?.id || '');
+              const participantForUser = (expense.participants || []).find((p) => {
+                const pid = p?.userId?._id || p?.userId?.id || p?.userId;
+                return pid && userId && String(pid) === userId;
+              });
+
+              // Show per-user amount/ share if available; otherwise fallback to total expense amount.
+              const displayAmount = Number(
+                participantForUser?.amount ?? participantForUser?.shareAmount ?? participantForUser?.paidAmount ??
+                sharedGraph.amount ??
+                expense.amount ??
+                0
+              );
               const unreadCount = unreadByExpense[String(expense._id)] || 0;
               const settlementPayerName = expense.paidBy?.name || expense.paidBy?.email || 'n/a';
               const settlementRecipient = (expense.participants || []).find((participant) => {
