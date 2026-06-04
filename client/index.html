@@ -8,8 +8,11 @@
       const params = new URLSearchParams(location.search);
       const redirect = params.get('redirect');
       if (redirect) {
+        // Normalize redirects coming from /<repo>/auth or 404 pages.
+        // Always keep the target within the same origin.
         history.replaceState(null, '', redirect);
       }
+
     </script>
   </head>
   <body>

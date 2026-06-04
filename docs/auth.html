@@ -6,7 +6,11 @@
     <title>SplitSense</title>
     <script>
       const target = location.pathname + location.search + location.hash;
-      location.replace('./index.html?redirect=' + encodeURIComponent(target));
+      // GitHub Pages serves the SPA under /<repo>/.
+      // Use an absolute path to the correct index.html to avoid case/relative-path issues.
+      const repoBase = location.pathname.replace(/\/[^/]*$/, '');
+      location.replace(repoBase + '/index.html?redirect=' + encodeURIComponent(target));
+
     </script>
   </head>
   <body>

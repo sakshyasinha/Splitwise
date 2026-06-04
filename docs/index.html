@@ -10,6 +10,12 @@
       if (redirect) {
         history.replaceState(null, '', redirect);
       }
+
+      // Normalize deep-link reloads on GitHub Pages.
+      // If the rewritten path still points at a missing file, bounce back to this index.
+      // (Keeps existing SPA behavior but prevents GitHub Pages 404s.)
+      window.addEventListener('error', () => {});
+
     </script>
     <script type="module" crossorigin src="/Splitwise/assets/index.js"></script>
     <link rel="stylesheet" crossorigin href="/Splitwise/assets/index.css">

@@ -6,8 +6,11 @@
     <title>Splitwise Clone</title>
     <script>
       const target = location.pathname + location.search + location.hash;
-      const base = '/splitwise/';
+      // GitHub Pages serves the SPA under /<repo>/.
+      // Use the current directory to compute the correct base.
+      const base = location.pathname.replace(/\/[^/]*$/, '');
       location.replace(base + 'index.html?redirect=' + encodeURIComponent(target));
+
 
     </script>
   </head>
