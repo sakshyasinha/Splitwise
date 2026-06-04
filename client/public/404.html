@@ -6,7 +6,9 @@
     <title>SplitSense</title>
     <script>
       const target = location.pathname + location.search + location.hash;
-      location.replace(new URL('./index.html', location.href).toString() + '?redirect=' + encodeURIComponent(target));
+      // Ensure GitHub Pages serves SPA entry for deep links like /splitwise/auth
+      location.replace('/splitwise/index.html?redirect=' + encodeURIComponent(target));
+
     </script>
   </head>
   <body>

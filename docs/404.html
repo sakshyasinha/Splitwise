@@ -6,7 +6,9 @@
     <title>Splitwise Clone</title>
     <script>
       const target = location.pathname + location.search + location.hash;
-      location.replace('/Splitwise/index.html?redirect=' + encodeURIComponent(target));
+      const base = '/splitwise/';
+      location.replace(base + 'index.html?redirect=' + encodeURIComponent(target));
+
     </script>
   </head>
   <body>
