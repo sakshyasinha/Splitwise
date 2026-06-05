@@ -10,7 +10,7 @@
       // Use the same directory as the current page so casing mismatches don't break reloads.
       const base = location.pathname.replace(/\/[^/]*$/, '');
       // If we're already at /<repo>/404.html then base becomes /<repo>/.
-      location.replace(base + 'index.html?redirect=' + encodeURIComponent(target));
+      location.replace(base + '/index.html?redirect=' + encodeURIComponent(target));
 
 
     </script>
