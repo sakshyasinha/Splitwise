@@ -7,9 +7,10 @@
     <script>
       const target = location.pathname + location.search + location.hash;
       // GitHub Pages serves the SPA under /<repo>/.
-      // Use the current directory to compute the correct base.
-      const base = location.pathname.replace(/\/[^/]*$/, '');
+      // Build a safe base that always ends with '/'.
+      const base = location.pathname.replace(/\/[^/]*$/, '/');
       location.replace(base + 'index.html?redirect=' + encodeURIComponent(target));
+
 
 
     </script>
