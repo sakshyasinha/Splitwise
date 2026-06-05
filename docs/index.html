@@ -8,8 +8,13 @@
       const params = new URLSearchParams(location.search);
       const redirect = params.get('redirect');
       if (redirect) {
-        history.replaceState(null, '', redirect);
+        // Fix cases where redirect accidentally points to /<repo>index.html (missing '/')
+        // e.g. /Splitwiseindex.html?redirect=...
+        // Normalize to /<repo>/index.html.
+        const normalized = redirect.replace(/\/([^/]+)index\.html(\?|#|$)/, '/$1/index.html$2');
+        history.replaceState(null, '', normalized);
       }
+
 
       // Normalize deep-link reloads on GitHub Pages.
       // If the rewritten path still points at a missing file, bounce back to this index.
