@@ -3674,9 +3674,108 @@ body::after {
 }
 
 @media (max-width: 520px) {
+  /* Mobile-only compact overrides for dashboard redesign */
+  main.dashboard-layout,
+  .dashboard-layout {
+    padding: 10px 12px 24px;
+    gap: 12px;
+  }
+
+  .dashboard-layout::before {
+    inset: 10px 12px 18px;
+  }
+
+  /* tighten topbar + hero so cards don't look overly large */
+  .topbar {
+    padding: 10px 12px;
+    min-height: 56px;
+  }
+
+  .topbar-logo {
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+  }
+
+  .topbar-title {
+    font-size: 13px;
+  }
+
+  .topbar-sub {
+    font-size: 10px;
+  }
+
+  .hero-strip {
+    padding: 16px;
+    min-height: 0;
+  }
+
+  .hero-strip h1 {
+    font-size: 22px;
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+
+  .hero-strip p {
+    font-size: 12px;
+    line-height: 1.45;
+    max-width: none;
+  }
+
+  .due-pill {
+    margin-top: 12px;
+  }
+
+  /* stats grid: make it feel less tall */
+  .stats-grid {
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .stats-grid .card {
+    border-radius: 8px;
+  }
+
+  .stats-grid .card-header {
+    padding: 12px 12px 0;
+  }
+
+  .stats-grid .card-content {
+    padding: 10px 12px 12px;
+  }
+
+  .stats-grid .metric {
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+
+  .stats-grid .metric-label {
+    margin-bottom: 6px;
+  }
+
+  .content-grid {
+    padding: 0 12px 18px;
+    gap: 12px;
+  }
+
+  .card-header,
+  .card-content {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .floating-add-expense {
+    right: 12px;
+    bottom: 12px;
+    min-height: 48px;
+  }
+
+  /* end mobile-only compact overrides */
+  /* existing styles preserved below */
   .dashboard-layout {
     padding: 10px;
   }
+
 
   .dashboard-layout::before {
     inset: 10px;
