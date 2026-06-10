@@ -3679,7 +3679,10 @@ body::after {
   .dashboard-layout {
     padding: 10px 12px 24px;
     gap: 12px;
+    max-width: 100%;
+    width: 100%;
   }
+
 
   .dashboard-layout::before {
     inset: 10px 12px 18px;
@@ -3726,11 +3729,31 @@ body::after {
     margin-top: 12px;
   }
 
-  /* stats grid: make it feel less tall */
+  /* stats grid: make it feel less tall + avoid squish overflow */
   .stats-grid {
     padding: 0 12px;
     gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .stats-grid {
+    grid-auto-flow: row;
+  }
+
+
+  /* Force cards to behave in the grid and avoid clipping */
+  .stats-grid .card {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .stats-grid .metric {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+  }
+
 
   .stats-grid .card {
     border-radius: 8px;

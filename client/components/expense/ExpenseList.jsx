@@ -50,10 +50,17 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
     [expenses]
   );
 
-  const paymentRows = useMemo(
-    () => (expenses || []).filter((tx) => isPaymentTx(tx)),
-    [expenses]
-  );
+  // Treat only true settlement/payout-style transactions as “payment rows”.
+  // Some “direct” expenses are stored with splitType=payment but should still show up as regular expenses.
+  const paymentRows = useMemo(() => {
+    return (expenses || []).filter((tx) => {
+      if (!isPaymentTx(tx)) return false;
+      // If backend is sending a transactionType/type='settlement', keep it as payment row.
+      const txType = String(tx?.transactionType || tx?.type || '').toLowerCase();
+      return txType === 'settlement' || String(tx?.splitType || '').toLowerCase() === 'payment';
+    });
+  }, [expenses]);
+
 
   // Filter expenses based on search and filter criteria
   const filteredExpenses = useMemo(() => {

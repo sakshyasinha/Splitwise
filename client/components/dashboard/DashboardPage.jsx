@@ -246,6 +246,27 @@ const DashboardPage = ({ view = 'dashboard' }) => {
       mergedDues.set(key, { ...due });
     });
 
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        // Debug: inspect what the server returns for dues (especially direct-payment rows)
+        console.debug('DashboardPage debug: myDues sample:', (myDues || []).slice(0, 5).map((d) => ({
+          transactionId: d?.transactionId,
+          sourceExpenseId: d?.sourceExpenseId,
+          expenseId: d?.expenseId,
+          status: d?.status,
+          amount: d?.amount,
+          ledgerState: d?.ledgerState,
+          splitType: d?.splitType,
+          transactionType: d?.transactionType,
+          paidTo: d?.paidTo?.id || d?.paidTo?._id || d?.paidTo?.userId || d?.paidTo?.email,
+          description: d?.description,
+          canSettle: d?.canSettle,
+        })));
+      } catch (e) {
+        // ignore
+      }
+    }
+
     return Array.from(mergedDues.values()).filter((due) => {
       const status = String(due?.status || 'pending').toLowerCase();
       if (status === 'settled' || status === 'paid') {
@@ -255,6 +276,7 @@ const DashboardPage = ({ view = 'dashboard' }) => {
       return Number(due?.amount || 0) > 0;
     });
   }, [myDues]);
+
 
   const visibleLents = useMemo(() => {
     const mergedLents = new Map();
