@@ -46,9 +46,10 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
   );
 
   const expenseRows = useMemo(
-    () => (expenses || []).filter((tx) => isExpenseTx(tx)),
+    () => (expenses || []).filter((tx) => isExpenseTx(tx) && !isPaymentTx(tx)),
     [expenses]
   );
+
 
   // Treat only true settlement/payout-style transactions as “payment rows”.
   // Some “direct” expenses are stored with splitType=payment but should still show up as regular expenses.
