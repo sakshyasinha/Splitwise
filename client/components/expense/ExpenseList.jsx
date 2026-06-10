@@ -507,7 +507,10 @@ export default function ExpenseList({ onEdit, externalSearchQuery = '' }) {
           <ul className="expense-list recent-expense-list">
             {filteredExpenses.map((expense) => {
               const paidById = expense.paidBy?._id || expense.paidBy;
-              const canManage = currentUserId && String(paidById) === currentUserId;
+              const createdById = expense.createdBy?._id || expense.createdBy;
+              const canManage =
+                currentUserId &&
+                (String(paidById) === currentUserId || String(createdById) === currentUserId);
               const isEditing = editingId === expense._id;
               const isConfirming = confirmDelete === expense._id;
               const sharedGraph = expense.sharedGraph || {};

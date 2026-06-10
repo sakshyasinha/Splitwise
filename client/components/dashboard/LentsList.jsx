@@ -31,6 +31,11 @@ export default function LentsList({ lents }) {
     }
 
     try {
+      console.log('LentsList handleNudge lent payload:', {
+        lentId: getRowKey(lent),
+        lent,
+        owedBy: lent?.owedBy,
+      });
       const rowKey = getRowKey(lent);
       setNudgingId(rowKey);
         await sendPaymentReminder(
