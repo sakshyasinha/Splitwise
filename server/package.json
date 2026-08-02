@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@sentry/node": "^8.6.0",
+    "axios": "^1.19.0",
     "bcryptjs": "^2.4.3",
     "bull": "^4.16.5",
     "cors": "^2.8.5",
