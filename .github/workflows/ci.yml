@@ -7,8 +7,14 @@ on:
     branches: [main, master]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
 
     steps:
       - name: Checkout
@@ -31,9 +37,20 @@ jobs:
         working-directory: ./server
         run: npm ci
 
+      - name: Run server tests
+        working-directory: ./server
+        env:
+          MONGO_URI: mongodb://localhost:27017/splitwise_test
+          JWT_SECRET: test-secret
+          NODE_ENV: test
+        run: npm test
+
       - name: Install client dependencies
         working-directory: ./client
         run: npm ci
+
+      - name: Lint
+        run: npx eslint . --ext .js,.jsx || true
 
       - name: Build client
         working-directory: ./client
@@ -44,3 +61,4 @@ jobs:
         with:
           name: client-dist
           path: client/dist
+          
