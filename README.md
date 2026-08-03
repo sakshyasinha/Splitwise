@@ -2,7 +2,7 @@
 
 SplitSense is a full-stack web app for managing shared expenses, group balances, settlements, activity, notifications, receipts, recurring bills, and analytics.
 
-**Live Demo:** https://sakshyasinha.github.io/splitwise/
+**Live Demo:** [https://sakshyasinha.github.io/splitwise/](https://splitwise-qlql.vercel.app/)
 
 ---
 
