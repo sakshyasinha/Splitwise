@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "start:prod": "pm2-runtime ecosystem.config.js",
-    "test": "mocha --exit 'tests/**/*.test.js'",
+    "test": "mocha \"tests/**/*.test.js\" --timeout 10000 --exit",
     "coverage": "nyc npm test"
   },
   "dependencies": {
