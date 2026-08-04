@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "start:prod": "pm2-runtime ecosystem.config.js",
-    "test": "mocha \"tests/**/*.test.js\" --timeout 10000 --exit",
+    "test": "mocha --file tests/setup.js \"tests/**/*.test.js\" --timeout 10000 --exit",
     "coverage": "nyc npm test"
   },
   "dependencies": {
@@ -34,6 +34,7 @@
     "winston": "^3.9.0"
   },
   "devDependencies": {
+    "mongodb-memory-server": "^10.1.4",
     "mocha": "^10.2.0",
     "nyc": "^15.1.0",
     "supertest": "^6.3.3"
