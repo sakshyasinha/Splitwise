@@ -11,15 +11,20 @@ describe('Auth API', () => {
     password: 'SuperSecret123',
   };
 
+  let connectedHere = false;
+
   before(async () => {
     if (mongoose.connection.readyState === 0) {
       await mongoose.connect(process.env.MONGO_URI);
+      connectedHere = true;
     }
   });
 
   after(async () => {
     await User.deleteOne({ email: testUser.email });
-    await mongoose.disconnect();
+    if (connectedHere) {
+      await mongoose.disconnect();
+    }
   });
 
   describe('POST /api/auth/register', () => {
